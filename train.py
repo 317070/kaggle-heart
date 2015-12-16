@@ -8,6 +8,7 @@ import utils
 import cPickle as pickle
 import os
 
+
 def train_model(metadata_path, metadata=None):
     if metadata is None:
         if os.path.isfile(metadata_path):
@@ -17,13 +18,15 @@ def train_model(metadata_path, metadata=None):
     l_ins, l_out = config().build_model()
 
     """train, train, train"""
-
+    metadata = {
+        'metadata_path': metadata_path,
+        'configuration_file': config().__name__,
+        'git_revision_hash': utils.get_git_revision_hash(),
+    }
     with open(metadata_path, 'w') as f:
-        pickle.dump({
-            'metadata_path': metadata_path,
-            'configuration_file': config().__name__,
-            'git_revision_hash': utils.get_git_revision_hash(),
-        }, f, pickle.HIGHEST_PROTOCOL)
+        pickle.dump(metadata, f, pickle.HIGHEST_PROTOCOL)
+
+    return metadata
 
 
 
@@ -40,7 +43,7 @@ if __name__ == "__main__":
     expid = utils.generate_expid(args.config)
     metadata_path = "metadata/%s.pkl" % expid
 
-    train_model(metadata_path)
+    meta_data = train_model(metadata_path)
     predict_model(metadata_path)
 
 

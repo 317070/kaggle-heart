@@ -6,7 +6,7 @@ import string
 import utils
 
 
-def predict_model(metadata_path):
+def predict_model(metadata_path, metadata=None):
     pass
 
 if __name__ == "__main__":

@@ -27,13 +27,14 @@ def pad_with_zeros(img, out_shape):
 
 def read_dicom(filename):
     d = dicom.read_file(filename)
-    img = d.pixel_array
-    # print np.sum(np.array(img) - np.array(img, dtype='uint8'))
-    # print np.max(np.array(img)), np.min(np.array(img))
-    slice_location = d.SliceLocation
-    pixel_spacing = d.PixelSpacing
-    slice_thickness = d.SliceThickness
-    return np.array(img), slice_location, pixel_spacing, slice_thickness
+    metadata = {}
+    for atrr in dir(d):
+        if atrr[0].isupper():  # TODO how to check it properly?
+            try:
+                metadata[atrr] = getattr(d, atrr)
+            except AttributeError:
+                pass
+    return np.array(d.pixel_array), metadata
 
 
 def convert_study_2np(in_path, out_path):
@@ -53,10 +54,10 @@ def convert_view_2np(in_paths, out_path, view):
     in_paths.sort(key=lambda x: int(x.split('_')[-1]))
     slices = [int(s.split('_')[-1]) for s in in_paths]
     offsets = []
+    metadata_slices = []  # metadata per slice
+    d_slices = []  # list of data slices (for sax)
+    # final data will be 4d array: (n_slices, n_times, img_height, img_width)
 
-    # final data is a 4d array: (n_slices, n_times, img_height, img_width)
-    d_slices = []  # list of slices (for sax)
-    m_slices = []  # metadata per slice
     for s in in_paths:
         n_trials = 1  # for most of the studies
         files = os.listdir(s)
@@ -69,16 +70,19 @@ def convert_view_2np(in_paths, out_path, view):
         n_trials -= 1  # for indexing
 
         offset, time = [], []  # within one slice offsets should be equal
+        m_time = []
         d_time = []  # list of 30 images from one cardiac cycle
         for f in files[n_trials * 30:(n_trials + 1) * 30]:  # take the last trial
             offset.append(int(f.split('-')[1]))
             time.append(int(f.split('-')[2].split('.')[0]))
-            img = read_dicom(s + '/' + f)[0]
+            img, metadata = read_dicom(s + '/' + f)
             d_time.append(img)
+            m_time.append(metadata)
         assert all(x == y for x, y in zip(time, xrange(1, 31)))  # check time (1-30)
         assert all(x == offset[0] for x in offset)  # check offsets (equal)
         offsets.append(offset[0])
         d_slices.append(d_time)
+        metadata_slices.append(m_time)
     # check shapes
     img_shapes = [dt.shape for ds in d_slices for dt in ds]
     shapes_set = list(set(img_shapes))
@@ -111,20 +115,19 @@ def convert_view_2np(in_paths, out_path, view):
         raise ValueError('3 different img shapes!!!!')
 
     data = np.array(d_slices)
-    # print 'view:', view
-    # print 'slices:', slices
-    # print 'offsets', offsets
-    # print 'data shape', data.shape
-    metadata = None  # TODO: add slicing info, offsets and metadata from dicom files
-
+    print
+    print 'view:', view
+    print 'slices:', slices
+    print 'offsets:', offsets
+    print 'data shape:', data.shape
     out_filename = out_path + view + '.pkl'
     with open(out_filename, 'wb') as f:
         pickle.dump({'data': data,
                      'slices': slices,
                      'offsets': offsets,
-                     'metadata': metadata}, f, protocol=pickle.HIGHEST_PROTOCOL)
-        # print 'saved to %s' % out_filename
-        # print
+                     'metadata': metadata_slices}, f, protocol=pickle.HIGHEST_PROTOCOL)
+    print 'saved to %s' % out_filename
+    print
 
 
 if __name__ == '__main__':

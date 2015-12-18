@@ -1,13 +1,14 @@
+"""
+Converts dicom images from cardiac cycle into 3d numpy arrays (time x height x width) + metadata
+and saves into pkl files
+"""
+
 import os
 import numpy as np
 import dicom
 import cPickle as pickle
 import sys
 
-"""
-Converts dicom images from cardiac cycle into 3d numpy arrays (time x height x width) + metadata
-and saves into pkl files
-"""
 
 def read_dicom(filename):
     d = dicom.read_file(filename)
@@ -82,12 +83,17 @@ def convert_view_2np(in_paths, out_path, view):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) == 2:
-        global_path = sys.argv[1]
-    else:
-        global_path = '/mnt/sda3/data/kaggle-heart/'
-    in_data_path = global_path + 'validate/'
-    out_data_path = global_path + 'proc_validate/'
+    # global_path = '/mnt/sda3/data/kaggle-heart/'
+    # dataset = 'validate'
+
+    if len(sys.argv) < 3:
+        sys.exit("Usage: dicom2npy.py <global_data_path> <train/validate>")
+
+    global_path = sys.argv[1]
+    dataset = sys.argv[2]
+
+    in_data_path = global_path + dataset + '/'
+    out_data_path = global_path + 'pkl_' + dataset + '/'
 
     in_study_paths = os.listdir(in_data_path)
     out_study_paths = [out_data_path + s + '/study/' for s in in_study_paths]
@@ -102,5 +108,5 @@ if __name__ == '__main__':
     # convert_study_2np(s_in, s_out)
 
     for s_in, s_out in zip(in_study_paths, out_study_paths):
-        print '******** %s *********' % s_in
+        print '\n******** %s *********' % s_in
         convert_study_2np(s_in, s_out)

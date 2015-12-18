@@ -3,38 +3,33 @@ import numpy as np
 import dicom
 import cPickle as pickle
 import sys
-from collections import defaultdict
-
-
-def pad_with_zeros(img, out_shape):
-    """pad image with zeros"""
-    in_shape = img.shape
-    out_img = img
-    # rows are equal -> add columns
-    col_diff = out_shape[1] - in_shape[1]
-    if col_diff:
-        pad_img = np.zeros((in_shape[0], col_diff / 2))
-        out_img = np.concatenate((pad_img, out_img, pad_img), axis=1)
-
-    row_diff = out_shape[0] - in_shape[0]
-    if row_diff:
-        pad_img = np.zeros((row_diff / 2, in_shape[1]))
-        out_img = np.concatenate((pad_img, out_img, pad_img))
-
-    assert out_shape == out_img.shape
-    return out_img
 
 
 def read_dicom(filename):
     d = dicom.read_file(filename)
     metadata = {}
-    for atrr in dir(d):
-        if atrr[0].isupper():  # TODO how to check it properly?
+    for attr in dir(d):
+        if attr[0].isupper():
             try:
-                metadata[atrr] = getattr(d, atrr)
+                metadata[attr] = getattr(d, attr)
             except AttributeError:
                 pass
     return np.array(d.pixel_array), metadata
+
+
+def save_data(data, metadata, slices, offsets, view, out_path, batch=''):
+    print 'view:', view
+    print 'slices:', slices
+    print 'offsets:', offsets
+    print 'data shape:', data.shape
+    out_filename = out_path + view + batch + '.pkl'
+    with open(out_filename, 'wb') as f:
+        pickle.dump({'data': data,
+                     'slices': slices,
+                     'offsets': offsets,
+                     'metadata': metadata}, f, protocol=pickle.HIGHEST_PROTOCOL)
+    print 'saved to %s' % out_filename
+    print
 
 
 def convert_study_2np(in_path, out_path):
@@ -50,11 +45,58 @@ def convert_study_2np(in_path, out_path):
     convert_view_2np(ch4_dirs, out_path, '4ch')
 
 
+def split_by_orientation(orientations_set, d_slices, m_slices, offsets, slices):
+    d, m, s, o = [], [], [], []
+    for orientation in orientations_set:
+        d_slices1, m_slices1, offsets1, slices1 = [], [], [], []
+        for ds, ms, ofs, sl in zip(d_slices, m_slices, offsets, slices):
+            # print sl
+            # print ds[0].shape
+            # print ms[0]['ImageOrientationPatient']
+            # print ms[0]['ImagePositionPatient']
+            if all(tuple(mt['ImageOrientationPatient']) == orientation for mt in ms):
+                d_slices1.append(ds)
+                m_slices1.append(ms)
+                offsets1.append(ofs)
+                slices1.append(sl)
+
+        d.append(np.array(d_slices1))
+        m.append(m_slices1)
+        s.append(slices1)
+        o.append(offsets1)
+    return d, m, s, o
+
+
+def split_by_shape(shapes_set, d_slices, m_slices, offsets, slices):
+    d, m, s, o = [], [], [], []
+    for shape in shapes_set:
+        print '*shape:', shape
+        d_slices1, m_slices1, offsets1, slices1 = [], [], [], []
+        for ds, ms, ofs, sl in zip(d_slices, m_slices, offsets, slices):
+            if all(dt.shape == shape for dt in ds):
+                for dt in ds:
+                    print dt.shape
+                print type(ds), len(ds), ds.shape, ds[0].shape
+                print np.asarray(ds).shape
+                d_slices1.append(np.array(ds))
+                m_slices1.append(ms)
+                offsets1.append(ofs)
+                slices1.append(sl)
+        if slices1:
+            d.append(np.array(d_slices1))
+            #print np.array(d_slices1).shape
+            m.append(m_slices1)
+            s.append(slices1)
+            o.append(offsets1)
+    return d, m, s, o
+
+
 def convert_view_2np(in_paths, out_path, view):
     in_paths.sort(key=lambda x: int(x.split('_')[-1]))
     slices = [int(s.split('_')[-1]) for s in in_paths]
+
     offsets = []
-    metadata_slices = []  # metadata per slice
+    m_slices = []  # metadata per slice
     d_slices = []  # list of data slices (for sax)
     # final data will be 4d array: (n_slices, n_times, img_height, img_width)
 
@@ -82,52 +124,21 @@ def convert_view_2np(in_paths, out_path, view):
         assert all(x == offset[0] for x in offset)  # check offsets (equal)
         offsets.append(offset[0])
         d_slices.append(d_time)
-        metadata_slices.append(m_time)
+        m_slices.append(m_time)
+
     # check shapes
     img_shapes = [dt.shape for ds in d_slices for dt in ds]
+    img_orientations = [tuple(mt['ImageOrientationPatient']) for ms in m_slices for mt in ms]
     shapes_set = list(set(img_shapes))
-    n_shapes = len(shapes_set)
-    if n_shapes == 2:
-        print 'shapes are different:'
-        print shapes_set
-        # check if it's transposed
-        if shapes_set[0][0] == shapes_set[1][1] and shapes_set[0][1] == shapes_set[1][0]:
-            # select most common shape
-            d = defaultdict(int)
-            for s in img_shapes:
-                d[s] += 1
-            common_shape = sorted(d.keys(), key=d.get)[-1]
-            for i, ds in enumerate(d_slices):
-                for j, dt in enumerate(ds):
-                    if dt.shape != common_shape:
-                        d_slices[i][j] = np.transpose(dt)
-            print 'converted to shape', common_shape, d
-        # or we need to pad zeros
-        else:
-            shapes_sorted = sorted(sorted(shapes_set, key=lambda tup: tup[0]), key=lambda tup: tup[1])
-            largest_shape = shapes_sorted[-1]
-            for i, ds in enumerate(d_slices):
-                for j, dt in enumerate(ds):
-                    if dt.shape != largest_shape:
-                        d_slices[i][j] = pad_with_zeros(dt, largest_shape)
-            print 'converted to shape', largest_shape
-    elif n_shapes > 2:
-        raise ValueError('3 different img shapes!!!!')
-
-    data = np.array(d_slices)
-    print
-    print 'view:', view
-    print 'slices:', slices
-    print 'offsets:', offsets
-    print 'data shape:', data.shape
-    out_filename = out_path + view + '.pkl'
-    with open(out_filename, 'wb') as f:
-        pickle.dump({'data': data,
-                     'slices': slices,
-                     'offsets': offsets,
-                     'metadata': metadata_slices}, f, protocol=pickle.HIGHEST_PROTOCOL)
-    print 'saved to %s' % out_filename
-    print
+    orientations_set = list(set(img_orientations))
+    d, m, s, o = split_by_orientation(orientations_set, d_slices, m_slices, offsets, slices)
+    i = 0
+    for dd, mm, ss, oo in zip(d, m, s, o):
+        d1, m1, s1, o1 = split_by_shape(shapes_set, dd, mm, oo, ss)
+        for dd1, mm1, ss1, oo1 in zip(d1, m1, s1, o1):
+            print 'DATA:', dd1.shape
+            save_data(dd1, mm1, ss1, oo1, view, out_path, '_' + str(i))
+            i += 1
 
 
 if __name__ == '__main__':
@@ -146,8 +157,9 @@ if __name__ == '__main__':
         if not os.path.exists(p):
             os.makedirs(p)
 
-    # s = '/mnt/sda3/data/kaggle-heart/validate/643/study/'
-    # convert_study_2np(s, '/mnt/sda3/data/kaggle-heart/proc_validate/663/study/')
+    s_in = '/mnt/sda3/data/kaggle-heart/validate/643/study/'
+    s_out = '/mnt/sda3/data/kaggle-heart/proc_validate/643/study/'
+    convert_study_2np(s_in, s_out)
 
     for s_in, s_out in zip(in_study_paths, out_study_paths):
         print '******** %s *********' % s_in

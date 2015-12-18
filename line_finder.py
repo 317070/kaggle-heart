@@ -12,6 +12,15 @@ INDEX = 2
 
 
 def find_line(coordinates, orientations, labels=None):
+    """
+    Find which images are consecutive. They will be returned as:
+    [[label1, label2], [label3, label4, label5], [label6], [label7]]
+    One image can be in multiple lines.
+    :param coordinates: list of the dicom ImagePositionPatient
+    :param orientations: list of the dicom ImageOrientationPatient
+    :param labels: list of the matching labels, which are the labels found in the result.
+    :return:
+    """
     if labels is None:
         labels = range(len(coordinates))
 

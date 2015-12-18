@@ -5,7 +5,7 @@ import glob
 np.random.seed(1234)
 import matplotlib.pyplot as plt
 from matplotlib import animation
-
+import os
 
 """
 total_file_list = [item for i in xrange(1, 501) for item in glob.glob('/home/oncilladock/storage/data/dsb15/train/%d/study/*/*.dcm' % i)]
@@ -13,12 +13,18 @@ total_file_list.sort()
 print len(total_file_list)
 """
 
-folder_list = glob.glob('/home/oncilladock/storage/data/dsb15/*/*/study/*/')
+folder_list = glob.glob( os.path.expanduser('~/storage/data/dsb15/lv-challenge/*/*/') )
+#folder_list = glob.glob( os.path.expanduser('~/storage/data/dsb15/*/*/study/*/') )
+print len(folder_list)
 #folder_list.sort()
 np.random.seed(317070)
 np.random.shuffle(folder_list)
 
-for folder in folder_list[15:]:
+x = []
+y = []
+orient = []
+posit = []
+for folder in folder_list[27:]:
     print folder
     file_list = glob.glob('%s/*.dcm' % folder)
     if not file_list:
@@ -27,28 +33,46 @@ for folder in folder_list[15:]:
 
     vmin = 1e10
     vmax = -1e10
+
+
     for file in file_list:
         d = dicom.read_file(file)
         #print d.ImageType, d.SoftwareVersions
-        #print d.ImageOrientationPatient, d.ImagePositionPatient
         #print d.SliceLocation, d.SliceThickness
-        print d.SmallestImagePixelValue, d.LargestImagePixelValue
-        print d.NumberOfPhaseEncodingSteps
+        #print d.SmallestImagePixelValue, d.LargestImagePixelValue
+        #print d.NumberOfPhaseEncodingSteps
         if d.SmallestImagePixelValue < vmin:
             vmin = d.SmallestImagePixelValue
         if d.LargestImagePixelValue > vmax:
             vmax = d.LargestImagePixelValue
         img = d.pixel_array.astype('int')
 
+    """
+    posit.append(d.ImagePositionPatient)
+    orient.append(d.ImageOrientationPatient)
+    x.append(d.ImagePositionPatient[0])
+    y.append(d.ImagePositionPatient[1:])
+    plt.gca().annotate(folder.split('/')[-2], xy=(x[-1], y[-1][0]), xytext=(x[-1]+20, y[-1][0]+20),
+            arrowprops=dict(facecolor='black', shrink=0.05))
+    plt.gca().annotate(folder.split('/')[-2], xy=(x[-1], y[-1][1]), xytext=(x[-1]+20, y[-1][1]+20),
+            arrowprops=dict(facecolor='black', shrink=0.05))
+    print d.ImageOrientationPatient, d.ImagePositionPatient
+    """
+    #print d.ManufacturerModelName, d.WindowCenterWidthExplanation
+    #fig = plt.figure()
+    #n, bins, patches = plt.hist(img.flatten(), 50, normed=1, facecolor='green', alpha=0.75)
+
     fig = plt.figure()
+
     mngr = plt.get_current_fig_manager()
     # to put it into the upper left corner for example:
     mngr.window.setGeometry(50, 100, 640, 545)
 
     plt.suptitle(folder)
-
+    vmax = 255  # np.percentile(img, 90)*1.25
+    print "max:",vmax
     im = fig.gca().imshow(img, cmap='gist_gray_r', vmin=vmin, vmax=vmax)
-    #fig.colorbar(fig.gca())
+    # fig.colorbar(fig.gca())
     def init():
         im.set_data(img)
 
@@ -62,6 +86,9 @@ for folder in folder_list[15:]:
 
     plt.show()
 
+#print posit, orient
+#plt.plot(x,y,'.')
+#plt.show()
 
 """
 fig, plt_axes = plt.subplots(5, len(folder_list)//5+1, sharey=True)

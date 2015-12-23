@@ -4,6 +4,8 @@ import lasagne
 from updates import build_updates
 from data_loader import generate_train_batch, generate_validation_batch
 from functools import partial
+import lasagne
+import lasagne.layers.cuda_convnet
 
 """
 When adding new configuration parameters, add the default values to this config file. This adds them to
@@ -35,3 +37,8 @@ learning_rate_schedule = {
     500: 0.00003,
 }
 
+def build_model():
+    return {
+        "inputs":[],
+        "output":None
+    }

@@ -6,25 +6,25 @@ from configuration import config
 import cPickle as pickle
 
 patient_folders = glob.glob("/data/dsb15_pkl/4d_group_pkl_train/*/study/")
-np.seed(317070)
+np.random.seed(317070)
 validation_patients_indices = np.random.choice(range(501), 50, replace=False)
 
-VALIDATION_REGEX = r"/" + "|".join(validation_patients_indices)+"/"
+VALIDATION_REGEX = r"/" + "|".join(["%d"%i for i in validation_patients_indices])+"/"
 
 train_patient_folders = [folder for folder in patient_folders if re.match(VALIDATION_REGEX, folder) is None]
 validation_patient_folders = [folder for folder in patient_folders if folder not in train_patient_folders]
 
-sunny_data = pickle.load("/data/dsb15_pkl/pkl_annotated/data.pkl")
-num_sunny_images = len(sunny_data["train"])
+sunny_data = pickle.load(open("/data/dsb15_pkl/pkl_annotated/data.pkl","rb"))
+num_sunny_images = len(sunny_data["images"])
 
 validation_sunny_indices = np.random.choice(range(num_sunny_images), 50, replace=False)
 train_sunny_indices = [i for i in range(num_sunny_images) if i not in validation_sunny_indices]
 
-sunny_train_images = sunny_data['images'][train_sunny_indices]
-sunny_train_labels = sunny_data['labels'][train_sunny_indices]
+sunny_train_images = np.array(sunny_data['images'])[train_sunny_indices]
+sunny_train_labels = np.array(sunny_data['labels'])[train_sunny_indices]
 
-sunny_validation_images = sunny_data['images'][validation_sunny_indices]
-sunny_validation_labels = sunny_data['labels'][validation_sunny_indices]
+sunny_validation_images = np.array(sunny_data['images'])[validation_sunny_indices]
+sunny_validation_labels = np.array(sunny_data['labels'])[validation_sunny_indices]
 
 
 def generate_train_batch():

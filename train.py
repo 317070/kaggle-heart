@@ -9,7 +9,7 @@ import cPickle as pickle
 import os
 import lasagne
 import theano
-import theano.Tensor as T
+import theano.tensor as T
 import time
 from itertools import izip
 from datetime import datetime, timedelta
@@ -31,7 +31,7 @@ def train_model(metadata_path, metadata=None):
     print "  layer output shapes:"
     for layer in all_layers:
         name = string.ljust(layer.__class__.__name__, 32)
-        print "    %s %s" % (name, layer.get_output_shape(),)
+        print "    %s %s" % (name, layer.output_shape,)
 
     obj = config().build_objective(input_layers, output_layer)
     train_loss = obj.get_loss()

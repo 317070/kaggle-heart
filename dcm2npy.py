@@ -15,6 +15,7 @@ print len(total_file_list)
 
 folder_list = glob.glob( os.path.expanduser('~/storage/data/dsb15/lv-challenge/*/*/') )
 #folder_list = glob.glob( os.path.expanduser('~/storage/data/dsb15/*/*/study/*/') )
+
 print len(folder_list)
 #folder_list.sort()
 np.random.seed(317070)

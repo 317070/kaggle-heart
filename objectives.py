@@ -11,14 +11,14 @@ class BinaryCrossentropyImageObjective(object):
         self.input_layer = input_layer
         self.target_var = T.matrix("target")
 
-    def get_loss(self, input=None, target=None, *args, **kwargs):
+    def get_loss(self, *args, **kwargs):
         network_output = lasagne.layers.helper.get_output(self.input_layer, *args, **kwargs)
-        return log_loss(network_output, target)
+        return log_loss(network_output, self.target_var)
 
 def log_loss(y, t, eps=1e-15):
     """
     cross entropy loss, summed over classes, mean over batches
     """
     y = T.clip(y, eps, 1 - eps)
-    loss = -T.sum(t * T.log(y)) / y.shape[0].astype(theano.config.floatX)
+    loss = -T.sum(t * T.log(y)).mean()
     return loss

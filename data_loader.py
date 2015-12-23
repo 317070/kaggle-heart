@@ -35,7 +35,7 @@ def generate_train_batch():
         indices = config().rng.randint(0, len(sunny_train_images), config().chunk_size)
 
         chunk_x = np.zeros((config().chunk_size, 256, 256), dtype='float32')
-        chunk_y = np.zeros((config().chunk_size, 256, 256), dtype='float32')
+        chunk_y = np.zeros((config().chunk_size, 256 * 256), dtype='float32')
 
         for k, idx in enumerate(indices):
             img = images[indices[k]]

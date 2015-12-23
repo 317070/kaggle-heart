@@ -35,13 +35,13 @@ def train_model(metadata_path, metadata=None):
 
     obj = config().build_objective(input_layers, output_layer)
     train_loss = obj.get_loss()
-    output = output_layer.get_output(deterministic=True)
+    output = lasagne.layers.helper.get_output(output_layer, deterministic=True)
 
     all_params = lasagne.layers.get_all_params(output_layer)
 
-    input_ndims = [len(l_in.get_output_shape()) for l_in in input_layers]
-    xs_shared = [lasagne.utils.shared_empty(dim=ndim) for ndim in input_ndims]
-    y_shared = lasagne.utils.shared_empty(dim=3)
+    input_ndims = [len(l_in.output_shape) for l_in in input_layers]
+    xs_shared = [lasagne.utils.shared_empty(dim=ndim, dtype='float32') for ndim in input_ndims]
+    y_shared = lasagne.utils.shared_empty(dim=2, dtype='float32')
 
     learning_rate_schedule = config().learning_rate_schedule
 

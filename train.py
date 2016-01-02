@@ -31,7 +31,8 @@ def train_model(metadata_path, metadata=None):
     print "  layer output shapes:"
     for layer in all_layers:
         name = string.ljust(layer.__class__.__name__, 32)
-        print "    %s %s" % (name, layer.output_shape,)
+        num_param = string.ljust(lasagne.layers.count_params(layer).__str__(), 10)
+        print "    %s %s %s" % (name,  num_param, layer.output_shape)
 
     obj = config().build_objective(input_layers, output_layer)
     train_loss = obj.get_loss()
@@ -63,7 +64,7 @@ def train_model(metadata_path, metadata=None):
 
     if config().restart_from_save:
         print "Load model parameters for resuming"
-        if os.file.exists(metadata_path):
+        if os.path.isfile(metadata_path):
             resume_metadata = np.load(metadata_path)
             lasagne.layers.set_all_param_values(output_layer, resume_metadata['param_values'])
             start_chunk_idx = resume_metadata['chunks_since_start'] + 1
@@ -133,6 +134,7 @@ def train_model(metadata_path, metadata=None):
                     num_batches_chunk_eval = int(np.ceil(chunk_length_eval / float(config().batch_size)))
 
                     for x_shared, x_chunk_eval in zip(xs_shared, xs_chunk_eval):
+
                         x_shared.set_value(x_chunk_eval)
 
                     outputs_chunk = []
@@ -199,8 +201,8 @@ if __name__ == "__main__":
                           required=True)
     args = parser.parse_args()
     set_configuration(args.config)
-    print config().__name__
-    print utils.get_git_revision_hash()
+    print "Running configuration:", config().__name__
+    print "Current git version:", utils.get_git_revision_hash()
     expid = utils.generate_expid(args.config)
     metadata_path = "metadata/%s.pkl" % expid
 

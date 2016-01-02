@@ -31,18 +31,17 @@ def generate_train_batch():
     images = sunny_train_images
     labels = sunny_train_labels
 
-    for n in xrange(config.num_chunks):
+    for n in xrange(config().num_chunks_train):
         indices = config().rng.randint(0, len(sunny_train_images), config().chunk_size)
 
-        chunk_x = np.zeros((config().chunk_size, 256, 256), dtype='float32')
+        chunk_x = np.zeros((config().chunk_size, 1, 256, 256), dtype='float32')
         chunk_y = np.zeros((config().chunk_size, 256 * 256), dtype='float32')
 
         for k, idx in enumerate(indices):
             img = images[indices[k]]
             lbl = labels[indices[k]]
             config().preprocess(chunk_x[k], img, chunk_y[k], lbl)
-
-        yield chunk_x, chunk_y
+        yield [chunk_x], chunk_y
 
 def generate_validation_batch(set="validation"):
     if set=="train":

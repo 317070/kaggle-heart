@@ -15,6 +15,16 @@ class BinaryCrossentropyImageObjective(object):
         network_output = lasagne.layers.helper.get_output(self.input_layer, *args, **kwargs)
         return log_loss(network_output, self.target_var)
 
+class UpscaledImageObjective(object):
+    def __init__(self, input_layer):
+        self.input_layer = input_layer
+        self.target_var = T.matrix("target")
+
+    def get_loss(self, *args, **kwargs):
+        network_output = lasagne.layers.helper.get_output(self.input_layer, *args, **kwargs)
+
+        return log_loss(network_output, self.target_var[:,::16,::16])
+
 def log_loss(y, t, eps=1e-15):
     """
     cross entropy loss, summed over classes, mean over batches

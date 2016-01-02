@@ -24,7 +24,7 @@ preprocess = preprocess
 build_updates = build_updates
 
 batch_size = 128
-chunk_size = 32768
+chunk_size = 4096
 num_chunks_train = 840
 
 validate_every = 20

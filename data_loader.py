@@ -35,13 +35,14 @@ def generate_train_batch():
         indices = config().rng.randint(0, len(sunny_train_images), config().chunk_size)
 
         chunk_x = np.zeros((config().chunk_size, 1, 256, 256), dtype='float32')
-        chunk_y = np.zeros((config().chunk_size, 256 * 256), dtype='float32')
+        chunk_y = np.zeros((config().chunk_size, 256, 256), dtype='float32')
 
         for k, idx in enumerate(indices):
             img = images[indices[k]]
             lbl = labels[indices[k]]
             config().preprocess(chunk_x[k], img, chunk_y[k], lbl)
         yield [chunk_x], chunk_y
+
 
 def generate_validation_batch(set="validation"):
     if set=="train":
@@ -60,7 +61,8 @@ def generate_validation_batch(set="validation"):
 
     for n in xrange(num_chunks):
         chunk_size = config().chunk_size
-        chunk_x = np.zeros((chunk_size, 256, 256), dtype='float32')
+        chunk_x = np.zeros((chunk_size, 1, 256, 256), dtype='float32')
+        chunk_labels = np.zeros((chunk_size, 256, 256), dtype='float32')
         current_chunk_length = chunk_size
 
         for k in xrange(chunk_size):
@@ -69,10 +71,22 @@ def generate_validation_batch(set="validation"):
                 break
 
             img = images[idx]
-            config().preprocess_validation(chunk_x[k], img)
+            lbl = labels[idx]
+            config().preprocess_validation(chunk_x[k], img, chunk_labels[k], lbl)
             idx += 1
 
-        yield chunk_x, current_chunk_length
+        yield [chunk_x], current_chunk_length
 
+
+def get_label_set(set="validation"):
+    if set=="train":
+        images = sunny_train_images
+        labels = sunny_train_labels
+    elif set=="validation":
+        images = sunny_validation_images
+        labels = sunny_validation_labels
+    else:
+        raise "choose either validation or train set"
+    return images, labels
 
 

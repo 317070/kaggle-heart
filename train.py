@@ -42,7 +42,7 @@ def train_model(metadata_path, metadata=None):
 
     input_ndims = [len(l_in.output_shape) for l_in in input_layers]
     xs_shared = [lasagne.utils.shared_empty(dim=ndim, dtype='float32') for ndim in input_ndims]
-    y_shared = lasagne.utils.shared_empty(dim=2, dtype='float32')
+    y_shared = lasagne.utils.shared_empty(dim=3, dtype='float32')
 
     learning_rate_schedule = config().learning_rate_schedule
 
@@ -59,7 +59,7 @@ def train_model(metadata_path, metadata=None):
 
     updates = config().build_updates(train_loss, all_params, learning_rate)
 
-    iter_train = theano.function([idx], train_loss, givens=givens, updates=updates)
+    iter_train = theano.function([idx], train_loss, givens=givens, on_unused_input="ignore", updates=updates)
     compute_output = theano.function([idx], output, givens=givens, on_unused_input="ignore")
 
     if config().restart_from_save:
@@ -122,24 +122,24 @@ def train_model(metadata_path, metadata=None):
         if ((e + 1) % config().validate_every) == 0:
             print
             print "Validating"
-            subsets = ["train", "valid"]
+            subsets = ["train", "validation"]
             gens = [create_eval_train_gen, create_eval_valid_gen]
-            label_sets = [config().data_loader.labels_train, config().data_loader.labels_valid]
+            label_sets = [config().get_label_set(subset)[1] for subset in subsets]
             losses_eval = [losses_eval_train, losses_eval_valid]
 
             for subset, create_gen, labels, losses in zip(subsets, gens, label_sets, losses_eval):
-                print "  %s set" % subset
+                print "  %s set (%d samples)" % (subset, len(labels))
                 outputs = []
                 for xs_chunk_eval, chunk_length_eval in create_gen():
                     num_batches_chunk_eval = int(np.ceil(chunk_length_eval / float(config().batch_size)))
 
                     for x_shared, x_chunk_eval in zip(xs_shared, xs_chunk_eval):
-
                         x_shared.set_value(x_chunk_eval)
 
                     outputs_chunk = []
                     for b in xrange(num_batches_chunk_eval):
                         out = compute_output(b)
+                        out = config().postprocess(out)
                         outputs_chunk.append(out)
 
                     outputs_chunk = np.vstack(outputs_chunk)
@@ -147,8 +147,8 @@ def train_model(metadata_path, metadata=None):
                     outputs.append(outputs_chunk)
 
                 outputs = np.vstack(outputs)
-                loss = utils.log_loss(outputs, labels)
-                acc = utils.accuracy(outputs, labels)
+                loss = utils.segmentation_log_loss(outputs, labels)
+                acc = utils.segmentation_accuracy(outputs, labels)
                 print "    loss:\t%.6f" % loss
                 print "    acc:\t%.2f%%" % (acc * 100)
                 print
@@ -204,7 +204,7 @@ if __name__ == "__main__":
     print "Running configuration:", config().__name__
     print "Current git version:", utils.get_git_revision_hash()
     expid = utils.generate_expid(args.config)
-    metadata_path = "metadata/%s.pkl" % expid
+    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % expid
 
     meta_data = train_model(metadata_path)
     predict_model(metadata_path)

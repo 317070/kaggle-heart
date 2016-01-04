@@ -1,8 +1,8 @@
 import numpy as np
-from preprocess import preprocess
+from preprocess import preprocess, preprocess_validation
 import lasagne
 from updates import build_updates
-from data_loader import generate_train_batch, generate_validation_batch
+from data_loader import generate_train_batch, generate_validation_batch, get_label_set
 from functools import partial
 import lasagne
 import lasagne.layers.cuda_convnet
@@ -21,8 +21,12 @@ create_eval_valid_gen = partial(generate_validation_batch, set="validation")
 create_eval_train_gen = partial(generate_validation_batch, set="train")
 
 preprocess = preprocess
+preprocess_validation = preprocess_validation
 build_updates = build_updates
 
+get_label_set = get_label_set
+
+# In total, you train 'chunk_size' samples 'num_chunks_train' time, and you do updates every 'batch_size'
 batch_size = 128
 chunk_size = 4096
 num_chunks_train = 840

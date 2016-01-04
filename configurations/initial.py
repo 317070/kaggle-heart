@@ -9,6 +9,10 @@ from lasagne.layers.dnn import MaxPool2DDNNLayer as MaxPoolLayer
 from lasagne.layers import InputLayer
 from lasagne.layers import DenseLayer
 from lasagne.layers import GlobalPoolLayer
+from postprocess import upsample_segmentation
+
+validate_every = 1
+save_every = 1
 
 def build_model():
     l0 = InputLayer((batch_size, 1, 255, 255))
@@ -50,3 +54,7 @@ def build_model():
 
 def build_objective(l_ins, l_out):
     return objectives.UpscaledImageObjective(l_out)
+
+def postprocess(output):
+    output = output.reshape(128, 32, 32)
+    return upsample_segmentation(output, (256, 256))

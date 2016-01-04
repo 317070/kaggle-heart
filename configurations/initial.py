@@ -4,41 +4,43 @@ from default import *
 import theano.tensor as T
 import objectives
 
+from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
+from lasagne.layers.dnn import MaxPool2DDNNLayer as MaxPoolLayer
+from lasagne.layers import InputLayer
+from lasagne.layers import DenseLayer
+from lasagne.layers import GlobalPoolLayer
 
 def build_model():
-    l0 = lasagne.layers.InputLayer((batch_size, 1, 255, 255))
-    l0s = lasagne.layers.cuda_convnet.bc01_to_c01b(l0)
+    l0 = InputLayer((batch_size, 1, 255, 255))
+    l1a = ConvLayer(l0, num_filters=32, filter_size=(3, 3),
+                                               b=lasagne.init.Constant(0.1))
+    l1b = ConvLayer(l1a, num_filters=32, filter_size=(3, 3),
+                                               b=lasagne.init.Constant(0.1))
+    l1 = MaxPoolLayer(l1b, pool_size=(2, 2))
 
-    l1a = lasagne.layers.cuda_convnet.Conv2DCCLayer(l0s, num_filters=32, filter_size=(3, 3), pad="same",
-                                               b=lasagne.init.Constant(0.1), dimshuffle=False)
-    l1b = lasagne.layers.cuda_convnet.Conv2DCCLayer(l1a, num_filters=32, filter_size=(3, 3), pad="same",
-                                               b=lasagne.init.Constant(0.1), dimshuffle=False)
-    l1 = lasagne.layers.cuda_convnet.MaxPool2DCCLayer(l1b, pool_size=(2, 2), dimshuffle=False)
+    l2a = ConvLayer(l1, num_filters=32, filter_size=(3, 3),
+                                               b=lasagne.init.Constant(0.1))
+    l2b = ConvLayer(l2a, num_filters=32, filter_size=(3, 3),
+                                               b=lasagne.init.Constant(0.1))
+    l2 = MaxPoolLayer(l2b, pool_size=(2, 2))
 
-    l2a = lasagne.layers.cuda_convnet.Conv2DCCLayer(l1, num_filters=32, filter_size=(3, 3), pad="same",
-                                               b=lasagne.init.Constant(0.1), dimshuffle=False)
-    l2b = lasagne.layers.cuda_convnet.Conv2DCCLayer(l2a, num_filters=32, filter_size=(3, 3), pad="same",
-                                               b=lasagne.init.Constant(0.1), dimshuffle=False)
-    l2 = lasagne.layers.cuda_convnet.MaxPool2DCCLayer(l2b, pool_size=(2, 2), dimshuffle=False)
+    l3a = ConvLayer(l2, num_filters=32, filter_size=(3, 3),
+                                               b=lasagne.init.Constant(0.1))
+    l3b = ConvLayer(l3a, num_filters=32, filter_size=(3, 3),
+                                               b=lasagne.init.Constant(0.1))
+    l3 = MaxPoolLayer(l3b, pool_size=(2, 2))
 
-    l3a = lasagne.layers.cuda_convnet.Conv2DCCLayer(l2, num_filters=32, filter_size=(3, 3), pad="same",
-                                               b=lasagne.init.Constant(0.1), dimshuffle=False)
-    l3b = lasagne.layers.cuda_convnet.Conv2DCCLayer(l3a, num_filters=32, filter_size=(3, 3), pad="same",
-                                               b=lasagne.init.Constant(0.1), dimshuffle=False)
-    l3 = lasagne.layers.cuda_convnet.MaxPool2DCCLayer(l3b, pool_size=(2, 2), dimshuffle=False)
+    l4a = ConvLayer(l3, num_filters=32, filter_size=(3, 3),
+                                               b=lasagne.init.Constant(0.1))
+    l4b = ConvLayer(l4a, num_filters=32, filter_size=(3, 3),
+                                               b=lasagne.init.Constant(0.1))
+    l4 = MaxPoolLayer(l4b, pool_size=(2, 2))
 
-    l4a = lasagne.layers.cuda_convnet.Conv2DCCLayer(l3, num_filters=32, filter_size=(3, 3), pad="same",
-                                               b=lasagne.init.Constant(0.1), dimshuffle=False)
-    l4b = lasagne.layers.cuda_convnet.Conv2DCCLayer(l4a, num_filters=32, filter_size=(3, 3), pad="same",
-                                               b=lasagne.init.Constant(0.1), dimshuffle=False)
-    l4 = lasagne.layers.cuda_convnet.MaxPool2DCCLayer(l4b, pool_size=(2, 2), dimshuffle=False)
-    l4s = lasagne.layers.cuda_convnet.c01b_to_bc01(l4)
+    l5 = DenseLayer(l4, num_units=64)
 
-    l5 = lasagne.layers.DenseLayer(lasagne.layers.dropout(l4s, p=0.5), num_units=64, b=lasagne.init.Constant(0.1))
+    l6 = DenseLayer(lasagne.layers.dropout(l5, p=0.5), num_units=128)
 
-    l6 = lasagne.layers.DenseLayer(lasagne.layers.dropout(l5, p=0.5), num_units=128, b=lasagne.init.Constant(0.1))
-
-    l7 = lasagne.layers.DenseLayer(lasagne.layers.dropout(l6, p=0.5), num_units=32*32, nonlinearity=T.nnet.sigmoid)
+    l7 = DenseLayer(lasagne.layers.dropout(l6, p=0.5), num_units=32*32, nonlinearity=T.nnet.sigmoid)
 
     return {
         "inputs":[l0],
@@ -47,4 +49,4 @@ def build_model():
 
 
 def build_objective(l_ins, l_out):
-    return objectives.BinaryCrossentropyImageObjective(l_out)
+    return objectives.UpscaledImageObjective(l_out)

@@ -23,7 +23,7 @@ class UpscaledImageObjective(object):
     def get_loss(self, *args, **kwargs):
         network_output = lasagne.layers.helper.get_output(self.input_layer, *args, **kwargs)
 
-        return log_loss(network_output, self.target_var[:,::16,::16])
+        return log_loss(network_output, self.target_var[:,::64])
 
 def log_loss(y, t, eps=1e-15):
     """

@@ -18,7 +18,7 @@ from datetime import datetime, timedelta
 def train_model(metadata_path, metadata=None):
     if metadata is None:
         if os.path.isfile(metadata_path):
-            metadata = pickle.load(open(open(metadata_path, 'r')))
+            metadata = pickle.load(open(metadata_path, 'r'))
 
     print "Build model"
     interface_layers = config().build_model()
@@ -58,30 +58,30 @@ def train_model(metadata_path, metadata=None):
          givens[l_in.input_var] = x_shared[idx*config().batch_size:(idx+1)*config().batch_size]
 
     updates = config().build_updates(train_loss, all_params, learning_rate)
+    grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss, all_params)])+1e-9)
 
-    iter_train = theano.function([idx], train_loss, givens=givens, on_unused_input="ignore", updates=updates)
+    iter_train = theano.function([idx], [train_loss, ], givens=givens, on_unused_input="ignore", updates=updates)
     compute_output = theano.function([idx], output, givens=givens, on_unused_input="ignore")
 
-    if config().restart_from_save:
+    if config().restart_from_save and os.path.isfile(metadata_path):
         print "Load model parameters for resuming"
-        if os.path.isfile(metadata_path):
-            resume_metadata = np.load(metadata_path)
-            lasagne.layers.set_all_param_values(output_layer, resume_metadata['param_values'])
-            start_chunk_idx = resume_metadata['chunks_since_start'] + 1
-            chunks_train_idcs = range(start_chunk_idx, config().num_chunks_train)
+        resume_metadata = np.load(metadata_path)
+        lasagne.layers.set_all_param_values(output_layer, resume_metadata['param_values'])
+        start_chunk_idx = resume_metadata['chunks_since_start'] + 1
+        chunks_train_idcs = range(start_chunk_idx, config().num_chunks_train)
 
-            # set lr to the correct value
-            current_lr = np.float32(utils.current_learning_rate(learning_rate_schedule, start_chunk_idx))
-            print "  setting learning rate to %.7f" % current_lr
-            learning_rate.set_value(current_lr)
-            losses_train = resume_metadata['losses_train']
-            losses_eval_valid = resume_metadata['losses_eval_valid']
-            losses_eval_train = resume_metadata['losses_eval_train']
-        else:
-            chunks_train_idcs = range(config().num_chunks_train)
-            losses_train = []
-            losses_eval_valid = []
-            losses_eval_train = []
+        # set lr to the correct value
+        current_lr = np.float32(utils.current_learning_rate(learning_rate_schedule, start_chunk_idx))
+        print "  setting learning rate to %.7f" % current_lr
+        learning_rate.set_value(current_lr)
+        losses_train = resume_metadata['losses_train']
+        losses_eval_valid = resume_metadata['losses_eval_valid']
+        losses_eval_train = resume_metadata['losses_eval_train']
+    else:
+        chunks_train_idcs = range(config().num_chunks_train)
+        losses_train = []
+        losses_eval_valid = []
+        losses_eval_train = []
 
 
     create_train_gen = config().create_train_gen
@@ -111,7 +111,7 @@ def train_model(metadata_path, metadata=None):
         print "  batch SGD"
         losses = []
         for b in xrange(num_batches_chunk):
-            loss = iter_train(b)
+            loss, = tuple(iter_train(b))
             losses.append(loss)
 
 
@@ -149,13 +149,13 @@ def train_model(metadata_path, metadata=None):
                 outputs = np.vstack(outputs)
                 loss = utils.segmentation_log_loss(outputs, labels)
                 acc = utils.segmentation_accuracy(outputs, labels)
+                utils.segmentation_visualization(outputs, labels)
                 print "    loss:\t%.6f" % loss
                 print "    acc:\t%.2f%%" % (acc * 100)
                 print
 
                 losses.append(loss)
                 del outputs
-
 
         now = time.time()
         time_since_start = now - start_time

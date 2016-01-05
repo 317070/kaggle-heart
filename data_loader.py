@@ -38,7 +38,7 @@ def generate_train_batch():
         chunk_y = np.zeros((config().chunk_size, 256, 256), dtype='float32')
 
         for k, idx in enumerate(indices):
-            img = images[indices[k]]
+            img = images[indices[k]]-128
             lbl = labels[indices[k]]
             config().preprocess(chunk_x[k], img, chunk_y[k], lbl)
         yield [chunk_x], chunk_y

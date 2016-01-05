@@ -21,7 +21,7 @@ def hostname():
 
 
 def generate_expid(arch_name):
-    return "%s-%s-%s" % (arch_name, hostname(), timestamp())
+    return "%s-%s-0" % (arch_name, hostname())
 
 
 def get_git_revision_hash():
@@ -95,3 +95,7 @@ def segmentation_accuracy(outputs, labels):
     outputs = (outputs > 0.5).astype('int8')
     result = np.mean(labels * outputs + (1-labels) * (1-outputs), axis=(0,1,2))
     return result
+
+def segmentation_visualization(outputs, labels):
+    print outputs[0]
+    print labels[0]

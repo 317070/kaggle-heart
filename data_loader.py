@@ -1,18 +1,27 @@
 import glob
-import utils
 import numpy as np
 import re
 from configuration import config
 import cPickle as pickle
+from validation_set import get_cross_validation_indices
 
-patient_folders = glob.glob("/data/dsb15_pkl/4d_group_pkl_train/*/study/")
-np.random.seed(317070)
-validation_patients_indices = np.random.choice(range(501), 50, replace=False)
+
+################
+# Regular data #
+################
+
+patient_folders = sorted(glob.glob("/data/dsb15_pkl/4d_group_pkl_train/*/study/"))  # glob is non-deterministic!
+validation_patients_indices = get_cross_validation_indices()
 
 VALIDATION_REGEX = r"/" + "|".join(["%d"%i for i in validation_patients_indices])+"/"
 
 train_patient_folders = [folder for folder in patient_folders if re.match(VALIDATION_REGEX, folder) is None]
 validation_patient_folders = [folder for folder in patient_folders if folder not in train_patient_folders]
+
+
+##############
+# Sunny data #
+##############
 
 sunny_data = pickle.load(open("/data/dsb15_pkl/pkl_annotated/data.pkl","rb"))
 num_sunny_images = len(sunny_data["images"])
@@ -27,7 +36,31 @@ sunny_validation_images = np.array(sunny_data['images'])[validation_sunny_indice
 sunny_validation_labels = np.array(sunny_data['labels'])[validation_sunny_indices]
 
 
-def generate_train_batch():
+def get_patient_data(index, wanted_data_tags, set="train"):
+    """
+    return a dict with the desired data matched to the required tags
+    :param wanted_data_tags:
+    :return:
+    """
+    result = dict()
+    if set=="train":
+        folder = train_patient_folders[index]
+    else:
+        folder = validation_patient_folders[index]
+
+    files = sorted(glob.glob(folder+"*"))  # glob is non-deterministic!
+    for data_tag in wanted_data_tags.keys():
+        if data_tag.startswith("sliced:data"):
+            result[data_tag] = [pickle.load(open(f, "r"))['data'] for f in files]
+        if data_tag.startswith("sliced:meta:"):
+            key = data_tag[len("slided:meta:"):]
+            result[data_tag] = [pickle.load(open(f, "r"))['metadata'][key] for f in files]
+        if data_tag.startswith("sunny"):
+            result[data_tag] = [pickle.load(open(f, "r"))['metadata'][key] for f in files]
+        # add others when needed
+    return result
+
+def generate_train_batch(required_input_keys, required_output_keys):
     images = sunny_train_images
     labels = sunny_train_labels
 
@@ -41,7 +74,15 @@ def generate_train_batch():
             img = images[indices[k]]-128
             lbl = labels[indices[k]]
             config().preprocess(chunk_x[k], img, chunk_y[k], lbl)
-        yield [chunk_x], chunk_y
+
+        yield {
+            "input": {
+                "sunny": chunk_x,
+            },
+            "output": {
+                "segmentation": chunk_y,
+            }
+        }
 
 
 def generate_validation_batch(set="validation"):

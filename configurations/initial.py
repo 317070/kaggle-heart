@@ -1,4 +1,3 @@
-#TODO: add code
 from default import *
 
 import theano.tensor as T
@@ -70,15 +69,21 @@ def build_model():
                     b=lasagne.init.Constant(0.1),
                     nonlinearity=lasagne.nonlinearities.sigmoid)
 
-    l_final = lasagne.layers.FlattenLayer(l5c,outdim=2)
+    l_final = lasagne.layers.FlattenLayer(l5c, outdim=2)
+
     return {
-        "inputs":[l0],
-        "output":l_final
+        "inputs":{
+            "sunny": l0
+        },
+        "outputs":{
+            "segmentation": l_final,
+            "top": l_final
+        }
     }
 
 
-def build_objective(l_ins, l_out):
-    return objectives.UpscaledImageObjective(l_out)
+def build_objective(l_ins, l_outs):
+    return objectives.UpscaledImageObjective(l_outs)
 
 
 def postprocess(output):

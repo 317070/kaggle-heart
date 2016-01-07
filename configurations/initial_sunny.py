@@ -13,8 +13,11 @@ validate_every = 10
 save_every = 100
 restart_from_save = False
 
+batches_per_chunk = 64
+
 batch_size = 64
-chunk_size = 4096
+chunk_size = batch_size*batches_per_chunk
+
 num_chunks_train = 840
 
 learning_rate_schedule = {
@@ -24,8 +27,16 @@ learning_rate_schedule = {
     800: 0.0000003
 }
 
+
+data_sizes = {
+    "sliced:data": (batch_size, 30, 30, 100, 100), #30 mri_slices, 30 time steps, 100 px wide, 100 px high,
+    "sliced:data:shape": (batch_size, 2,),
+    "sunny": (batch_size, 1, 256, 256)
+    # TBC with the metadata
+}
+
 def build_model():
-    l0 = InputLayer((batch_size, 1, 255, 255))
+    l0 = InputLayer(data_sizes["sunny"])
     l1a = ConvLayer(l0, num_filters=32, filter_size=(3, 3),
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1))

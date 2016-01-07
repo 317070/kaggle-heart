@@ -99,3 +99,16 @@ def segmentation_accuracy(outputs, labels):
 def segmentation_visualization(outputs, labels):
     print outputs[0]
     print labels[0]
+
+def merge(a, b, path=None):
+    "merges dict b into dict a"
+    if path is None: path = []
+    for key in b:
+        if key in a:
+            if isinstance(a[key], dict) and isinstance(b[key], dict):
+                merge(a[key], b[key], path + [str(key)])
+            else:
+                raise Exception('Conflict at %s' % '.'.join(path + [str(key)]))
+        else:
+            a[key] = b[key]
+    return a

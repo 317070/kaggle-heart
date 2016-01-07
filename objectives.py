@@ -29,3 +29,22 @@ def log_loss(y, t, eps=1e-15):
     y = T.clip(y, eps, 1 - eps)
     loss = -T.mean(t * np.log(y) + (1-t) * np.log(1-y))
     return loss
+
+
+
+class R2Objective(BinaryCrossentropyImageObjective):
+    def __init__(self, input_layers):
+        self.input_systole = input_layers["systole"]
+        self.input_diastole = input_layers["diastole"]
+        self.target_vars = dict()
+        self.target_vars["systole"] = T.fvector("systole_target")
+        self.target_vars["diastole"] = T.fvector("diastole_target")
+
+    def get_loss(self, *args, **kwargs):
+        network_systole  = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)
+        network_diastole = lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)
+
+        systole_target = self.target_vars["systole"]
+        diastole_target = self.target_vars["diastole"]
+        return T.sum((network_diastole-diastole_target)**2) + T.sum((network_systole-systole_target)**2)
+

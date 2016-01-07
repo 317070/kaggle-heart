@@ -29,26 +29,31 @@ def train_model(metadata_path, metadata=None):
 
     output_layers = interface_layers["outputs"]
     input_layers = interface_layers["inputs"]
-    all_layers = lasagne.layers.get_all_layers(output_layers["top"])
-    num_params = lasagne.layers.count_params(output_layers["top"])
+    top_layer = lasagne.layers.MergeLayer(
+        incomings=output_layers.values()
+    )
+    all_layers = lasagne.layers.get_all_layers(top_layer)
+    num_params = lasagne.layers.count_params(top_layer)
     print "  number of parameters: %d" % num_params
     print "  layer output shapes:"
-    for layer in all_layers:
+    for layer in all_layers[:-1]:
         name = string.ljust(layer.__class__.__name__, 32)
         num_param = string.ljust(lasagne.layers.count_params(layer).__str__(), 10)
         print "    %s %s %s" % (name,  num_param, layer.output_shape)
 
     obj = config().build_objective(input_layers, output_layers)
     train_loss = obj.get_loss()
-    output = lasagne.layers.helper.get_output(output_layers["top"], deterministic=True)
+    outputs = [lasagne.layers.helper.get_output(output_layers[tag], deterministic=True) for tag in output_layers]
 
-    all_params = lasagne.layers.get_all_params(output_layers["top"])
+    all_params = lasagne.layers.get_all_params(top_layer)
 
     xs_shared = {
         key: lasagne.utils.shared_empty(dim=len(l_in.output_shape), dtype='float32') for (key, l_in) in input_layers.iteritems()
     }
 
     # contains target_vars of the objective! Not the output layers desired values!
+    # There can be more output layers than are strictly required for the objective
+    # e.g. for debugging
     ys_shared = {
         key: lasagne.utils.shared_empty(dim=target_var.ndim, dtype='float32') for (key, target_var) in obj.target_vars.iteritems()
     }
@@ -70,12 +75,12 @@ def train_model(metadata_path, metadata=None):
     grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss, all_params)]))
 
     iter_train = theano.function([idx], [train_loss, ], givens=givens, on_unused_input="ignore", updates=updates)
-    compute_output = theano.function([idx], output, givens=givens, on_unused_input="ignore")
+    compute_output = theano.function([idx], outputs, givens=givens, on_unused_input="ignore")
 
     if config().restart_from_save and os.path.isfile(metadata_path):
         print "Load model parameters for resuming"
         resume_metadata = np.load(metadata_path)
-        lasagne.layers.set_all_param_values(output_layers["top"], resume_metadata['param_values'])
+        lasagne.layers.set_all_param_values(top_layer, resume_metadata['param_values'])
         start_chunk_idx = resume_metadata['chunks_since_start'] + 1
         chunks_train_idcs = range(start_chunk_idx, config().num_chunks_train)
 
@@ -158,7 +163,7 @@ def train_model(metadata_path, metadata=None):
 
                     outputs_chunk = []
                     for b in xrange(num_batches_chunk_eval):
-                        out = compute_output(b)
+                        out = compute_output(b) # TODO: this now returns all outputs as defined in the model!
                         out = config().postprocess(out)
                         outputs_chunk.append(out)
 

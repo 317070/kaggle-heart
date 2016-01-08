@@ -24,7 +24,7 @@ def print_to_file(filename):
 
     sys.stdout = CustomPrint(old_stdout, logfile)
     sys.stderr = CustomPrint(old_stdout, logfile)
-    
+
     try:
         yield
     finally:

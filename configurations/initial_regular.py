@@ -58,12 +58,10 @@ def build_model():
     # then use sum to estimate volume. Sum over last 3 dimensions
     # TODO: this summer should output a distribution over the 600 classes softmaxed!
     # TODO: it should also take into account resolution, etc.
-    volume_layer = lasagne.layers.FeaturePoolLayer(reshape(l1d, data_sizes["sliced:data"][:2]+(-1,)),
+    volume_layer = GaussianApproximationVolumeLayer(reshape(l1d, data_sizes["sliced:data"][:2]+(-1,)),
                                                    pool_size=l1d.output_shape[-1],
                                                    axis=2,
                                                    pool_function=T.sum)
-
-    volume_layer = lasagne.layers.FlattenLayer(volume_layer, outdim=2)
 
     # then use max and min for systole and diastole
     l_systole = lasagne.layers.FlattenLayer(

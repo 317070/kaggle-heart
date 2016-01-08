@@ -48,14 +48,17 @@ def get_patient_data(indices, wanted_data_tags, set="train"):
         "input": {
         },
         "output": {
-            "systole": np.zeros((config().chunk_size, ), dtype='float32'),
-            "diastole": np.zeros((config().chunk_size, ), dtype='float32'),
+            "systole":  np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
+            "diastole": np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
         }
     }
 
     for tag in wanted_data_tags:
         if tag in config().data_sizes:
-            result["input"][tag] = np.zeros((config().chunk_size, ) + config().data_sizes[tag][1:], dtype='float32')
+            chunk_shape = list(config().data_sizes[tag])
+            chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
+            chunk_shape = tuple(chunk_shape)
+            result["input"][tag] = np.zeros(chunk_shape, dtype='float32')
 
     if set=="train":
         folders = [train_patient_folders[i] for i in indices]
@@ -84,8 +87,11 @@ def get_patient_data(indices, wanted_data_tags, set="train"):
         # find the id of the current patient in the folder name (=safer)
         id = int(re.search(r'/(\d+)/', folder).group(1))
         assert regular_labels[id-1, 0]==id
-        result["output"]["systole"][i] = regular_labels[id-1, 1]
-        result["output"]["diastole"][i] = regular_labels[id-1, 2]
+        V_systole = regular_labels[id-1, 1]
+        V_diastole = regular_labels[id-1, 2]
+
+        result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1
+        result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1
     return result
 
 
@@ -93,8 +99,18 @@ def get_sunny_patient_data(indices, set="train"):
     images = sunny_train_images
     labels = sunny_train_labels
 
-    sunny_chunk = np.zeros((config().chunk_size, 1, 256, 256), dtype='float32')
-    sunny_label_chunk = np.zeros((config().chunk_size, 256, 256),    dtype='float32')
+    chunk_shape = list(config().data_sizes["sunny"])
+    chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
+    chunk_shape = tuple(chunk_shape)
+
+    sunny_chunk =       np.zeros(chunk_shape, dtype='float32')
+
+    chunk_shape = list(config().data_sizes["sunny"])
+    chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
+    chunk_shape.remove(1)
+    chunk_shape = tuple(chunk_shape)
+
+    sunny_label_chunk = np.zeros(chunk_shape, dtype='float32')
 
     for k, idx in enumerate(indices):
         img = images[indices[k]]-128
@@ -114,18 +130,21 @@ def get_sunny_patient_data(indices, set="train"):
 def generate_train_batch(required_input_keys, required_output_keys):
     # generate sunny data
 
+    sunny_chunk_size = config().sunny_batch_size * config().batches_per_chunk
+    chunk_size = config().batch_size * config().batches_per_chunk
+
     for n in xrange(config().num_chunks_train):
         result = {}
         input_keys_to_do = list(required_input_keys) #clone
         output_keys_to_do = list(required_output_keys) #clone
         if "sunny" in input_keys_to_do or "segmentation" in output_keys_to_do:
-            indices = config().rng.randint(0, len(sunny_train_images), config().sunny_chunk_size)
+            indices = config().rng.randint(0, len(sunny_train_images), sunny_chunk_size)
             sunny_patient_data = get_sunny_patient_data(indices, set="train")
             result = utils.merge(result, sunny_patient_data)
             input_keys_to_do.remove("sunny")
             output_keys_to_do.remove("segmentation")
 
-        indices = config().rng.randint(0, len(train_patient_folders), config().chunk_size)
+        indices = config().rng.randint(0, len(train_patient_folders), chunk_size)
         kaggle_data = get_patient_data(indices, input_keys_to_do, set="train")
 
         result = utils.merge(result, kaggle_data)

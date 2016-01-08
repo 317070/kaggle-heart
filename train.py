@@ -43,6 +43,9 @@ def train_model(metadata_path, metadata=None):
 
     obj = config().build_objective(input_layers, output_layers)
     train_loss = obj.get_loss()
+    kaggle_loss = obj.get_kaggle_loss()
+    segmentation_loss = obj.get_segmentation_loss()
+
     outputs = [lasagne.layers.helper.get_output(output_layers[tag], deterministic=True) for tag in output_layers]
 
     all_params = lasagne.layers.get_all_params(top_layer)
@@ -74,7 +77,7 @@ def train_model(metadata_path, metadata=None):
     updates = config().build_updates(train_loss, all_params, learning_rate)
     grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss, all_params)]))
 
-    iter_train = theano.function([idx], [train_loss, ], givens=givens, on_unused_input="ignore", updates=updates)
+    iter_train = theano.function([idx], [train_loss, kaggle_loss, segmentation_loss], givens=givens, on_unused_input="ignore", updates=updates)
     compute_output = theano.function([idx], outputs, givens=givens, on_unused_input="ignore")
 
     if config().restart_from_save and os.path.isfile(metadata_path):
@@ -116,7 +119,7 @@ def train_model(metadata_path, metadata=None):
     start_time = time.time()
     prev_time = start_time
 
-    num_batches_chunk = config().chunk_size // config().batch_size
+    num_batches_chunk = config().batches_per_chunk
 
     for e, train_data in izip(chunks_train_idcs, create_train_gen()):
         print "Chunk %d/%d" % (e + 1, config().num_chunks_train)
@@ -136,13 +139,20 @@ def train_model(metadata_path, metadata=None):
 
         print "  batch SGD"
         losses = []
+        kaggle_losses = []
+        segmentation_losses = []
         for b in xrange(num_batches_chunk):
-            loss, = tuple(iter_train(b))
+            loss, kaggle_loss, segmentation_loss = tuple(iter_train(b))
             losses.append(loss)
+            kaggle_losses.append(kaggle_loss)
+            segmentation_losses.append(segmentation_loss)
 
         mean_train_loss = np.mean(losses)
         print "  mean training loss:\t\t%.6f" % mean_train_loss
         losses_train.append(mean_train_loss)
+
+        print "  mean kaggle loss:\t\t%.6f" % np.mean(kaggle_losses)
+        print "  mean segment loss:\t\t%.6f" % np.mean(segmentation_losses)
 
         if ((e + 1) % config().validate_every) == 0:
             print

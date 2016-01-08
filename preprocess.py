@@ -30,8 +30,12 @@ def preprocess(patient_data, result, index):
             patient_4d_tensor = np.swapaxes(
                                         resize_to_make_it_fit(patient_data[tag], output_shape=desired_shape[-2:])
                                         ,1,0)
-            t_sh = patient_4d_tensor.shape
-            result[tag][index][:t_sh[0],:t_sh[1],:t_sh[2],:t_sh[3]] = patient_4d_tensor
+            patient_shape = patient_4d_tensor.shape
+
+            # TODO: find a better way to adapt the number of images per patient
+            t_sh = [min(l1,l2) for l1, l2 in zip(desired_shape, patient_shape)]
+
+            result[tag][index][:t_sh[0],:t_sh[1],:t_sh[2],:t_sh[3]] = patient_4d_tensor[:t_sh[0],:t_sh[1],:t_sh[2],:t_sh[3]]
         if tag.startswith("sliced:data:shape"):
             result[tag][index] = patient_data[tag]
         if tag.startswith("sliced:meta:"):

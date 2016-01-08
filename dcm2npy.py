@@ -70,10 +70,10 @@ for folder in folder_list[27:]:
     mngr.window.setGeometry(50, 100, 640, 545)
 
     plt.suptitle(folder)
-    vmax = 255  # np.percentile(img, 90)*1.25
+    vmax = 255
     print "max:",vmax
     im = fig.gca().imshow(img, cmap='gist_gray_r', vmin=vmin, vmax=vmax)
-    # fig.colorbar(fig.gca())
+
     def init():
         im.set_data(img)
 

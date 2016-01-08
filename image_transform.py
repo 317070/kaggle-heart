@@ -7,8 +7,6 @@ import multiprocessing as mp
 import numpy as np
 import skimage.io
 import skimage.transform
-
-
 import utils
 
 tform_identity = skimage.transform.AffineTransform()

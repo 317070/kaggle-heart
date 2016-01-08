@@ -29,10 +29,6 @@ build_updates = build_updates
 get_label_set = get_label_set
 
 # In total, you train 'chunk_size' samples 'num_chunks_train' time, and you do updates every 'batch_size'
-sunny_batch_size = 128
-sunny_chunk_size = 4096
-batch_size = 128
-chunk_size = 4096
 num_chunks_train = 840
 
 validate_every = 20

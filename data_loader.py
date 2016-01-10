@@ -12,14 +12,16 @@ from validation_set import get_cross_validation_indices
 ################
 
 patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_train/*/study/"))  # glob is non-deterministic!
-validation_patients_indices = get_cross_validation_indices()
+validation_patients_indices = get_cross_validation_indices(indices=range(1,501))
+train_patients_indices = [i for i in range(1,501) if i not in validation_patients_indices]
 
-VALIDATION_REGEX = r"/" + "|".join(["%d"%i for i in validation_patients_indices])+"/"
+VALIDATION_REGEX = "|".join(["(/%d/)"%i for i in validation_patients_indices])
 
-train_patient_folders = [folder for folder in patient_folders if re.match(VALIDATION_REGEX, folder) is None]
+train_patient_folders = [folder for folder in patient_folders if re.search(VALIDATION_REGEX, folder) is None]
 validation_patient_folders = [folder for folder in patient_folders if folder not in train_patient_folders]
 
 regular_labels = pickle.load(open("/data/dsb15_pkl/train.pkl","r"))
+
 
 ##############
 # Sunny data #
@@ -28,7 +30,7 @@ regular_labels = pickle.load(open("/data/dsb15_pkl/train.pkl","r"))
 sunny_data = pickle.load(open("/data/dsb15_pkl/pkl_annotated/data.pkl","rb"))
 num_sunny_images = len(sunny_data["images"])
 
-validation_sunny_indices = np.random.choice(range(num_sunny_images), 50, replace=False)
+validation_sunny_indices = get_cross_validation_indices(indices=range(num_sunny_images))
 train_sunny_indices = [i for i in range(num_sunny_images) if i not in validation_sunny_indices]
 
 sunny_train_images = np.array(sunny_data['images'])[train_sunny_indices]
@@ -61,9 +63,9 @@ def get_patient_data(indices, wanted_data_tags, set="train"):
             result["input"][tag] = np.zeros(chunk_shape, dtype='float32')
 
     if set=="train":
-        folders = [train_patient_folders[i] for i in indices]
+        folders = [train_patient_folders[i] for i in indices if i<len(train_patient_folders)]
     else:
-        folders = [validation_patient_folders[i] for i in indices]
+        folders = [validation_patient_folders[i] for i in indices if i<len(train_patient_folders)]
 
     # TODO: every folder is multiple times in a chunk!
     # therefore, this can be done with loading every file only once
@@ -103,7 +105,7 @@ def get_sunny_patient_data(indices, set="train"):
     chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
     chunk_shape = tuple(chunk_shape)
 
-    sunny_chunk =       np.zeros(chunk_shape, dtype='float32')
+    sunny_chunk = np.zeros(chunk_shape, dtype='float32')
 
     chunk_shape = list(config().data_sizes["sunny"])
     chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
@@ -113,9 +115,13 @@ def get_sunny_patient_data(indices, set="train"):
     sunny_label_chunk = np.zeros(chunk_shape, dtype='float32')
 
     for k, idx in enumerate(indices):
-        img = images[indices[k]]-128
-        lbl = labels[indices[k]]
-        config().sunny_preprocess(sunny_chunk[k], img, sunny_label_chunk[k], lbl)
+        if indices[k]<len(images):
+            img = images[indices[k]]-128
+            lbl = labels[indices[k]]
+            config().sunny_preprocess(sunny_chunk[k], img, sunny_label_chunk[k], lbl)
+        else:
+            print "requesting out of bound sunny?"
+            pass #zeros
 
     return {
         "input": {
@@ -153,90 +159,66 @@ def generate_train_batch(required_input_keys, required_output_keys):
 
 
 # TODO: finish this function
+# iteratively walk through first train set, then validation set
+# then, return zeros (or whatever)
+# train.py will select the relevant results and calculate what it wants based on those outputs
 
-def generate_validation_batch(required_input_keys, required_output_keys):
+def generate_validation_batch(required_input_keys, required_output_keys, set="train"):
     # generate sunny data
-    if set=="sunny:train":
-        images = sunny_train_images
-        labels = sunny_train_labels
-    elif set=="sunny:validation":
-        images = sunny_validation_images
-        labels = sunny_validation_labels
-    else:
-        raise "choose either validation or train set"
+    sunny_length = get_lenght_of_set(name="sunny", set=set)
+    regular_length = get_lenght_of_set(name="regular", set=set)
 
-    num_images = len(images)
-    num_chunks = int(np.ceil(num_images / float(config().chunk_size)))
+    sunny_batches = int(np.ceil(sunny_length / float(config().sunny_batch_size)))
+    regular_batches = int(np.ceil(regular_length / float(config().batch_size)))
 
-    idx = 0
+    num_batches = max(sunny_batches, regular_batches)
+
+    num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
+
+    sunny_chunk_size = config().batches_per_chunk * config().sunny_batch_size
+    regular_chunk_size = config().batches_per_chunk * config().batch_size
+
     for n in xrange(num_chunks):
 
-        current_chunk_length = config().chunk_size
-        if n*config().chunk_size + current_chunk_length > len(num_images):
-            current_chunk_length = len(num_images) - n*config().chunk_size
-
-        indices = range(n*config().chunk_size, n*config().chunk_size + current_chunk_length)
-
         result = {}
-        input_keys_to_do = list(required_input_keys) #clone
-        output_keys_to_do = list(required_output_keys) #clone
+        input_keys_to_do  = list(required_input_keys)  # clone
+        output_keys_to_do = list(required_output_keys) # clone
 
         if "sunny" in input_keys_to_do or "segmentation" in output_keys_to_do:
+
+            indices = range(n*sunny_chunk_size, (n+1)*sunny_chunk_size)
+
             sunny_patient_data = get_sunny_patient_data(indices, set="train")
             result = utils.merge(result, sunny_patient_data)
             input_keys_to_do.remove("sunny")
             output_keys_to_do.remove("segmentation")
 
+        indices = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
         kaggle_data = get_patient_data(indices, input_keys_to_do, set="train")
 
         result = utils.merge(result, kaggle_data)
-        idx += 1
-        yield result, current_chunk_length
+
+        yield result
+
+def get_number_of_validation_batches(set="validation"):
+
+    sunny_length = get_lenght_of_set(name="sunny", set=set)
+    regular_length = get_lenght_of_set(name="regular", set=set)
+
+    sunny_batches = int(np.ceil(sunny_length / float(config().sunny_batch_size)))
+    regular_batches = int(np.ceil(regular_length / float(config().batch_size)))
+    return min(sunny_batches, regular_batches)
 
 
-def generate_validation_batch(set="validation"):
-    if set=="train":
-        images = sunny_train_images
-        labels = sunny_train_labels
-    elif set=="validation":
-        images = sunny_validation_images
-        labels = sunny_validation_labels
+def get_lenght_of_set(name="sunny", set="validation"):
+    if name == "sunny":
+        if set=="train":
+            return len(sunny_train_images)
+        elif set=="validation":
+            return len(sunny_validation_images)
     else:
-        raise "choose either validation or train set"
-
-    num_images = len(images)
-    num_chunks = int(np.ceil(num_images / float(config().chunk_size)))
-
-    idx = 0
-
-    for n in xrange(num_chunks):
-        chunk_size = config().chunk_size
-        chunk_x = np.zeros((chunk_size, 1, 256, 256), dtype='float32')
-        chunk_labels = np.zeros((chunk_size, 256, 256), dtype='float32')
-        current_chunk_length = chunk_size
-
-        for k in xrange(chunk_size):
-            if idx >= num_images:
-                current_chunk_length = k
-                break
-
-            img = images[idx]
-            lbl = labels[idx]
-            config().preprocess_validation(chunk_x[k], img, chunk_labels[k], lbl)
-            idx += 1
-
-        yield [chunk_x], current_chunk_length
-
-
-def get_label_set(set="validation"):
-    if set=="train":
-        images = sunny_train_images
-        labels = sunny_train_labels
-    elif set=="validation":
-        images = sunny_validation_images
-        labels = sunny_validation_labels
-    else:
-        raise "choose either validation or train set"
-    return images, labels
-
+        if set=="train":
+            return len(train_patient_folders)
+        elif set=="validation":
+            return len(validation_patient_folders)
 

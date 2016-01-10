@@ -2,10 +2,7 @@ import numpy as np
 import lasagne
 import theano
 import theano.tensor as T
-
-def binary_crossentropy_image_objective(predictions, targets):
-    return log_loss(predictions, targets)
-
+import theano_printer
 
 class TargetVarDictObjective(object):
     def __init__(self, input_layers):
@@ -23,6 +20,7 @@ class TargetVarDictObjective(object):
     def get_segmentation_loss(self, *args, **kwargs):
         return -1
 
+
 class BinaryCrossentropyImageObjective(TargetVarDictObjective):
     def __init__(self, input_layers):
         super(BinaryCrossentropyImageObjective, self).__init__(input_layers)
@@ -33,7 +31,12 @@ class BinaryCrossentropyImageObjective(TargetVarDictObjective):
     def get_loss(self, *args, **kwargs):
         network_output = lasagne.layers.helper.get_output(self.input_layer, *args, **kwargs)
         segmentation_target = self.target_vars["segmentation"]
-        return log_loss(network_output.flatten(ndim=2), segmentation_target.flatten(ndim=2))
+
+        if "average" in kwargs and not kwargs["average"]:
+            loss = log_loss( network_output.flatten(ndim=2), segmentation_target.flatten(ndim=2) )
+            return loss
+
+        return T.mean(log_loss(network_output.flatten(ndim=2), segmentation_target.flatten(ndim=2)))
 
 
 class UpscaledImageObjective(BinaryCrossentropyImageObjective):
@@ -42,15 +45,13 @@ class UpscaledImageObjective(BinaryCrossentropyImageObjective):
         segmentation_target = self.target_vars["segmentation"]
         return log_loss(network_output.flatten(ndim=2), segmentation_target[:,4::8,4::8].flatten(ndim=2))
 
-def log_loss(y, t, eps=1e-15):
+def log_loss(y, t, eps=1e-7):
     """
     cross entropy loss, summed over classes, mean over batches
     """
     y = T.clip(y, eps, 1 - eps)
-    loss = -T.mean(t * np.log(y) + (1-t) * np.log(1-y))
+    loss = -T.mean(t * np.log(y) + (1-t) * np.log(1-y), axis=(1,))
     return loss
-
-
 
 
 class R2Objective(TargetVarDictObjective):
@@ -92,10 +93,15 @@ class KaggleObjective(TargetVarDictObjective):
         P_systole = T.extra_ops.cumsum(network_systole, axis=1)
         P_diastole = T.extra_ops.cumsum(network_diastole, axis=1)
 
+        if "average" in kwargs and not kwargs["average"]:
+            CRPS = 0.5 * T.mean((P_systole - systole_target)**2,  axis = (1,)) + \
+                   0.5 * T.mean((P_diastole - diastole_target)**2, axis = (1,))
+            return CRPS
+
         CRPS = 0.5 * T.mean((P_systole - systole_target)**2,  axis = (0,1)) + \
                0.5 * T.mean((P_diastole - diastole_target)**2, axis = (0,1))
-
         return CRPS
+
 
 class MixedKaggleSegmentationObjective(KaggleObjective, BinaryCrossentropyImageObjective):
     def __init__(self, input_layers):

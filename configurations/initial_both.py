@@ -10,15 +10,17 @@ from lasagne.layers import reshape
 from lasagne.layers import DenseLayer
 from postprocess import upsample_segmentation
 from volume_estimation_layers import GaussianApproximationVolumeLayer
+import theano_printer
 
-validate_every = 10
-save_every = 100
+validate_every = 1
+validate_train_set = False
+save_every = 20
 restart_from_save = False
 
 batches_per_chunk = 1
 
 batch_size = 1
-sunny_batch_size = 4
+sunny_batch_size = 2
 num_chunks_train = 840
 
 learning_rate_schedule = {
@@ -29,7 +31,7 @@ learning_rate_schedule = {
 }
 
 data_sizes = {
-    "sliced:data": (batch_size, 30, 15, 50, 50), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data": (batch_size, 30, 15, 25, 25), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, 256, 256)
     # TBC with the metadata
@@ -45,15 +47,18 @@ def build_model():
     l1a_sunny = ConvLayer(l0_sunny, num_filters=32, filter_size=(3, 3),
                     pad='same',
                     W=lasagne.init.Orthogonal(),
-                    b=lasagne.init.Constant(0.1))
+                    b=lasagne.init.Constant(0.1),
+                    )
     l1b_sunny = ConvLayer(l1a_sunny, num_filters=32, filter_size=(3, 3),
                     pad='same',
                     W=lasagne.init.Orthogonal(),
-                    b=lasagne.init.Constant(0.1))
+                    b=lasagne.init.Constant(0.1),
+                    )
     l1c_sunny = ConvLayer(l1b_sunny, num_filters=32, filter_size=(3, 3),
                     pad='same',
                     W=lasagne.init.Orthogonal(),
-                    b=lasagne.init.Constant(0.1))
+                    b=lasagne.init.Constant(0.1),
+                    )
     l1d_sunny = ConvLayer(l1c_sunny, num_filters=1, filter_size=(1, 1),
                     pad='same',
                     W=lasagne.init.Orthogonal(),

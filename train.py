@@ -4,6 +4,7 @@ import argparse
 from configuration import config, set_configuration
 import numpy as np
 import string
+from data_loader import get_lenght_of_set, get_number_of_validation_batches
 from predict import predict_model
 import utils
 import cPickle as pickle
@@ -18,11 +19,9 @@ import sys
 from log import print_to_file
 import logging
 from functools import partial
+import theano_printer
 
 def train_model(metadata_path, metadata=None):
-    if metadata is None:
-        if os.path.isfile(metadata_path):
-            metadata = pickle.load(open(metadata_path, 'r'))
 
     print "Build model"
     interface_layers = config().build_model()
@@ -42,9 +41,14 @@ def train_model(metadata_path, metadata=None):
         print "    %s %s %s" % (name,  num_param, layer.output_shape)
 
     obj = config().build_objective(input_layers, output_layers)
+
     train_loss = obj.get_loss()
     kaggle_loss = obj.get_kaggle_loss()
     segmentation_loss = obj.get_segmentation_loss()
+
+    validation_train_loss = obj.get_loss()
+    validation_kaggle_loss = obj.get_kaggle_loss(average=False)
+    validation_segmentation_loss = obj.get_segmentation_loss(average=False)
 
     outputs = [lasagne.layers.helper.get_output(output_layers[tag], deterministic=True) for tag in output_layers]
 
@@ -69,16 +73,24 @@ def train_model(metadata_path, metadata=None):
     givens = dict()
     for key in output_layers.keys():
         if key in obj.target_vars:  #only add them when needed for our objective!
-            givens[obj.target_vars[key]] = ys_shared[key][idx*config().batch_size : (idx+1)*config().batch_size]
+            if key=="segmentation":
+                givens[obj.target_vars[key]] = ys_shared[key][idx*config().sunny_batch_size : (idx+1)*config().sunny_batch_size]
+            else:
+                givens[obj.target_vars[key]] = ys_shared[key][idx*config().batch_size : (idx+1)*config().batch_size]
 
     for key in input_layers.keys():
-        givens[input_layers[key].input_var] = xs_shared[key][idx*config().batch_size:(idx+1)*config().batch_size]
+        if key=="sunny":
+            givens[input_layers[key].input_var] = xs_shared[key][idx*config().sunny_batch_size:(idx+1)*config().sunny_batch_size]
+        else:
+            givens[input_layers[key].input_var] = xs_shared[key][idx*config().batch_size:(idx+1)*config().batch_size]
 
     updates = config().build_updates(train_loss, all_params, learning_rate)
     grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss, all_params)]))
 
-    iter_train = theano.function([idx], [train_loss, kaggle_loss, segmentation_loss], givens=givens, on_unused_input="ignore", updates=updates)
-    compute_output = theano.function([idx], outputs, givens=givens, on_unused_input="ignore")
+    iter_train = theano.function([idx], [train_loss, kaggle_loss, segmentation_loss] + theano_printer.get_the_stuff_to_print(),
+                                 givens=givens, on_unused_input="ignore", updates=updates)
+    iter_validate = theano.function([idx], [validation_train_loss, validation_kaggle_loss, validation_segmentation_loss] + theano_printer.get_the_stuff_to_print(),
+                                    givens=givens, on_unused_input="ignore")
 
     if config().restart_from_save and os.path.isfile(metadata_path):
         print "Load model parameters for resuming"
@@ -106,14 +118,14 @@ def train_model(metadata_path, metadata=None):
                                )
 
     create_eval_valid_gen = partial(config().create_eval_valid_gen,
-                               required_input_keys = xs_shared.keys(),
-                               required_output_keys = ys_shared.keys()
-                               )
+                                   required_input_keys = xs_shared.keys(),
+                                   required_output_keys = ys_shared.keys()
+                                   )
 
     create_eval_train_gen = partial(config().create_eval_train_gen,
-                               required_input_keys = xs_shared.keys(),
-                               required_output_keys = ys_shared.keys()
-                               )
+                                   required_input_keys = xs_shared.keys(),
+                                   required_output_keys = ys_shared.keys()
+                                   )
 
     print "Train model"
     start_time = time.time()
@@ -142,7 +154,7 @@ def train_model(metadata_path, metadata=None):
         kaggle_losses = []
         segmentation_losses = []
         for b in xrange(num_batches_chunk):
-            loss, kaggle_loss, segmentation_loss = tuple(iter_train(b))
+            loss, kaggle_loss, segmentation_loss = tuple(iter_train(b)[:3])
             losses.append(loss)
             kaggle_losses.append(kaggle_loss)
             segmentation_losses.append(segmentation_loss)
@@ -157,40 +169,54 @@ def train_model(metadata_path, metadata=None):
         if ((e + 1) % config().validate_every) == 0:
             print
             print "Validating"
-            subsets = ["train", "validation"]
-            gens = [create_eval_train_gen, create_eval_valid_gen]
-            label_sets = [config().get_label_set(subset)[1] for subset in subsets]
-            losses_eval = [losses_eval_train, losses_eval_valid]
+            if config().validate_train_set:
+                subsets = ["validation", "train"]
+                gens = [create_eval_valid_gen, create_eval_train_gen]
+                losses_eval = [losses_eval_valid, losses_eval_train]
+            else:
+                subsets = ["validation"]
+                gens = [create_eval_valid_gen]
+                losses_eval = [losses_eval_valid]
 
-            for subset, create_gen, labels, losses in zip(subsets, gens, label_sets, losses_eval):
-                print "  %s set (%d samples)" % (subset, len(labels))
-                outputs = []
-                for validation_data, chunk_length_eval in create_gen():
-                    num_batches_chunk_eval = int(np.ceil(chunk_length_eval / float(config().batch_size)))
+            for subset, create_gen, losses_validation in zip(subsets, gens, losses_eval):
+
+                losses = []
+                kaggle_losses = []
+                segmentation_losses = []
+                print "  %s set (%d batches)" % (subset, get_number_of_validation_batches(set=subset))
+
+                for validation_data in create_gen():
+                    num_batches_chunk_eval = config().batches_per_chunk
 
                     for key in xs_shared:
                         xs_shared[key].set_value(validation_data["input"][key])
 
-                    outputs_chunk = []
+                    for key in ys_shared:
+                        ys_shared[key].set_value(validation_data["output"][key])
+
                     for b in xrange(num_batches_chunk_eval):
-                        out = compute_output(b) # TODO: this now returns all outputs as defined in the model!
-                        out = config().postprocess(out)
-                        outputs_chunk.append(out)
+                        loss, kaggle_loss, segmentation_loss = tuple(iter_validate(b)[:3])
+                        losses.append(loss)
+                        kaggle_losses.extend(kaggle_loss)
+                        segmentation_losses.extend(segmentation_loss)
 
-                    outputs_chunk = np.vstack(outputs_chunk)
-                    outputs_chunk = outputs_chunk[:chunk_length_eval] # truncate to the right length
-                    outputs.append(outputs_chunk)
+                losses = np.array(losses)
+                kaggle_losses = np.array(kaggle_losses)
+                segmentation_losses = np.array(segmentation_losses)
 
-                outputs = np.vstack(outputs)
-                loss = utils.segmentation_log_loss(outputs, labels)
-                acc = utils.segmentation_accuracy(outputs, labels)
-                utils.segmentation_visualization(outputs, labels)
-                print "    loss:\t%.6f" % loss
-                print "    acc:\t%.2f%%" % (acc * 100)
+                # now select only the relevant section to average
+                sunny_len = get_lenght_of_set(name="sunny", set=subset)
+                regular_len = get_lenght_of_set(name="regular", set=subset)
+                num_valid_batches = get_number_of_validation_batches(set=subset)
+
+                print "  mean training loss:\t\t%.6f" % np.mean(losses[:num_valid_batches])
+                print "  mean kaggle loss:\t\t%.6f"   % np.mean(kaggle_losses[:regular_len])
+                print "  mean segment loss:\t\t%.6f"  % np.mean(segmentation_losses[:sunny_len])
+                # print "    acc:\t%.2f%%" % (acc * 100)
                 print
 
-                losses.append(loss)
-                del outputs
+                loss_to_save = np.mean(losses[:num_valid_batches])
+                losses_validation.append(loss_to_save)
 
         now = time.time()
         time_since_start = now - start_time
@@ -218,7 +244,7 @@ def train_model(metadata_path, metadata=None):
                     'losses_eval_valid': losses_eval_valid,
                     'losses_eval_train': losses_eval_train,
                     'time_since_start': time_since_start,
-                    'param_values': lasagne.layers.get_all_param_values(output_layer)
+                    'param_values': lasagne.layers.get_all_param_values(top_layer)
                 }, f, pickle.HIGHEST_PROTOCOL)
 
             print "  saved to %s" % metadata_path

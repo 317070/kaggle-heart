@@ -116,7 +116,7 @@ def get_sunny_patient_data(indices, set="train"):
 
     for k, idx in enumerate(indices):
         if indices[k]<len(images):
-            img = images[indices[k]]-128
+            img = images[indices[k]]
             lbl = labels[indices[k]]
             config().sunny_preprocess(sunny_chunk[k], img, sunny_label_chunk[k], lbl)
         else:
@@ -158,11 +158,6 @@ def generate_train_batch(required_input_keys, required_output_keys):
         yield result
 
 
-# TODO: finish this function
-# iteratively walk through first train set, then validation set
-# then, return zeros (or whatever)
-# train.py will select the relevant results and calculate what it wants based on those outputs
-
 def generate_validation_batch(required_input_keys, required_output_keys, set="train"):
     # generate sunny data
     sunny_length = get_lenght_of_set(name="sunny", set=set)
@@ -199,6 +194,7 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="tr
         result = utils.merge(result, kaggle_data)
 
         yield result
+
 
 def get_number_of_validation_batches(set="validation"):
 

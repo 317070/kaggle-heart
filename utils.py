@@ -112,3 +112,14 @@ def merge(a, b, path=None):
         else:
             a[key] = b[key]
     return a
+
+def detect_nans(loss, xs_shared, ys_shared, all_params):
+    if np.isnan(loss):
+        print "NaN Detected."
+        #if not np.isfinite(g_n): print "Nan in gradients detected"
+        for p in all_params:
+            if not np.isfinite(p.get_value()).all(): print "Nan detected in", p.name
+        for k, v in xs_shared.iteritems():
+            if not np.isfinite(v).all(): print "Nan detected in loaded data: %s"%k
+        for k, v in ys_shared.iteritems():
+            if not np.isfinite(v).all(): print "Nan detected in loaded data: %s"%k

@@ -1,5 +1,6 @@
 import numpy as np
-from preprocess import sunny_preprocess, sunny_preprocess_validation, preprocess
+from preprocess import sunny_preprocess, sunny_preprocess_validation, preprocess, preprocess_with_augmentation, \
+    sunny_preprocess_with_augmentation
 import lasagne
 from updates import build_updates
 from data_loader import generate_train_batch, generate_validation_batch
@@ -20,9 +21,10 @@ create_train_gen = generate_train_batch
 create_eval_valid_gen = partial(generate_validation_batch, set="validation")
 create_eval_train_gen = partial(generate_validation_batch, set="train")
 
-sunny_preprocess = sunny_preprocess
+sunny_preprocess = sunny_preprocess_with_augmentation
 sunny_preprocess_validation = sunny_preprocess_validation
-preprocess = preprocess
+preprocess = preprocess_with_augmentation
+preprocess_validation = preprocess
 
 build_updates = build_updates
 

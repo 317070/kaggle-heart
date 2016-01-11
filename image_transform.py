@@ -9,6 +9,8 @@ import skimage.io
 import skimage.transform
 import utils
 
+
+
 tform_identity = skimage.transform.AffineTransform()
 
 def resize_to_make_it_fit(images, output_shape=(50, 50)):
@@ -18,14 +20,61 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
     #result.reshape((final_shape[0],-1) + output_shape)
     for i, mri_slice in enumerate(images):
         mri_slice = mri_slice.reshape((-1,)+mri_slice.shape[-2:])
+        scaling = max(mri_slice[0].shape[-2]/output_shape[-2], mri_slice[0].shape[-1]/output_shape[-1])
+        tform = build_rescale_transform(scaling, mri_slice[0].shape[-2:], target_shape=output_shape)
 
-        tform =  build_centering_transform(mri_slice[0].shape, target_shape=output_shape)
         for j, frame in enumerate(mri_slice):
             # TODO: can't this be done better?
             result[i,j] = fast_warp(frame, tform, output_shape=output_shape)
 
     #result.reshape(final_shape)
     return result
+
+def resize_and_augment(images, output_shape=(50, 50), augment=None):
+    final_shape = (len(images),) + images[0].shape[:-2] + output_shape
+    result = np.zeros(final_shape, dtype="float32")
+
+    #result.reshape((final_shape[0],-1) + output_shape)
+    for i, mri_slice in enumerate(images):
+        mri_slice = mri_slice.reshape((-1,)+mri_slice.shape[-2:])
+        scaling = max(mri_slice[0].shape[-2]/output_shape[-2], mri_slice[0].shape[-1]/output_shape[-1])
+        tform = build_rescale_transform(scaling, mri_slice[0].shape[-2:], target_shape=output_shape)
+        # add rotation
+        # add skew
+        # add translation
+        tform_center, tform_uncenter = build_center_uncenter_transforms(mri_slice[0].shape[-2:])
+        augment_tform = build_augmentation_transform((1.0, 1.0), augment["rotation"], augment["shear"], augment["translation"], flip=False)
+        total_tform = tform + tform_uncenter + augment_tform + tform_center
+        for j, frame in enumerate(mri_slice):
+            result[i,j] = fast_warp(frame, total_tform, output_shape=output_shape)
+
+    #result.reshape(final_shape)
+    return result
+
+def resize_to_make_sunny_fit(image, output_shape=(50, 50)):
+    scaling = max(image.shape[-2]/output_shape[-2], image.shape[-1]/output_shape[-1])
+    tform = build_rescale_transform(scaling, image.shape[-2:], target_shape=output_shape)
+    return fast_warp(image, tform, output_shape=output_shape)
+
+
+def resize_and_augment_sunny(image, output_shape=(50, 50), augment=None):
+    if augment is None:
+        return resize_to_make_sunny_fit(image, output_shape=(50, 50))
+
+    final_shape = image.shape[:-2] + output_shape
+    result = np.zeros(final_shape, dtype="float32")
+
+    #result.reshape((final_shape[0],-1) + output_shape)
+    scaling = max(image.shape[-2]/output_shape[-2], image.shape[-1]/output_shape[-1])
+    tform = build_rescale_transform(scaling, image.shape[-2:], target_shape=output_shape)
+    # add rotation
+    # add skew
+    # add translation
+    tform_center, tform_uncenter = build_center_uncenter_transforms(image.shape[-2:])
+    augment_tform = build_augmentation_transform((1.0, 1.0), augment["rotation"], augment["shear"], augment["translation"], flip=False)
+    total_tform = tform + tform_uncenter + augment_tform + tform_center
+    #result.reshape(final_shape)
+    return fast_warp(image, total_tform, output_shape=output_shape, mode='constant')
 
 
 def fast_warp(img, tf, output_shape=(50, 50), mode='constant', order=1):
@@ -72,6 +121,7 @@ def build_center_uncenter_transforms(image_shape):
     tform_center = skimage.transform.SimilarityTransform(translation=center_shift)
     return tform_center, tform_uncenter
 
+
 def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translation=(0, 0), flip=False):
     if flip:
         shear += 180
@@ -81,6 +131,7 @@ def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translati
 
     tform_augment = skimage.transform.AffineTransform(scale=(1/zoom[0], 1/zoom[1]), rotation=np.deg2rad(rotation), shear=np.deg2rad(shear), translation=translation)
     return tform_augment
+
 
 def random_perturbation_transform(zoom_range, rotation_range, shear_range, translation_range, do_flip=True, allow_stretch=False, rng=np.random):
     shift_x = rng.uniform(*translation_range)

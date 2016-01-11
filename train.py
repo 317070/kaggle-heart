@@ -20,9 +20,13 @@ from log import print_to_file
 import logging
 from functools import partial
 import theano_printer
+from theano.compile.nanguardmode import NanGuardMode
+import buffering
 
 def train_model(metadata_path, metadata=None):
 
+    if theano.config.optimizer != "fast_run":
+        print "WARNING: not running in fast mode!"
     print "Build model"
     interface_layers = config().build_model()
 
@@ -49,8 +53,6 @@ def train_model(metadata_path, metadata=None):
     validation_train_loss = obj.get_loss()
     validation_kaggle_loss = obj.get_kaggle_loss(average=False)
     validation_segmentation_loss = obj.get_segmentation_loss(average=False)
-
-    outputs = [lasagne.layers.helper.get_output(output_layers[tag], deterministic=True) for tag in output_layers]
 
     all_params = lasagne.layers.get_all_params(top_layer)
 
@@ -85,10 +87,12 @@ def train_model(metadata_path, metadata=None):
             givens[input_layers[key].input_var] = xs_shared[key][idx*config().batch_size:(idx+1)*config().batch_size]
 
     updates = config().build_updates(train_loss, all_params, learning_rate)
-    grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss, all_params)]))
+    #grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss, all_params)]))
 
     iter_train = theano.function([idx], [train_loss, kaggle_loss, segmentation_loss] + theano_printer.get_the_stuff_to_print(),
-                                 givens=givens, on_unused_input="ignore", updates=updates)
+                                 givens=givens, on_unused_input="ignore", updates=updates,
+                                 # mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
+                                 )
     iter_validate = theano.function([idx], [validation_train_loss, validation_kaggle_loss, validation_segmentation_loss] + theano_printer.get_the_stuff_to_print(),
                                     givens=givens, on_unused_input="ignore")
 
@@ -114,8 +118,9 @@ def train_model(metadata_path, metadata=None):
 
     create_train_gen = partial(config().create_train_gen,
                                required_input_keys = xs_shared.keys(),
-                               required_output_keys = ys_shared.keys()
+                               required_output_keys = ys_shared.keys(),
                                )
+
 
     create_eval_valid_gen = partial(config().create_eval_valid_gen,
                                    required_input_keys = xs_shared.keys(),
@@ -133,7 +138,7 @@ def train_model(metadata_path, metadata=None):
 
     num_batches_chunk = config().batches_per_chunk
 
-    for e, train_data in izip(chunks_train_idcs, create_train_gen()):
+    for e, train_data in izip(chunks_train_idcs, buffering.buffered_gen_threaded(create_train_gen())):
         print "Chunk %d/%d" % (e + 1, config().num_chunks_train)
 
         if e in learning_rate_schedule:
@@ -142,6 +147,9 @@ def train_model(metadata_path, metadata=None):
             learning_rate.set_value(lr)
 
         print "  load training data onto GPU"
+        # FOR TESTING
+        #pickle.dump(train_data, open("labeldump", "wb"))
+        #crash
 
         for key in xs_shared:
             xs_shared[key].set_value(train_data["input"][key])
@@ -154,7 +162,11 @@ def train_model(metadata_path, metadata=None):
         kaggle_losses = []
         segmentation_losses = []
         for b in xrange(num_batches_chunk):
-            loss, kaggle_loss, segmentation_loss = tuple(iter_train(b)[:3])
+            iter_result = iter_train(b)
+
+            loss, kaggle_loss, segmentation_loss = tuple(iter_result[:3])
+            utils.detect_nans(loss, xs_shared, ys_shared, all_params)
+
             losses.append(loss)
             kaggle_losses.append(kaggle_loss)
             segmentation_losses.append(segmentation_loss)
@@ -185,7 +197,7 @@ def train_model(metadata_path, metadata=None):
                 segmentation_losses = []
                 print "  %s set (%d batches)" % (subset, get_number_of_validation_batches(set=subset))
 
-                for validation_data in create_gen():
+                for validation_data in buffering.buffered_gen_threaded(create_gen()):
                     num_batches_chunk_eval = config().batches_per_chunk
 
                     for key in xs_shared:

@@ -12,30 +12,39 @@ from postprocess import upsample_segmentation
 from volume_estimation_layers import GaussianApproximationVolumeLayer
 import theano_printer
 
-validate_every = 1
+validate_every = 100
 validate_train_set = False
-save_every = 20
+save_every = 100
 restart_from_save = False
 
 batches_per_chunk = 1
 
-batch_size = 1
-sunny_batch_size = 2
-num_chunks_train = 840
+batch_size = 2
+sunny_batch_size = 4
+num_chunks_train = 8400
+
+image_size = 64
 
 learning_rate_schedule = {
     0:   0.0003,
-    10:  0.00003,
+    250:  0.00003,
     500: 0.000003,
     800: 0.0000003
 }
 
 data_sizes = {
-    "sliced:data": (batch_size, 30, 15, 25, 25), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
-    "sunny": (sunny_batch_size, 1, 256, 256)
+    "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
 }
+
+augmentation_params = {
+    "rotation": (0, 360),
+    "shear": (-10, 10),
+    "translation": (-8, 8),
+}
+
 
 def build_model():
 
@@ -128,7 +137,3 @@ def build_model():
 def build_objective(l_ins, l_outs):
     return objectives.MixedKaggleSegmentationObjective(l_outs)
 
-
-def postprocess(output):
-    output = output.reshape(64, 32, 32)
-    return upsample_segmentation(output, (256, 256))

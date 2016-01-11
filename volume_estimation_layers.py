@@ -27,8 +27,11 @@ class GaussianApproximationVolumeLayer(lasagne.layers.Layer):
             # needs: (batch, time, pixels)
             input = input.flatten(ndim=3)
 
-        mu = T.sum(input, axis=2).dimshuffle(0,1,'x')
-        sigma = T.sum(input * (1-input), axis=2).dimshuffle(0,1,'x')
+        eps=1e-7
+        clipped_input = T.clip(input, eps, 1-eps)
+        mu = T.sum(clipped_input, axis=2).dimshuffle(0,1,'x')
+
+        sigma = T.sum(clipped_input * (1-clipped_input), axis=2).dimshuffle(0,1,'x')
         x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x','x',0)
         x = (x_axis - mu) / sigma
         return (T.erf(x) + 1)/2

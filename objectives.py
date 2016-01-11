@@ -108,7 +108,7 @@ class MixedKaggleSegmentationObjective(KaggleObjective, BinaryCrossentropyImageO
         super(MixedKaggleSegmentationObjective, self).__init__(input_layers)
 
     def get_loss(self, *args, **kwargs):
-        return self.get_kaggle_loss(*args, **kwargs) + self.get_segmentation_loss(*args, **kwargs)
+        return self.get_kaggle_loss(*args, **kwargs) + 0*self.get_segmentation_loss(*args, **kwargs)
 
     def get_kaggle_loss(self, *args, **kwargs):
         return KaggleObjective.get_loss(self, *args, **kwargs)

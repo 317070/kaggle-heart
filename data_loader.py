@@ -76,6 +76,8 @@ def get_patient_data(indices, wanted_data_tags, set="train"):
         for tag in wanted_data_tags:
             if tag.startswith("sliced:data"):
                 patient_result[tag] = [pickle.load(open(f, "r"))['data'] for f in files]
+            if tag.startswith("sliced:data:ax"):
+                patient_result[tag] = [pickle.load(open(f, "r"))['data'] for f in files if "sax" in f]
             if tag.startswith("sliced:data:shape"):
                 patient_result[tag] = [pickle.load(open(f, "r"))['data'].shape for f in files]
             if tag.startswith("sliced:meta:"):

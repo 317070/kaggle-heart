@@ -28,12 +28,12 @@ image_size = 64
 learning_rate_schedule = {
     0:   0.0003,
     250:  0.00003,
-    500: 0.000003,
-    800: 0.0000003
+    5000: 0.000003,
+    8000: 0.0000003,
 }
 
 data_sizes = {
-    "sliced:data": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
@@ -80,8 +80,8 @@ def build_model():
     #################
     # Regular model #
     #################
-    l0 = InputLayer(data_sizes["sliced:data"])
-    l0r = reshape(l0, (-1, 1, ) + data_sizes["sliced:data"][-2:])
+    l0 = InputLayer(data_sizes["sliced:data:ax"])
+    l0r = reshape(l0, (-1, 1, ) + data_sizes["sliced:data:ax"][-2:])
 
     # first do the segmentation steps
     l1a = ConvLayer(l0r, num_filters=32, filter_size=(3, 3),
@@ -102,7 +102,7 @@ def build_model():
                     b=l1d_sunny.b,
                     nonlinearity=lasagne.nonlinearities.sigmoid)
 
-    l_1r = reshape(l1d, data_sizes["sliced:data"])
+    l_1r = reshape(l1d, data_sizes["sliced:data:ax"])
 
     # returns (batch, time, 600) of probabilities
     # TODO: it should also take into account resolution, etc.
@@ -123,7 +123,7 @@ def build_model():
 
     return {
         "inputs":{
-            "sliced:data": l0,
+            "sliced:data:ax": l0,
             "sunny": l0_sunny,
         },
         "outputs":{

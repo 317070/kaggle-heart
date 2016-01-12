@@ -90,16 +90,13 @@ class KaggleObjective(TargetVarDictObjective):
         systole_target = self.target_vars["systole"]
         diastole_target = self.target_vars["diastole"]
 
-        P_systole = T.extra_ops.cumsum(network_systole, axis=1)
-        P_diastole = T.extra_ops.cumsum(network_diastole, axis=1)
-
         if "average" in kwargs and not kwargs["average"]:
-            CRPS = 0.5 * T.mean((P_systole - systole_target)**2,  axis = (1,)) + \
-                   0.5 * T.mean((P_diastole - diastole_target)**2, axis = (1,))
+            CRPS = 0.5 * T.mean((network_systole - systole_target)**2,  axis = (1,)) + \
+                   0.5 * T.mean((network_diastole - diastole_target)**2, axis = (1,))
             return CRPS
 
-        CRPS = 0.5 * T.mean((P_systole - systole_target)**2,  axis = (0,1)) + \
-               0.5 * T.mean((P_diastole - diastole_target)**2, axis = (0,1))
+        CRPS = 0.5 * T.mean((network_systole - systole_target)**2,  axis = (0,1)) + \
+               0.5 * T.mean((network_diastole - diastole_target)**2, axis = (0,1))
         return CRPS
 
 
@@ -108,7 +105,7 @@ class MixedKaggleSegmentationObjective(KaggleObjective, BinaryCrossentropyImageO
         super(MixedKaggleSegmentationObjective, self).__init__(input_layers)
 
     def get_loss(self, *args, **kwargs):
-        return self.get_kaggle_loss(*args, **kwargs) + 0*self.get_segmentation_loss(*args, **kwargs)
+        return self.get_kaggle_loss(*args, **kwargs) + 0.1 * self.get_segmentation_loss(*args, **kwargs)
 
     def get_kaggle_loss(self, *args, **kwargs):
         return KaggleObjective.get_loss(self, *args, **kwargs)

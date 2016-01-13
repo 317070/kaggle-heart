@@ -2,6 +2,7 @@ import numpy as np
 import lasagne
 import theano
 import theano.tensor as T
+import theano_printer
 
 """
 If the input is a segmentation with probabilities, this means that getting the distribution of the output is a Poisson binomial distribution.
@@ -31,7 +32,7 @@ class GaussianApproximationVolumeLayer(lasagne.layers.Layer):
         clipped_input = T.clip(input, eps, 1-eps)
         mu = T.sum(clipped_input, axis=2).dimshuffle(0,1,'x')
 
-        sigma = T.sum(clipped_input * (1-clipped_input), axis=2).dimshuffle(0,1,'x')
+        sigma = T.sqrt(T.sum(clipped_input * (1-clipped_input), axis=2).dimshuffle(0,1,'x') + eps)
         x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x','x',0)
         x = (x_axis - mu) / sigma
         return (T.erf(x) + 1)/2

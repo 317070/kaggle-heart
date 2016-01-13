@@ -15,25 +15,25 @@ import theano_printer
 validate_every = 100
 validate_train_set = False
 save_every = 100
-restart_from_save = False
+restart_from_save = True
+take_a_dump = False
 
 batches_per_chunk = 1
 
-batch_size = 2
-sunny_batch_size = 4
-num_chunks_train = 8400
-
-image_size = 64
+batch_size = 1
+sunny_batch_size = 1
+num_chunks_train = 8401
 
 learning_rate_schedule = {
     0:   0.0003,
-    250:  0.00003,
-    5000: 0.000003,
+    100:  0.00003,
+    6000: 0.000003,
     8000: 0.0000003,
 }
 
+image_size = 64
 data_sizes = {
-    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:ax": (batch_size, 30, 16, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
@@ -53,30 +53,23 @@ def build_model():
     ###############
     l0_sunny = InputLayer(data_sizes["sunny"])
 
-    l1a_sunny = ConvLayer(l0_sunny, num_filters=32, filter_size=(3, 3),
+    sunny_layers = [l0_sunny]
+    for i in xrange(1,21):
+        layer = ConvLayer(sunny_layers[-1], num_filters=8, filter_size=((1, 7) if i%2==0 else (7, 1)),
+                        pad='same',
+                        W=lasagne.init.Orthogonal(),
+                        b=lasagne.init.Constant(0.1),
+                        )
+        sunny_layers.append(layer)
+
+    l1_sunny = ConvLayer(sunny_layers[-1], num_filters=1, filter_size=(3, 3),
                     pad='same',
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1),
-                    )
-    l1b_sunny = ConvLayer(l1a_sunny, num_filters=32, filter_size=(3, 3),
-                    pad='same',
-                    W=lasagne.init.Orthogonal(),
-                    b=lasagne.init.Constant(0.1),
-                    )
-    l1c_sunny = ConvLayer(l1b_sunny, num_filters=32, filter_size=(3, 3),
-                    pad='same',
-                    W=lasagne.init.Orthogonal(),
-                    b=lasagne.init.Constant(0.1),
-                    )
-    l1f_sunny = ConvLayer(l1c_sunny, num_filters=1, filter_size=(3, 3),
-                    pad='same',
-                    W=lasagne.init.Orthogonal(),
-                    b=lasagne.init.Constant(0.1),
-                    nonlinearity=lasagne.nonlinearities.sigmoid
-                    )
+                    nonlinearity=lasagne.nonlinearities.sigmoid)
 
     #l_sunny_segmentation = lasagne.layers.reshape(l1d_sunny, data_sizes["sunny"][:1] + l1d_sunny.output_shape[-2:])
-    l_sunny_segmentation = lasagne.layers.SliceLayer(l1f_sunny, indices=0, axis=1)
+    l_sunny_segmentation = lasagne.layers.SliceLayer(l1_sunny, indices=0, axis=1)
 
     #################
     # Regular model #
@@ -85,27 +78,21 @@ def build_model():
     l0r = reshape(l0, (-1, 1, ) + data_sizes["sliced:data:ax"][-2:])
 
     # first do the segmentation steps
-    l1a = ConvLayer(l0r, num_filters=32, filter_size=(3, 3),
+
+    layers = [l0r]
+    for i in xrange(1,21):
+        layer = ConvLayer(layers[-1], num_filters=8, filter_size=((1, 7) if i%2==0 else (7, 1)),
+                        pad='same',
+                        W=sunny_layers[i].W,
+                        b=sunny_layers[i].b,
+                        )
+        layers.append(layer)
+
+    l1f = ConvLayer(layers[-1], num_filters=1, filter_size=(3, 3),
                     pad='same',
-                    W=l1a_sunny.W,
-                    b=l1a_sunny.b,
-                    )
-    l1b = ConvLayer(l1a, num_filters=32, filter_size=(3, 3),
-                    pad='same',
-                    W=l1b_sunny.W,
-                    b=l1b_sunny.b,
-                    )
-    l1c = ConvLayer(l1b, num_filters=32, filter_size=(3, 3),
-                    pad='same',
-                    W=l1c_sunny.W,
-                    b=l1c_sunny.b,
-                    )
-    l1f = ConvLayer(l1c, num_filters=1, filter_size=(3, 3),
-                    pad='same',
-                    W=l1f_sunny.W,
-                    b=l1f_sunny.b,
-                    nonlinearity=lasagne.nonlinearities.sigmoid,
-                    )
+                    W=l1_sunny.W,
+                    b=l1_sunny.b,
+                    nonlinearity=lasagne.nonlinearities.sigmoid)
 
     l_1r = reshape(l1f, data_sizes["sliced:data:ax"])
 

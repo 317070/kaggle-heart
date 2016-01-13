@@ -1,6 +1,7 @@
 from default import *
 
 import theano.tensor as T
+from layers import MuLogSigmaErfLayer
 import objectives
 
 from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
@@ -15,7 +16,7 @@ import theano_printer
 validate_every = 100
 validate_train_set = False
 save_every = 100
-restart_from_save = False
+restart_from_save = True
 
 batches_per_chunk = 1
 
@@ -45,7 +46,6 @@ augmentation_params = {
     "translation": (-8, 8),
 }
 
-
 def build_model():
 
     ###############
@@ -72,8 +72,7 @@ def build_model():
                     pad='same',
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1),
-                    nonlinearity=lasagne.nonlinearities.sigmoid
-                    )
+                    nonlinearity=lasagne.nonlinearities.sigmoid)
 
     #l_sunny_segmentation = lasagne.layers.reshape(l1d_sunny, data_sizes["sunny"][:1] + l1d_sunny.output_shape[-2:])
     l_sunny_segmentation = lasagne.layers.SliceLayer(l1f_sunny, indices=0, axis=1)
@@ -88,43 +87,32 @@ def build_model():
     l1a = ConvLayer(l0r, num_filters=32, filter_size=(3, 3),
                     pad='same',
                     W=l1a_sunny.W,
-                    b=l1a_sunny.b,
-                    )
+                    b=l1a_sunny.b)
     l1b = ConvLayer(l1a, num_filters=32, filter_size=(3, 3),
                     pad='same',
                     W=l1b_sunny.W,
-                    b=l1b_sunny.b,
-                    )
-    l1c = ConvLayer(l1b, num_filters=32, filter_size=(3, 3),
+                    b=l1b_sunny.b)
+    l1c = ConvLayer(l1b, num_filters=64, filter_size=(3, 3),
                     pad='same',
                     W=l1c_sunny.W,
-                    b=l1c_sunny.b,
-                    )
+                    b=l1c_sunny.b)
     l1f = ConvLayer(l1c, num_filters=1, filter_size=(3, 3),
                     pad='same',
                     W=l1f_sunny.W,
                     b=l1f_sunny.b,
-                    nonlinearity=lasagne.nonlinearities.sigmoid,
-                    )
+                    nonlinearity=lasagne.nonlinearities.sigmoid)
 
     l_1r = reshape(l1f, data_sizes["sliced:data:ax"])
 
-    # returns (batch, time, 600) of probabilities
-    # TODO: it should also take into account resolution, etc.
-    volume_layer = GaussianApproximationVolumeLayer(l_1r)
+    l_d3 = lasagne.layers.DenseLayer(l_1r,
+                              num_units=2,
+                              nonlinearity=lasagne.nonlinearities.identity)
+    l_systole = MuLogSigmaErfLayer(l_d3)
 
-    # then use max and min over time for systole and diastole
-    l_systole = lasagne.layers.FlattenLayer(
-                    lasagne.layers.FeaturePoolLayer(volume_layer,
-                                                pool_size=volume_layer.output_shape[1],
-                                                axis=1,
-                                                pool_function=T.min), outdim=2)
-
-    l_diastole = lasagne.layers.FlattenLayer(
-                    lasagne.layers.FeaturePoolLayer(volume_layer,
-                                                pool_size=volume_layer.output_shape[1],
-                                                axis=1,
-                                                pool_function=T.max), outdim=2)
+    l_d3b = lasagne.layers.DenseLayer(l_1r,
+                              num_units=2,
+                              nonlinearity=lasagne.nonlinearities.identity)
+    l_diastole = MuLogSigmaErfLayer(l_d3b)
 
     return {
         "inputs":{
@@ -140,5 +128,5 @@ def build_model():
 
 
 def build_objective(l_ins, l_outs):
-    return objectives.MixedKaggleSegmentationObjective(l_outs)
+    return objectives.MixedKaggleSegmentationObjective(l_outs, segmentation_weight=1.0)
 

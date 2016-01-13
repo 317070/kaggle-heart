@@ -30,6 +30,7 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
     #result.reshape(final_shape)
     return result
 
+
 def resize_and_augment(images, output_shape=(50, 50), augment=None):
     final_shape = (len(images),) + images[0].shape[:-2] + output_shape
     result = np.zeros(final_shape, dtype="float32")
@@ -50,6 +51,7 @@ def resize_and_augment(images, output_shape=(50, 50), augment=None):
 
     #result.reshape(final_shape)
     return result
+
 
 def resize_to_make_sunny_fit(image, output_shape=(50, 50)):
     scaling = max(image.shape[-2]/output_shape[-2], image.shape[-1]/output_shape[-1])
@@ -110,7 +112,6 @@ def build_rescale_transform(downscale_factor, image_shape, target_shape):
     return tform_shift_ds + tform_ds
 
 
-
 def build_center_uncenter_transforms(image_shape):
     """
     These are used to ensure that zooming and rotation happens around the center of the image.
@@ -163,6 +164,7 @@ def random_perturbation_transform(zoom_range, rotation_range, shear_range, trans
     # the range should be multiplicatively symmetric, so [1/1.1, 1.1] instead of [0.9, 1.1] makes more sense.
 
     return build_augmentation_transform((zoom_x, zoom_y), rotation, shear, translation, flip)
+
 
 def perturb(img, augmentation_params, target_shape=(50, 50), rng=np.random):
     # # DEBUG: draw a border to see where the image ends up

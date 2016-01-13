@@ -23,6 +23,7 @@ import theano_printer
 from theano.compile.nanguardmode import NanGuardMode
 import buffering
 
+
 def train_model(metadata_path, metadata=None):
 
     if theano.config.optimizer != "fast_run":
@@ -46,9 +47,9 @@ def train_model(metadata_path, metadata=None):
 
     obj = config().build_objective(input_layers, output_layers)
 
-    train_loss = obj.get_loss()
-    kaggle_loss = obj.get_kaggle_loss()
-    segmentation_loss = obj.get_segmentation_loss()
+    train_loss_theano = obj.get_loss()
+    kaggle_loss_theano = obj.get_kaggle_loss()
+    segmentation_loss_theano = obj.get_segmentation_loss()
 
     validation_train_loss = obj.get_loss()
     validation_kaggle_loss = obj.get_kaggle_loss(average=False)
@@ -86,10 +87,10 @@ def train_model(metadata_path, metadata=None):
         else:
             givens[input_layers[key].input_var] = xs_shared[key][idx*config().batch_size:(idx+1)*config().batch_size]
 
-    updates = config().build_updates(train_loss, all_params, learning_rate)
+    updates = config().build_updates(train_loss_theano, all_params, learning_rate)
     #grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss, all_params)]))
 
-    iter_train = theano.function([idx], [train_loss, kaggle_loss, segmentation_loss] + theano_printer.get_the_stuff_to_print(),
+    iter_train = theano.function([idx], [train_loss_theano, kaggle_loss_theano, segmentation_loss_theano] + theano_printer.get_the_stuff_to_print(),
                                  givens=givens, on_unused_input="ignore", updates=updates,
                                  # mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
                                  )
@@ -262,8 +263,20 @@ def train_model(metadata_path, metadata=None):
             print "  saved to %s" % metadata_path
             print
 
-    return metadata
+    # store all known outputs from last batch:
+    if config().take_a_dump:
+        all_theano_variables = [train_loss_theano, kaggle_loss_theano, segmentation_loss_theano] + theano_printer.get_the_stuff_to_print()
+        for layer in all_layers[:-1]:
+            all_theano_variables.append(lasagne.layers.helper.get_output(layer))
 
+        iter_train = theano.function([idx], all_theano_variables,
+                                     givens=givens, on_unused_input="ignore", updates=updates,
+                                     # mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
+                                     )
+        train_data["intermediates"] = iter_train(0)
+        pickle.dump(train_data, open(metadata_path + "-dump", "wb"))
+
+    return metadata
 
 
 if __name__ == "__main__":

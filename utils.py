@@ -56,31 +56,15 @@ def load_gz(path): # load a .npy.gz file
     else:
         return np.load(path)
 
+def current_learning_rate(schedule, idx):
+    s = schedule.keys()
+    s.sort()
+    current_lr = schedule[0]
+    for i in s:
+        if idx >= i:
+            current_lr = schedule[i]
 
-'''
-def log_loss(y, t, eps=1e-15):
-    """
-    cross entropy loss, summed over classes, mean over batches
-    """
-    losses = log_losses(y, t, eps)
-    return np.mean(losses)
-
-def log_losses(y, t, eps=1e-15):
-    if t.ndim == 1:
-        t = one_hot(t)
-
-    y = np.clip(y, eps, 1 - eps)
-    losses = -np.sum(t * np.log(y), axis=1)
-    return losses
-
-def accuracy(y, t):
-    if t.ndim == 2:
-        t = np.argmax(t, axis=1)
-
-    predictions = np.argmax(y, axis=1)
-    return np.mean(predictions == t)
-
-'''
+    return current_lr
 
 def segmentation_log_loss(outputs, labels):
     eps=1e-15
@@ -88,9 +72,7 @@ def segmentation_log_loss(outputs, labels):
     result = - np.mean(labels * np.log(outputs) + (1-labels) * np.log(1-outputs), axis=(0,1,2))
     return result
 
-
 def segmentation_accuracy(outputs, labels):
-
     eps=1e-15
     outputs = (outputs > 0.5).astype('int8')
     result = np.mean(labels * outputs + (1-labels) * (1-outputs), axis=(0,1,2))

@@ -3,6 +3,7 @@ from default import *
 import theano.tensor as T
 import objectives
 
+from layers import WideConv2DDNNLayer
 from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
 from lasagne.layers.dnn import MaxPool2DDNNLayer as MaxPoolLayer
 from lasagne.layers import InputLayer
@@ -19,21 +20,20 @@ restart_from_save = False
 
 batches_per_chunk = 1
 
-batch_size = 2
-sunny_batch_size = 4
+batch_size = 1
+sunny_batch_size = 1
 num_chunks_train = 8400
-
-image_size = 64
 
 learning_rate_schedule = {
     0:   0.0003,
-    250:  0.00003,
-    5000: 0.000003,
+    100:  0.00003,
+    6000: 0.000003,
     8000: 0.0000003,
 }
 
+image_size = 64
 data_sizes = {
-    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:ax": (batch_size, 30, 16, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
@@ -58,22 +58,31 @@ def build_model():
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1),
                     )
-    l1b_sunny = ConvLayer(l1a_sunny, num_filters=32, filter_size=(3, 3),
+    l1b_sunny = WideConv2DDNNLayer(l1a_sunny, num_filters=32, filter_size=(3, 3), skip=2,
                     pad='same',
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1),
                     )
-    l1c_sunny = ConvLayer(l1b_sunny, num_filters=32, filter_size=(3, 3),
+    l1c_sunny = WideConv2DDNNLayer(l1b_sunny, num_filters=32, filter_size=(3, 3), skip=4,
                     pad='same',
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1),
                     )
-    l1f_sunny = ConvLayer(l1c_sunny, num_filters=1, filter_size=(3, 3),
+    l1d_sunny = WideConv2DDNNLayer(l1c_sunny, num_filters=32, filter_size=(3, 3), skip=8,
                     pad='same',
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1),
-                    nonlinearity=lasagne.nonlinearities.sigmoid
                     )
+    l1e_sunny = WideConv2DDNNLayer(l1d_sunny, num_filters=32, filter_size=(3, 3), skip=16,
+                    pad='same',
+                    W=lasagne.init.Orthogonal(),
+                    b=lasagne.init.Constant(0.1),
+                    )
+    l1f_sunny = WideConv2DDNNLayer(l1e_sunny, num_filters=1, filter_size=(3, 3), skip=32,
+                    pad='same',
+                    W=lasagne.init.Orthogonal(),
+                    b=lasagne.init.Constant(0.1),
+                    nonlinearity=lasagne.nonlinearities.sigmoid)
 
     #l_sunny_segmentation = lasagne.layers.reshape(l1d_sunny, data_sizes["sunny"][:1] + l1d_sunny.output_shape[-2:])
     l_sunny_segmentation = lasagne.layers.SliceLayer(l1f_sunny, indices=0, axis=1)
@@ -88,24 +97,28 @@ def build_model():
     l1a = ConvLayer(l0r, num_filters=32, filter_size=(3, 3),
                     pad='same',
                     W=l1a_sunny.W,
-                    b=l1a_sunny.b,
-                    )
-    l1b = ConvLayer(l1a, num_filters=32, filter_size=(3, 3),
+                    b=l1a_sunny.b)
+    l1b = WideConv2DDNNLayer(l1a, num_filters=32, filter_size=(3, 3), skip=2,
                     pad='same',
                     W=l1b_sunny.W,
-                    b=l1b_sunny.b,
-                    )
-    l1c = ConvLayer(l1b, num_filters=32, filter_size=(3, 3),
+                    b=l1b_sunny.b)
+    l1c = WideConv2DDNNLayer(l1b, num_filters=64, filter_size=(3, 3), skip=4,
                     pad='same',
                     W=l1c_sunny.W,
-                    b=l1c_sunny.b,
-                    )
-    l1f = ConvLayer(l1c, num_filters=1, filter_size=(3, 3),
+                    b=l1c_sunny.b)
+    l1d = WideConv2DDNNLayer(l1c, num_filters=64, filter_size=(3, 3), skip=8,
+                    pad='same',
+                    W=l1d_sunny.W,
+                    b=l1d_sunny.b)
+    l1e = WideConv2DDNNLayer(l1d, num_filters=32, filter_size=(3, 3), skip=16,
+                    pad='same',
+                    W=l1e_sunny.W,
+                    b=l1e_sunny.b)
+    l1f = WideConv2DDNNLayer(l1e, num_filters=1, filter_size=(3, 3), skip=32,
                     pad='same',
                     W=l1f_sunny.W,
                     b=l1f_sunny.b,
-                    nonlinearity=lasagne.nonlinearities.sigmoid,
-                    )
+                    nonlinearity=lasagne.nonlinearities.sigmoid)
 
     l_1r = reshape(l1f, data_sizes["sliced:data:ax"])
 

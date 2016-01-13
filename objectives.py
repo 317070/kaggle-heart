@@ -15,10 +15,10 @@ class TargetVarDictObjective(object):
         raise NotImplementedError
 
     def get_kaggle_loss(self, *args, **kwargs):
-        return -1
+        return theano.shared([-1])
 
     def get_segmentation_loss(self, *args, **kwargs):
-        return -1
+        return theano.shared([-1])
 
 
 class BinaryCrossentropyImageObjective(TargetVarDictObjective):
@@ -101,11 +101,12 @@ class KaggleObjective(TargetVarDictObjective):
 
 
 class MixedKaggleSegmentationObjective(KaggleObjective, BinaryCrossentropyImageObjective):
-    def __init__(self, input_layers):
+    def __init__(self, input_layers, segmentation_weight=1.0):
         super(MixedKaggleSegmentationObjective, self).__init__(input_layers)
+        self.segmentation_weight = segmentation_weight
 
     def get_loss(self, *args, **kwargs):
-        return self.get_kaggle_loss(*args, **kwargs) + 0.1 * self.get_segmentation_loss(*args, **kwargs)
+        return self.get_kaggle_loss(*args, **kwargs) + self.segmentation_weight * self.get_segmentation_loss(*args, **kwargs)
 
     def get_kaggle_loss(self, *args, **kwargs):
         return KaggleObjective.get_loss(self, *args, **kwargs)

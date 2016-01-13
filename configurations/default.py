@@ -34,6 +34,13 @@ num_chunks_train = 840
 validate_every = 20
 save_every = 20
 restart_from_save = True
+take_a_dump = True
+
+augmentation_params = {
+    "rotation": (0, 360),
+    "shear": (-10, 10),
+    "translation": (-8, 8),
+}
 
 data_sizes = {
     "sliced:data": (30, 30, 100, 100), #30 mri_slices, 30 time steps, 100 px wide, 100 px high,

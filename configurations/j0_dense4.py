@@ -1,7 +1,7 @@
 from default import *
 
 import theano.tensor as T
-from layers import MuLogSigmaErfLayer
+from layers import MuLogSigmaErfLayer, ConvolutionOverAxisLayer
 import objectives
 
 from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
@@ -52,38 +52,58 @@ def build_model():
     # Regular model #
     #################
     l0 = InputLayer(data_sizes["sliced:data:ax"])
-    l0r = reshape(l0, (-1, 1, ) + data_sizes["sliced:data:ax"][-2:])
+    l0r = reshape(l0, (-1, 1, ) + data_sizes["sliced:data:ax"][1:])
+
+    # (batch, channel, time, axis, x, y)
+
+    # convolve over time with small filter
+    l0t = ConvolutionOverAxisLayer(l0r, num_filters=2, filter_size=(5,), stride=(3,), axis=2, channel=1,
+                                   W=lasagne.init.Orthogonal(),
+                                   b=lasagne.init.Constant(0.1),
+                                   )
+
+    l0r = reshape(l0t, (-1, 1, ) + data_sizes["sliced:data:ax"][-2:])
 
     # first do the segmentation steps
-    l1a = ConvLayer(l0r, num_filters=32, filter_size=(3, 3),
+    l1a = ConvLayer(l0r, num_filters=32, filter_size=(5, 5), stride=2,
                     pad='same',
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1),
                     )
-    l1b = ConvLayer(l1a, num_filters=32, filter_size=(3, 3),
+    l1b = ConvLayer(l1a, num_filters=32, filter_size=(5, 5), stride=2,
                     pad='same',
                     W=lasagne.init.Orthogonal(),
                     b=lasagne.init.Constant(0.1),
                     )
-    l1c = ConvLayer(l1b, num_filters=64, filter_size=(3, 3),
-                    pad='same',
-                    W=lasagne.init.Orthogonal(),
-                    b=lasagne.init.Constant(0.1),
-                    )
-    l1f = ConvLayer(l1c, num_filters=1, filter_size=(3, 3),
-                    pad='same',
-                    W=lasagne.init.Orthogonal(),
-                    b=lasagne.init.Constant(0.1),
-                    nonlinearity=lasagne.nonlinearities.sigmoid)
+    l1b_m = MaxPoolLayer(l1b, pool_size=(2,2))
 
-    l_1r = reshape(l1f, data_sizes["sliced:data:ax"])
+    l1c = ConvLayer(l1b_m, num_filters=64, filter_size=(3, 3),
+                    pad='same',
+                    W=lasagne.init.Orthogonal(),
+                    b=lasagne.init.Constant(0.1),
+                    )
+    l1f = ConvLayer(l1c, num_filters=32, filter_size=(3, 3),
+                    pad='same',
+                    W=lasagne.init.Orthogonal(),
+                    b=lasagne.init.Constant(0.1))
 
-    l_d3 = lasagne.layers.DenseLayer(l_1r,
+    l1f_m = MaxPoolLayer(l1f, pool_size=(2,2))
+
+    l1f_r = reshape(l1f_m, (batch_size, 2, 9, 15, 32, 4, 4))
+
+
+    l0t = ConvolutionOverAxisLayer(l1f_r, num_filters=32, filter_size=(3,), stride=(1,),
+                                   axis=3, channel=1,
+                                   W=lasagne.init.Orthogonal(),
+                                   b=lasagne.init.Constant(0.1),
+                                   )
+
+    l_d3 = lasagne.layers.DenseLayer(l0t,
                               num_units=2,
                               nonlinearity=lasagne.nonlinearities.identity)
     l_systole = MuLogSigmaErfLayer(l_d3)
 
-    l_d3b = lasagne.layers.DenseLayer(l_1r,
+    l_d3b = lasagne.layers.DenseLayer(l0t,
                               num_units=2,
                               nonlinearity=lasagne.nonlinearities.identity)
     l_diastole = MuLogSigmaErfLayer(l_d3b)

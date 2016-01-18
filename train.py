@@ -39,10 +39,13 @@ def train_model(metadata_path, metadata=None):
     all_layers = lasagne.layers.get_all_layers(top_layer)
     num_params = lasagne.layers.count_params(top_layer)
     print "  number of parameters: %d" % num_params
-    print "  layer output shapes:"
+    print string.ljust("  layer output shapes:",36),
+    print string.ljust("#params:",10),
+    print "output shape:"
     for layer in all_layers[:-1]:
         name = string.ljust(layer.__class__.__name__, 32)
-        num_param = string.ljust(lasagne.layers.count_params(layer).__str__(), 10)
+        num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
+        num_param = string.ljust(num_param.__str__(), 10)
         print "    %s %s %s" % (name,  num_param, layer.output_shape)
 
     obj = config().build_objective(input_layers, output_layers)
@@ -51,9 +54,9 @@ def train_model(metadata_path, metadata=None):
     kaggle_loss_theano = obj.get_kaggle_loss()
     segmentation_loss_theano = obj.get_segmentation_loss()
 
-    validation_train_loss = obj.get_loss()
-    validation_kaggle_loss = obj.get_kaggle_loss(average=False)
-    validation_segmentation_loss = obj.get_segmentation_loss(average=False)
+    validation_train_loss = obj.get_loss(deterministic=True)
+    validation_kaggle_loss = obj.get_kaggle_loss(average=False, deterministic=True)
+    validation_segmentation_loss = obj.get_segmentation_loss(average=False, deterministic=True)
 
     all_params = lasagne.layers.get_all_params(top_layer)
 
@@ -88,7 +91,9 @@ def train_model(metadata_path, metadata=None):
             givens[input_layers[key].input_var] = xs_shared[key][idx*config().batch_size:(idx+1)*config().batch_size]
 
     updates = config().build_updates(train_loss_theano, all_params, learning_rate)
-    #grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss, all_params)]))
+
+    grad_norm = T.sqrt(T.sum([(g**2).sum() for g in theano.grad(train_loss_theano, all_params)]))
+    theano_printer.print_me_this("Grad norm", grad_norm)
 
     iter_train = theano.function([idx], [train_loss_theano, kaggle_loss_theano, segmentation_loss_theano] + theano_printer.get_the_stuff_to_print(),
                                  givens=givens, on_unused_input="ignore", updates=updates,
@@ -297,6 +302,8 @@ if __name__ == "__main__":
         metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % expid
 
         meta_data = train_model(metadata_path)
+        print "log saved to '%s'" % ("/mnt/storage/metadata/kaggle-heart/logs/%s.log" % expid)
         predict_model(metadata_path)
+        print "log saved to '%s'" % ("/mnt/storage/metadata/kaggle-heart/logs/%s.log" % expid)
 
 

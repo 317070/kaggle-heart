@@ -1,4 +1,5 @@
 import lasagne
+from lasagne.layers import Conv1DLayer
 import theano
 import theano.tensor as T
 import numpy as np
@@ -15,8 +16,9 @@ class MuLogSigmaErfLayer(lasagne.layers.Layer):
     def get_output_for(self, input, **kwargs):
         eps = 1e-7
         x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x',0)
-        sigma = T.exp(input[:,1].dimshuffle(0,'x'))
-
+        # This needs to be clipped to avoid NaN's!
+        sigma = T.exp(T.clip(input[:,1].dimshuffle(0,'x'), -10, 10))
+        #theano_printer.print_me_this("sigma", sigma)
         x = (x_axis - input[:,0].dimshuffle(0,'x')) / (sigma * np.sqrt(2).astype('float32'))
         return (T.erf(x) + 1)/2
 
@@ -43,15 +45,16 @@ class CumSumLayer(lasagne.layers.Layer):
         return input_shape
 
     def get_output_for(self, input, **kwargs):
-        return T.extra_ops.cumsum(input, axis=self.axis)
+        result = T.extra_ops.cumsum(input, axis=self.axis)
+        # theano_printer.print_me_this("result", result)
+        return result
 
 
 class WideConv2DDNNLayer(Conv2DDNNLayer):
 
-    def __init__(self, incoming, num_filters, filter_size, skip=0, W=lasagne.init.GlorotUniform(), **kwargs):
+    def __init__(self, incoming, num_filters, filter_size, skip=0, **kwargs):
         super(WideConv2DDNNLayer, self).__init__(incoming,
                                                  num_filters,
-                                                 W=W,
                                                  filter_size=filter_size,
                                                  **kwargs)
         self.skip = skip
@@ -92,10 +95,6 @@ class WideConv2DDNNLayer(Conv2DDNNLayer):
         conved = conved.reshape(target_shape)
 
         return conved
-
-
-
-
 
 
 

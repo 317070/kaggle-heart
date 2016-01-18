@@ -52,6 +52,8 @@ def get_patient_data(indices, wanted_data_tags, set="train"):
         "output": {
             "systole":  np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
             "diastole": np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
+            "systole:onehot":  np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
+            "diastole:onehot": np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
         }
     }
 
@@ -93,8 +95,9 @@ def get_patient_data(indices, wanted_data_tags, set="train"):
         assert regular_labels[id-1, 0]==id
         V_systole = regular_labels[id-1, 1]
         V_diastole = regular_labels[id-1, 2]
-
+        result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1
         result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1
+        result["output"]["diastole:onehot"][i][int(np.ceil(V_diastole))] = 1
         result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1
     return result
 
@@ -152,7 +155,7 @@ def generate_train_batch(required_input_keys, required_output_keys):
             input_keys_to_do.remove("sunny")
             output_keys_to_do.remove("segmentation")
 
-        indices = config().rng.randint(0, len(train_patient_folders), chunk_size)
+        indices = config().rng.randint(0, len(train_patient_folders), chunk_size)  #
         kaggle_data = get_patient_data(indices, input_keys_to_do, set="train")
 
         result = utils.merge(result, kaggle_data)
@@ -160,7 +163,7 @@ def generate_train_batch(required_input_keys, required_output_keys):
         yield result
 
 
-def generate_validation_batch(required_input_keys, required_output_keys, set="train"):
+def generate_validation_batch(required_input_keys, required_output_keys, set="validation"):
     # generate sunny data
     sunny_length = get_lenght_of_set(name="sunny", set=set)
     regular_length = get_lenght_of_set(name="regular", set=set)
@@ -192,6 +195,27 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="tr
 
         indices = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
         kaggle_data = get_patient_data(indices, input_keys_to_do, set="train")
+
+        result = utils.merge(result, kaggle_data)
+
+        yield result
+
+
+def generate_test_batch(required_input_keys, required_output_keys, set="test"):
+    regular_batches = int(np.ceil(regular_length / float(config().batch_size)))
+    num_batches = max(sunny_batches, regular_batches)
+    num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
+
+    sunny_chunk_size = config().batches_per_chunk * config().sunny_batch_size
+    regular_chunk_size = config().batches_per_chunk * config().batch_size
+
+    for n in xrange(num_chunks):
+
+        result = {}
+        input_keys_to_do  = list(required_input_keys)  # clone
+        output_keys_to_do = list(required_output_keys) # clone
+        indices = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
+        kaggle_data = get_patient_data(indices, input_keys_to_do, set="test")
 
         result = utils.merge(result, kaggle_data)
 

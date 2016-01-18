@@ -100,6 +100,32 @@ class KaggleObjective(TargetVarDictObjective):
         return CRPS
 
 
+class LogLossObjective(TargetVarDictObjective):
+    def __init__(self, input_layers):
+        super(LogLossObjective, self).__init__(input_layers)
+        self.input_systole = input_layers["systole:onehot"]
+        self.input_diastole = input_layers["diastole:onehot"]
+
+        self.target_vars["systole:onehot"]  = T.fmatrix("systole_target")
+        self.target_vars["diastole:onehot"] = T.fmatrix("diastole_target")
+
+    def get_loss(self, *args, **kwargs):
+        network_systole  = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)
+        network_diastole = lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)
+
+        systole_target = self.target_vars["systole:onehot"]
+        diastole_target = self.target_vars["diastole:onehot"]
+
+        if "average" in kwargs and not kwargs["average"]:
+            ll = 0.5 * log_loss(network_systole, systole_target) + \
+                 0.5 * log_loss(network_diastole, diastole_target)
+            return ll
+
+        ll = 0.5 * T.mean(log_loss(network_systole, systole_target),  axis = (0,)) + \
+             0.5 * T.mean(log_loss(network_diastole, diastole_target), axis = (0,))
+        return ll
+
+
 class MixedKaggleSegmentationObjective(KaggleObjective, BinaryCrossentropyImageObjective):
     def __init__(self, input_layers, segmentation_weight=1.0):
         super(MixedKaggleSegmentationObjective, self).__init__(input_layers)

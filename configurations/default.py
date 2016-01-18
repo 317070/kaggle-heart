@@ -34,7 +34,7 @@ num_chunks_train = 840
 validate_every = 20
 save_every = 20
 restart_from_save = True
-take_a_dump = True
+take_a_dump = False  # dump a lot of data in a pkl-dump file. (for debugging)
 
 augmentation_params = {
     "rotation": (0, 360),

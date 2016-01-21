@@ -5,7 +5,6 @@ from default import *
 import theano.tensor as T
 from layers import MuLogSigmaErfLayer, CumSumLayer
 import objectives
-
 from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
 from lasagne.layers.dnn import MaxPool2DDNNLayer as MaxPoolLayer
 from lasagne.layers import InputLayer
@@ -36,6 +35,7 @@ learning_rate_schedule = {
     12000: 0.000003,
     16000: 0.0000003,
 }
+
 from preprocess import preprocess_with_augmentation
 preprocess = preprocess_with_augmentation
 
@@ -48,7 +48,7 @@ data_sizes = {
 
 augmentation_params = {
     "rotation": (0, 360),
-    "shear": (-10, 10),
+    "shear": (0, 0),
     "translation": (-8, 8),
 }
 

@@ -59,7 +59,8 @@ def train_model(metadata_path, metadata=None):
     validation_segmentation_loss = obj.get_segmentation_loss(average=False, deterministic=True)
 
     all_params = lasagne.layers.get_all_params(top_layer)
-
+    print type(all_params)
+    print all_params
     xs_shared = {
         key: lasagne.utils.shared_empty(dim=len(l_in.output_shape), dtype='float32') for (key, l_in) in input_layers.iteritems()
     }

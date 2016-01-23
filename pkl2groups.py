@@ -42,33 +42,38 @@ def group_sax(in_paths, out_path, groups):
 
 
 if __name__ == '__main__':
-    # global_path = '/mnt/sda3/data/kaggle-heart/'
-    # dataset = 'proc_validate'
+    global_path = '/mnt/sda3/data/kaggle-heart/'
+    dataset = 'pkl_validate'
 
-    if len(sys.argv) < 3:
-        sys.exit("Usage: dicom2npy.py <global_data_path> <pkl_train/pkl_validate>")
-
-    global_path = sys.argv[1]
-    dataset = sys.argv[2]
+    # if len(sys.argv) < 3:
+    #     sys.exit("Usage: dicom2npy.py <global_data_path> <pkl_train/pkl_validate>")
+    #
+    # global_path = sys.argv[1]
+    # dataset = sys.argv[2]
 
     in_data_path = global_path + dataset + '/'
-    out_data_path = global_path + '4d_' + dataset + '/'
+    out_data_path = global_path + '4d_group_' + dataset + '/'
 
-    in_study_paths = os.listdir(in_data_path)
+    in_study_paths = sorted(os.listdir(in_data_path))
     out_study_paths = [out_data_path + s + '/study/' for s in in_study_paths]
     in_study_paths = [in_data_path + s + '/study/' for s in in_study_paths]
-    groups = [[7, 8], [9, 10, 11, 12, 13, 14, 15, 20], [17]]  # TODO read groups
+
+    with open(global_path + '4d-grouping.pkl') as f:
+        groups = pickle.load(f)
 
     for p in out_study_paths:
         if not os.path.exists(p):
             os.makedirs(p)
 
+    #groups = [[7, 8], [9, 10, 11, 12, 13, 14, 15, 20], [17]]
     # s_in = '/mnt/sda3/data/kaggle-heart/proc_validate/643/study/'
     # s_out = '/mnt/sda3/data/kaggle-heart/4d_proc_validate/643/study/'
     # if not os.path.exists(s_out):
     #     os.makedirs(s_out)
     # convert_study(s_in, s_out, groups)
 
-    for s_in, s_out, g in zip(in_study_paths, out_study_paths, groups):
+    for s_in, s_out in zip(in_study_paths, out_study_paths):
         print '******** %s *********' % s_in
-        convert_study(s_in, s_out, g)
+        patient_number = int(s_in.split('/')[-3])
+        print groups[patient_number]
+        convert_study(s_in, s_out, groups[patient_number])

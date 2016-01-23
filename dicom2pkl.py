@@ -83,19 +83,19 @@ def convert_view_2np(in_paths, out_path, view):
 
 
 if __name__ == '__main__':
-    # global_path = '/mnt/sda3/data/kaggle-heart/'
-    # dataset = 'validate'
+    global_path = '/mnt/sda3/data/kaggle-heart/'
+    dataset = 'validate'
 
-    if len(sys.argv) < 3:
-        sys.exit("Usage: dicom2npy.py <global_data_path> <train/validate>")
-
-    global_path = sys.argv[1]
-    dataset = sys.argv[2]
+    # if len(sys.argv) < 3:
+    #     sys.exit("Usage: dicom2npy.py <global_data_path> <train/validate>")
+    #
+    # global_path = sys.argv[1]
+    # dataset = sys.argv[2]
 
     in_data_path = global_path + dataset + '/'
     out_data_path = global_path + 'pkl_' + dataset + '/'
 
-    in_study_paths = os.listdir(in_data_path)
+    in_study_paths = sorted(os.listdir(in_data_path))
     out_study_paths = [out_data_path + s + '/study/' for s in in_study_paths]
     in_study_paths = [in_data_path + s + '/study/' for s in in_study_paths]
 

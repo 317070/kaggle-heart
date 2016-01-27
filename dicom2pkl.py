@@ -83,30 +83,24 @@ def convert_view_2np(in_paths, out_path, view):
 
 
 if __name__ == '__main__':
-    global_path = '/mnt/sda3/data/kaggle-heart/'
-    dataset = 'validate'
 
-    # if len(sys.argv) < 3:
-    #     sys.exit("Usage: dicom2npy.py <global_data_path> <train/validate>")
-    #
-    # global_path = sys.argv[1]
-    # dataset = sys.argv[2]
+    if len(sys.argv) < 2:
+        sys.exit("Usage: dicom2npy.py <global_data_path>")
+    global_path = sys.argv[1]
 
-    in_data_path = global_path + dataset + '/'
-    out_data_path = global_path + 'pkl_' + dataset + '/'
+    for dataset in ['train', 'validate']:
 
-    in_study_paths = sorted(os.listdir(in_data_path))
-    out_study_paths = [out_data_path + s + '/study/' for s in in_study_paths]
-    in_study_paths = [in_data_path + s + '/study/' for s in in_study_paths]
+        in_data_path = global_path + dataset + '/'
+        out_data_path = global_path + 'pkl_' + dataset + '/'
 
-    for p in out_study_paths:
-        if not os.path.exists(p):
-            os.makedirs(p)
+        in_study_paths = sorted(os.listdir(in_data_path))
+        out_study_paths = [out_data_path + s + '/study/' for s in in_study_paths]
+        in_study_paths = [in_data_path + s + '/study/' for s in in_study_paths]
 
-    # s_in = '/mnt/sda3/data/kaggle-heart/validate/643/study/'
-    # s_out = '/mnt/sda3/data/kaggle-heart/proc_validate/643/study/'
-    # convert_study_2np(s_in, s_out)
+        for p in out_study_paths:
+            if not os.path.exists(p):
+                os.makedirs(p)
 
-    for s_in, s_out in zip(in_study_paths, out_study_paths):
-        print '\n******** %s *********' % s_in
-        convert_study_2np(s_in, s_out)
+        for s_in, s_out in zip(in_study_paths, out_study_paths):
+            print '\n******** %s *********' % s_in
+            convert_study_2np(s_in, s_out)

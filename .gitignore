@@ -63,3 +63,6 @@ data/
 metadata/
 predictions/
 submissions/
+
+# pkl files
+*.pkl

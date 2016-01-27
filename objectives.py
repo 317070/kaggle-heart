@@ -106,8 +106,8 @@ class LogLossObjective(TargetVarDictObjective):
         self.input_systole = input_layers["systole:onehot"]
         self.input_diastole = input_layers["diastole:onehot"]
 
-        self.target_vars["systole:onehot"]  = T.fmatrix("systole_target")
-        self.target_vars["diastole:onehot"] = T.fmatrix("diastole_target")
+        self.target_vars["systole:onehot"]  = T.fmatrix("systole_target_onehot")
+        self.target_vars["diastole:onehot"] = T.fmatrix("diastole_target_onehot")
 
     def get_loss(self, *args, **kwargs):
         network_systole  = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)
@@ -124,6 +124,35 @@ class LogLossObjective(TargetVarDictObjective):
         ll = 0.5 * T.mean(log_loss(network_systole, systole_target),  axis = (0,)) + \
              0.5 * T.mean(log_loss(network_diastole, diastole_target), axis = (0,))
         return ll
+
+
+class KaggleValidationLogLossObjective(LogLossObjective):
+    """
+    This is the objective as defined by Kaggle: https://www.kaggle.com/c/second-annual-data-science-bowl/details/evaluation
+    """
+    def __init__(self, input_layers):
+        super(KaggleValidationLogLossObjective, self).__init__(input_layers)
+        self.target_vars["systole"]  = T.fmatrix("systole_target_kaggle")
+        self.target_vars["diastole"] = T.fmatrix("diastole_target_kaggle")
+
+    def get_kaggle_loss(self, *args, **kwargs):
+        if "validation" not in kwargs or not kwargs["validation"]:
+            return theano.shared([-1])
+
+        network_systole  = T.clip(T.extra_ops.cumsum(lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs), axis=1), 0.0, 1.0)
+        network_diastole = T.clip(T.extra_ops.cumsum(lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs), axis=1), 0.0, 1.0)
+
+        systole_target = self.target_vars["systole"]
+        diastole_target = self.target_vars["diastole"]
+
+        if "average" in kwargs and not kwargs["average"]:
+            CRPS = (T.mean((network_systole - systole_target)**2,  axis = (1,)) +
+                    T.mean((network_diastole - diastole_target)**2, axis = (1,)) )/2
+            return CRPS
+        else:
+            CRPS = (T.mean((network_systole - systole_target)**2,  axis = (0,1)) +
+                    T.mean((network_diastole - diastole_target)**2, axis = (0,1)) )/2
+            return CRPS
 
 
 class MixedKaggleSegmentationObjective(KaggleObjective, BinaryCrossentropyImageObjective):

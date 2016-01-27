@@ -1,6 +1,7 @@
 import multiprocessing as mp
 import Queue
 import threading
+import traceback
 
 def buffered_gen_mp(source_gen, buffer_size=2):
     """
@@ -41,9 +42,13 @@ def buffered_gen_threaded(source_gen, buffer_size=2):
     # will generate one extra element and block until there is room in the buffer.
 
     def _buffered_generation_thread(source_gen, buffer):
-        for data in source_gen:
-            buffer.put(data, block=True)
-        buffer.put(None) # sentinel: signal the end of the iterator
+        try:
+            for data in source_gen:
+                buffer.put(data, block=True)
+            buffer.put(None) # sentinel: signal the end of the iterator
+        except:
+            traceback.print_exc()
+            return
 
     thread = threading.Thread(target=_buffered_generation_thread, args=(source_gen, buffer))
     thread.daemon = True

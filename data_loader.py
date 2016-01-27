@@ -5,14 +5,16 @@ from configuration import config
 import cPickle as pickle
 import utils
 from validation_set import get_cross_validation_indices
+import random
 
-
+print "Loading data"
 ################
 # Regular data #
 ################
 
-patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_train/*/study/"))  # glob is non-deterministic!
-validation_patients_indices = get_cross_validation_indices(indices=range(1,501))
+patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_train/*/study/"), key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))  # glob is non-deterministic!
+
+validation_patients_indices = get_cross_validation_indices(indices=range(1,501), validation_index=4)
 train_patients_indices = [i for i in range(1,501) if i not in validation_patients_indices]
 
 VALIDATION_REGEX = "|".join(["(/%d/)"%i for i in validation_patients_indices])
@@ -21,6 +23,8 @@ train_patient_folders = [folder for folder in patient_folders if re.search(VALID
 validation_patient_folders = [folder for folder in patient_folders if folder not in train_patient_folders]
 
 regular_labels = pickle.load(open("/data/dsb15_pkl/train.pkl","r"))
+
+test_patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_validate/*/study/"), key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))  # glob is non-deterministic!
 
 
 ##############
@@ -40,7 +44,8 @@ sunny_validation_images = np.array(sunny_data['images'])[validation_sunny_indice
 sunny_validation_labels = np.array(sunny_data['labels'])[validation_sunny_indices]
 
 
-def get_patient_data(indices, wanted_data_tags, set="train"):
+def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train",
+                     train_preprocess=False, validate_preprocess=False, test_preprocess=False):
     """
     return a dict with the desired data matched to the required tags
     :param wanted_data_tags:
@@ -50,14 +55,17 @@ def get_patient_data(indices, wanted_data_tags, set="train"):
         "input": {
         },
         "output": {
-            "systole":  np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
-            "diastole": np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
-            "systole:onehot":  np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
-            "diastole:onehot": np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32'),
-        }
+        },
     }
 
-    for tag in wanted_data_tags:
+    for tag in wanted_output_tags:
+        if tag in ["systole", "diastole", "systole:onehot", "diastole:onehot"]:
+            result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32')
+        # and for the predictions, keep track of which patient is sitting where in the batch
+        if tag=="patients":
+            result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, ), dtype='int32')
+
+    for tag in wanted_input_tags:
         if tag in config().data_sizes:
             chunk_shape = list(config().data_sizes[tag])
             chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
@@ -65,40 +73,72 @@ def get_patient_data(indices, wanted_data_tags, set="train"):
             result["input"][tag] = np.zeros(chunk_shape, dtype='float32')
 
     if set=="train":
-        folders = [train_patient_folders[i] for i in indices if i<len(train_patient_folders)]
+        folders = [train_patient_folders[i] for i in indices if 0<=i<len(train_patient_folders)]
+    elif set=="validation":
+        folders = [validation_patient_folders[i] for i in indices if 0<=i<len(validation_patient_folders)]
+    elif set=="test":
+        folders = [test_patient_folders[i] for i in indices if 0<=i<len(test_patient_folders)]
     else:
-        folders = [validation_patient_folders[i] for i in indices if i<len(train_patient_folders)]
+        raise "Don't know the dataset %s" % set
 
-    # TODO: every folder is multiple times in a chunk!
-    # therefore, this can be done with loading every file only once
 
     for i, folder in enumerate(folders):
         files = sorted(glob.glob(folder+"*"))  # glob is non-deterministic!
         patient_result = dict()
-        for tag in wanted_data_tags:
-            if tag.startswith("sliced:data"):
+        for tag in wanted_input_tags:
+            if tag.startswith("sliced:data:singleslice"):
+                l = [sax for sax in files if "sax" in sax]
+                f = l[len(l)/2]
+                #f = random.choice(l)
+                patient_result[tag] = pickle.load(open(f, "r"))['data']
+                if tag.startswith("sliced:data:singleslice:difference"):
+                    for j in xrange(patient_result[tag].shape[0]-1):
+                        patient_result[tag][j] -= patient_result[tag][j+1]
+                    patient_result[tag] = np.delete(patient_result[tag],-1,0)
+            elif tag.startswith("sliced:data"):
                 patient_result[tag] = [pickle.load(open(f, "r"))['data'] for f in files]
-            if tag.startswith("sliced:data:ax"):
+            elif tag.startswith("sliced:data:ax"):
                 patient_result[tag] = [pickle.load(open(f, "r"))['data'] for f in files if "sax" in f]
-            if tag.startswith("sliced:data:shape"):
+            elif tag.startswith("sliced:data:shape"):
                 patient_result[tag] = [pickle.load(open(f, "r"))['data'].shape for f in files]
-            if tag.startswith("sliced:meta:"):
+            elif tag.startswith("sliced:data:singleslice"):
+                f = random.choice([sax for sax in files if "sax" in f])
+                print "file:",f
+                patient_result[tag] = pickle.load(open(f, "r"))['data']
+            elif tag.startswith("sliced:meta:"):
                 # get the key used in the pickle
                 key = tag[len("slided:meta:"):]
                 patient_result[tag] = [pickle.load(open(f, "r"))['metadata'][key] for f in files]
             # add others when needed
-        config().preprocess(patient_result, result=result["input"], index=i)
+
+        if train_preprocess:
+            config().preprocess_train(patient_result, result=result["input"], index=i)
+        elif validate_preprocess:
+            config().preprocess_validation(patient_result, result=result["input"], index=i)
+        elif test_preprocess:
+            config().preprocess_test(patient_result, result=result["input"], index=i)
+
 
         # load the labels
         # find the id of the current patient in the folder name (=safer)
         id = int(re.search(r'/(\d+)/', folder).group(1))
-        assert regular_labels[id-1, 0]==id
-        V_systole = regular_labels[id-1, 1]
-        V_diastole = regular_labels[id-1, 2]
-        result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1
-        result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1
-        result["output"]["diastole:onehot"][i][int(np.ceil(V_diastole))] = 1
-        result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1
+        if "patients" in wanted_output_tags:
+            result["output"]["patients"][i] = id
+
+        # only read labels, when we actually have them
+        if id in regular_labels[:, 0]:
+            assert regular_labels[id-1, 0]==id
+            V_systole = regular_labels[id-1, 1]
+            V_diastole = regular_labels[id-1, 2]
+            if "systole:onehot" in wanted_output_tags:
+                result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1
+            if "systole" in wanted_output_tags:
+                result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1
+            if "diastole:onehot" in wanted_output_tags:
+                result["output"]["diastole:onehot"][i][int(np.ceil(V_diastole))] = 1
+            if "diastole" in wanted_output_tags:
+                result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1
+
     return result
 
 
@@ -156,7 +196,8 @@ def generate_train_batch(required_input_keys, required_output_keys):
             output_keys_to_do.remove("segmentation")
 
         indices = config().rng.randint(0, len(train_patient_folders), chunk_size)  #
-        kaggle_data = get_patient_data(indices, input_keys_to_do, set="train")
+        kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do, set="train",
+                                       train_preprocess=True)
 
         result = utils.merge(result, kaggle_data)
 
@@ -165,12 +206,12 @@ def generate_train_batch(required_input_keys, required_output_keys):
 
 def generate_validation_batch(required_input_keys, required_output_keys, set="validation"):
     # generate sunny data
+    print "set:", set
     sunny_length = get_lenght_of_set(name="sunny", set=set)
     regular_length = get_lenght_of_set(name="regular", set=set)
 
     sunny_batches = int(np.ceil(sunny_length / float(config().sunny_batch_size)))
     regular_batches = int(np.ceil(regular_length / float(config().batch_size)))
-
     num_batches = max(sunny_batches, regular_batches)
 
     num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
@@ -194,7 +235,8 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
             output_keys_to_do.remove("segmentation")
 
         indices = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
-        kaggle_data = get_patient_data(indices, input_keys_to_do, set="train")
+        kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do, set=set,
+                                       validate_preprocess=True)
 
         result = utils.merge(result, kaggle_data)
 
@@ -202,34 +244,36 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
 
 
 def generate_test_batch(required_input_keys, required_output_keys, set="test"):
-    regular_batches = int(np.ceil(regular_length / float(config().batch_size)))
-    num_batches = max(sunny_batches, regular_batches)
-    num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
-
-    sunny_chunk_size = config().batches_per_chunk * config().sunny_batch_size
+    regular_length = get_lenght_of_set(name="regular", set=set)
+    num_batches = int(np.ceil(regular_length / float(config().batch_size)))
     regular_chunk_size = config().batches_per_chunk * config().batch_size
+    num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
 
     for n in xrange(num_chunks):
 
-        result = {}
         input_keys_to_do  = list(required_input_keys)  # clone
         output_keys_to_do = list(required_output_keys) # clone
+
         indices = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
-        kaggle_data = get_patient_data(indices, input_keys_to_do, set="test")
+        kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do, set=set,
+                                       test_preprocess=True)
 
-        result = utils.merge(result, kaggle_data)
-
-        yield result
+        yield kaggle_data
 
 
-def get_number_of_validation_batches(set="validation"):
+def get_number_of_validation_samples(set="validation"):
 
     sunny_length = get_lenght_of_set(name="sunny", set=set)
     regular_length = get_lenght_of_set(name="regular", set=set)
+    return min(sunny_length, regular_length)
 
-    sunny_batches = int(np.ceil(sunny_length / float(config().sunny_batch_size)))
-    regular_batches = int(np.ceil(regular_length / float(config().batch_size)))
-    return min(sunny_batches, regular_batches)
+
+def get_number_of_test_batches(set="test"):
+    regular_length = get_lenght_of_set(name="regular", set=set)
+    num_batches = int(np.ceil(regular_length / float(config().batch_size)))
+
+    return num_batches
+
 
 
 def get_lenght_of_set(name="sunny", set="validation"):
@@ -243,4 +287,6 @@ def get_lenght_of_set(name="sunny", set="validation"):
             return len(train_patient_folders)
         elif set=="validation":
             return len(validation_patient_folders)
+        elif set=="test":
+            return len(test_patient_folders)
 

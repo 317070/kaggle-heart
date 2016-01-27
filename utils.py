@@ -21,7 +21,9 @@ def hostname():
 
 
 def generate_expid(arch_name):
-    return "%s-%s-0" % (arch_name, hostname())
+    # expid shouldn't matter on anything else than configuration name.
+    # Configurations need to be deterministic!
+    return "%s" % (arch_name, )
 
 
 def get_git_revision_hash():

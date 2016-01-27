@@ -51,7 +51,12 @@ def preprocess(patient_data, result, index):
     for tag, data in patient_data.iteritems():
         desired_shape = result[tag][index].shape
         # try to fit data into the desired shape
-        if tag.startswith("sliced:data"):
+        if tag.startswith("sliced:data:singleslice"):
+            patient_4d_tensor = resize_to_make_it_fit([patient_data[tag]], output_shape=desired_shape[-2:])[0]
+            patient_shape = patient_4d_tensor.shape
+            t_sh = [min(l1,l2) for l1, l2 in zip(desired_shape, patient_shape)]
+            result[tag][index][:t_sh[0],:t_sh[1],:t_sh[2]] = patient_4d_tensor[:t_sh[0],:t_sh[1],:t_sh[2]]
+        elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
             patient_4d_tensor = np.swapaxes(
                                         resize_to_make_it_fit(patient_data[tag], output_shape=desired_shape[-2:])
@@ -83,7 +88,12 @@ def preprocess_with_augmentation(patient_data, result, index):
     for tag, data in patient_data.iteritems():
         desired_shape = result[tag][index].shape
         # try to fit data into the desired shape
-        if tag.startswith("sliced:data"):
+        if tag.startswith("sliced:data:singleslice"):
+            patient_4d_tensor = resize_and_augment([patient_data[tag]], output_shape=desired_shape[-2:], augment=augmentation_parameters)[0]
+            patient_shape = patient_4d_tensor.shape
+            t_sh = [min(l1,l2) for l1, l2 in zip(desired_shape, patient_shape)]
+            result[tag][index][:t_sh[0],:t_sh[1],:t_sh[2]] = patient_4d_tensor[:t_sh[0],:t_sh[1],:t_sh[2]]
+        elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
 
             patient_4d_tensor = np.swapaxes(

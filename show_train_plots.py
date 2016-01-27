@@ -4,14 +4,16 @@ import os
 import numpy as np
 import cPickle as pickle
 
-files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/*dense*.pkl")))
-
+print "Looking for the metadata files..."
+files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/*mxnet1*.pkl")))
+print "Plotting..."
 
 for file in files:
     filename = os.path.basename(os.path.normpath(file))
     data = pickle.load(open(file, "r"))
     train_losses = data['losses_train']
     valid_losses = data['losses_eval_valid']
+    kaggle_losses = data['losses_eval_valid_kaggle']
 
     fig = plt.figure()
 
@@ -26,6 +28,7 @@ for file in files:
     if len(valid_losses)>=1:
         x_valid = np.arange(0,len(train_losses),1.0*len(train_losses)/len(valid_losses))+1
         plt.plot(x_valid, valid_losses)
+        plt.plot(x_valid, kaggle_losses)
     plt.show()
 
 print "done"

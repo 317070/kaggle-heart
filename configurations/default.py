@@ -1,12 +1,14 @@
 import numpy as np
+import objectives
 from preprocess import sunny_preprocess, sunny_preprocess_validation, preprocess, preprocess_with_augmentation, \
     sunny_preprocess_with_augmentation
 import lasagne
 from updates import build_updates
-from data_loader import generate_train_batch, generate_validation_batch
+from data_loader import generate_train_batch, generate_validation_batch, generate_test_batch
 from functools import partial
 import lasagne
 import lasagne.layers.cuda_convnet
+from postprocess import postprocess
 
 """
 When adding new configuration parameters, add the default values to this config file. This adds them to
@@ -20,11 +22,17 @@ rng = np.random
 create_train_gen = generate_train_batch
 create_eval_valid_gen = partial(generate_validation_batch, set="validation")
 create_eval_train_gen = partial(generate_validation_batch, set="train")
+create_test_gen = partial(generate_test_batch, set="test")
 
-sunny_preprocess = sunny_preprocess_with_augmentation
+sunny_preprocess_train = sunny_preprocess_with_augmentation
 sunny_preprocess_validation = sunny_preprocess_validation
-preprocess = preprocess_with_augmentation
+sunny_preprocess_test = sunny_preprocess_validation
+
+preprocess_train = preprocess_with_augmentation
 preprocess_validation = preprocess
+preprocess_test = preprocess
+
+postprocess = postprocess
 
 build_updates = build_updates
 
@@ -35,6 +43,7 @@ validate_every = 20
 save_every = 20
 restart_from_save = True
 take_a_dump = False  # dump a lot of data in a pkl-dump file. (for debugging)
+dump_network_loaded_data = False  # dump the outputs from the dataloader (for debugging)
 
 augmentation_params = {
     "rotation": (0, 360),
@@ -59,3 +68,6 @@ def build_model():
         "inputs":[],
         "output":None
     }
+
+def build_objective(l_ins, l_outs):
+    return objectives.LogLossObjective(l_outs)

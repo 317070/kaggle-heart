@@ -21,7 +21,7 @@ def hostname():
 
 
 def generate_expid(arch_name):
-    return "%s-%s-%s" % (arch_name, hostname(), timestamp())
+    return "%s-%s-0" % (arch_name, hostname())
 
 
 def get_git_revision_hash():
@@ -29,29 +29,20 @@ def get_git_revision_hash():
     return subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip()
 
 
-def accuracy(y, t):
-    if t.ndim == 2:
-        t = np.argmax(t, axis=1)
-
-    predictions = np.argmax(y, axis=1)
-    return np.mean(predictions == t)
-
-
-def softmax(x):
-    m = np.max(x, axis=1, keepdims=True)
-    e = np.exp(x - m)
-    return e / np.sum(e, axis=1, keepdims=True)
-
-
-def entropy(x):
-    h = -x * np.log(x)
-    h[np.invert(np.isfinite(h))] = 0
-    return h.sum(1)
-
-
-def load_gz(path): # load a .npy.gz file
+def load_gz(path):  # load a .npy.gz file
     if path.endswith(".gz"):
         f = gzip.open(path, 'rb')
         return np.load(f)
     else:
         return np.load(path)
+
+
+def current_learning_rate(schedule, idx):
+    s = schedule.keys()
+    s.sort()
+    current_lr = schedule[0]
+    for i in s:
+        if idx >= i:
+            current_lr = schedule[i]
+
+    return current_lr

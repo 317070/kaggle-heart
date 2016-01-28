@@ -3,7 +3,7 @@ import objectives
 from preprocess import sunny_preprocess, sunny_preprocess_validation, preprocess, preprocess_with_augmentation, \
     sunny_preprocess_with_augmentation
 import lasagne
-from updates import build_updates
+from updates import build_nesterov_updates
 from data_loader import generate_train_batch, generate_validation_batch, generate_test_batch
 from functools import partial
 import lasagne
@@ -34,7 +34,7 @@ preprocess_test = preprocess
 
 postprocess = postprocess
 
-build_updates = build_updates
+build_updates = build_nesterov_updates
 
 # In total, you train 'chunk_size' samples 'num_chunks_train' time, and you do updates every 'batch_size'
 num_chunks_train = 840

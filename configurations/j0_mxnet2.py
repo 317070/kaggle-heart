@@ -95,6 +95,28 @@ def build_model():
                               num_units=600,
                               nonlinearity=lasagne.nonlinearities.softmax)
 
+
+    l = ConvolutionOver2DAxisLayer(l0, num_filters=40, filter_size=(5, 5),
+                                     axis=(2,3), channel=1,
+                                     W=lasagne.init.Orthogonal(),
+                                     b=lasagne.init.Constant(0.1),
+                                     nonlinearity=lasagne.nonlinearities.identity
+                                     )
+
+    l = BatchNormLayer(l, gamma=None)
+    l = lasagne.layers.NonlinearityLayer(l, nonlinearity=lasagne.nonlinearities.rectify)
+    l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
+
+    l = ConvolutionOver2DAxisLayer(l, num_filters=40, filter_size=(3, 3),
+                                     axis=(2,3), channel=1,
+                                     W=lasagne.init.Orthogonal(),
+                                     b=lasagne.init.Constant(0.1),
+                                     nonlinearity=lasagne.nonlinearities.identity
+                                     )
+    l = BatchNormLayer(l, gamma=None)
+    l = lasagne.layers.NonlinearityLayer(l, nonlinearity=lasagne.nonlinearities.rectify)
+    l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
+
     l_diastole = lasagne.layers.DenseLayer(lasagne.layers.DropoutLayer(l),
                               num_units=600,
                               nonlinearity=lasagne.nonlinearities.softmax)

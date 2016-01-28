@@ -49,7 +49,7 @@ def train_model(expid):
         num_param = string.ljust(num_param.__str__(), 10)
         print "    %s %s %s" % (name,  num_param, layer.output_shape)
 
-    obj = config().build_objective(input_layers, output_layers)
+    obj = config().build_objective(interface_layers)
 
     train_loss_theano = obj.get_loss()
     kaggle_loss_theano = obj.get_kaggle_loss()
@@ -68,6 +68,7 @@ def train_model(expid):
     # contains target_vars of the objective! Not the output layers desired values!
     # There can be more output layers than are strictly required for the objective
     # e.g. for debugging
+
     ys_shared = {
         key: lasagne.utils.shared_empty(dim=target_var.ndim, dtype='float32') for (key, target_var) in obj.target_vars.iteritems()
     }

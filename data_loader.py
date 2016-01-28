@@ -14,7 +14,7 @@ print "Loading data"
 
 patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_train/*/study/"), key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))  # glob is non-deterministic!
 
-validation_patients_indices = get_cross_validation_indices(indices=range(1,501), validation_index=4)
+validation_patients_indices = get_cross_validation_indices(indices=range(1,501), validation_index=0)
 train_patients_indices = [i for i in range(1,501) if i not in validation_patients_indices]
 
 VALIDATION_REGEX = "|".join(["(/%d/)"%i for i in validation_patients_indices])
@@ -61,6 +61,8 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
     for tag in wanted_output_tags:
         if tag in ["systole", "diastole", "systole:onehot", "diastole:onehot"]:
             result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32')
+        if tag in ["systole:value", "diastole:value"]:
+            result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, ), dtype='float32')
         # and for the predictions, keep track of which patient is sitting where in the batch
         if tag=="patients":
             result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, ), dtype='int32')
@@ -88,23 +90,21 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
         for tag in wanted_input_tags:
             if tag.startswith("sliced:data:singleslice"):
                 l = [sax for sax in files if "sax" in sax]
-                f = l[len(l)/2]
-                #f = random.choice(l)
-                patient_result[tag] = pickle.load(open(f, "r"))['data']
-                if tag.startswith("sliced:data:singleslice:difference"):
+                if "middle" in tag:
+                    f = l[len(l)/2]
+                else:
+                    f = random.choice(l)
+                patient_result[tag] = pickle.load(open(f, "r"))['data'].astype('float32')
+                if "difference" in tag:
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
             elif tag.startswith("sliced:data"):
-                patient_result[tag] = [pickle.load(open(f, "r"))['data'] for f in files]
+                patient_result[tag] = [pickle.load(open(f, "r"))['data'].astype('float32') for f in files]
             elif tag.startswith("sliced:data:ax"):
-                patient_result[tag] = [pickle.load(open(f, "r"))['data'] for f in files if "sax" in f]
+                patient_result[tag] = [pickle.load(open(f, "r"))['data'].astype('float32') for f in files if "sax" in f]
             elif tag.startswith("sliced:data:shape"):
                 patient_result[tag] = [pickle.load(open(f, "r"))['data'].shape for f in files]
-            elif tag.startswith("sliced:data:singleslice"):
-                f = random.choice([sax for sax in files if "sax" in f])
-                print "file:",f
-                patient_result[tag] = pickle.load(open(f, "r"))['data']
             elif tag.startswith("sliced:meta:"):
                 # get the key used in the pickle
                 key = tag[len("slided:meta:"):]

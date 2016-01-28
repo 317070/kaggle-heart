@@ -3,9 +3,9 @@ import importlib
 _config = None
 
 
-def set_configuration(configuration):
+def set_configuration(config_name):
     global _config
-    _config = importlib.import_module("configurations.%s" % configuration)
+    _config = importlib.import_module("configurations.%s" % config_name)
     print "loaded", _config
 
 

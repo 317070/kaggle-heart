@@ -1,8 +1,8 @@
-import lasagne
+import lasagne as nn
 import theano.tensor as T
 
 
-class NormalCDFLayer(lasagne.layers.MergeLayer):
+class NormalCDFLayer(nn.layers.MergeLayer):
     def __init__(self, mu, log_sigma, **kwargs):
         super(NormalCDFLayer, self).__init__([mu, log_sigma], **kwargs)
 
@@ -17,3 +17,8 @@ class NormalCDFLayer(lasagne.layers.MergeLayer):
         x = (x_range - mu) / (sigma * T.sqrt(2.))
         cdf = (T.erf(x) + 1.) / 2.
         return cdf
+
+
+class NormalizationLayer(nn.layers.Layer):
+    def get_output_for(self, input, **kwargs):
+        return (input - T.mean(input, axis=[-2, -1], keepdims=True)) / T.std(input, axis=[-2, -1], keepdims=True)

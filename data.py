@@ -1,207 +1,148 @@
+import cPickle as pickle
 import glob
-import os
+import re
 import numpy as np
 import skimage.io
 import skimage.transform
-import utils
-import dicom
 from scipy.misc import imresize
+from configuration import config
 
 
-
-
-labels_train = utils.load_gz("data/labels_train.npy.gz")
-
-default_augmentation_params = {
-    'zoom_range': (1 / 1.1, 1.1),
-    'rotation_range': (0, 360),
-    'translation_range': (-4, 4),
-    'do_flip': True,
-}
-
-no_augmentation_params = {
-    'zoom_range': (1.0, 1.0),
-    'rotation_range': (0, 0),
-    'translation_range': (0, 0),
-    'do_flip': False,
-    'allow_stretch': False,
-}
-
-
-def load(subset='train'):
-    return utils.load_gz("data/images_%s.npy.gz" % subset)
-
-
-def uint_to_float(img):
-    return 1 - (img / np.float32(255.0))
-
-
-def crop_resize(img):
-    """
-    Crop center and resize.
-
-    :param img: image to be cropped and resized.
-    """
-    if img.shape[0] < img.shape[1]:
-        img = img.T
-    # we crop image from center
-    short_edge = min(img.shape[:2])
-    yy = int((img.shape[0] - short_edge) / 2)
-    xx = int((img.shape[1] - short_edge) / 2)
-    crop_img = img[yy: yy + short_edge, xx: xx + short_edge]
-    img = crop_img
-    img = imresize(img, img_shape, )
-    return img
-
-
-def load_images(from_dir, verbose=True):
-    """
-    Load images in the form study x slices x width x height.
-    Each image contains 30 time series frames so that it is ready for the convolutional network.
-
-    :param from_dir: directory with images (train or validate)
-    :param verbose: if true then print data
-    """
-
-    current_study_sub = ''  # saves the current study sub_folder
-    current_study = ''  # saves the current study folder
-    current_study_images = []  # holds current study images
-    ids = []  # keeps the ids of the studies
-    study_to_images = dict()  # dictionary for studies to images
-    total = 0
-    images = []  # saves 30-frame-images
-    from_dir = from_dir if from_dir.endswith('/') else from_dir + '/'
-    for subdir, _, files in os.walk(from_dir):
-        subdir = subdir.replace('\\', '/')  # windows path fix
-        subdir_split = subdir.split('/')
-        study_id = subdir_split[-3]
-        if "sax" in subdir:
-            for f in files:
-                image_path = os.path.join(subdir, f)
-                if not image_path.endswith('.dcm'):
-                    continue
-
-                image = dicom.read_file(image_path)
-                image = image.pixel_array
-                if img_resize:
-                    image = crop_resize(image)
-
-                if current_study_sub != subdir:
-                    x = 0
-                    try:
-                        while len(images) < 30:
-                            images.append(images[x])
-                            x += 1
-                        if len(images) > 30:
-                            images = images[0:30]
-
-                    except IndexError:
-                        pass
-                    current_study_sub = subdir
-                    current_study_images.append(images)
-                    images = []
-
-                if current_study != study_id:
-                    study_to_images[current_study] = np.array(current_study_images)
-                    if current_study != "":
-                        ids.append(current_study)
-                    current_study = study_id
-                    current_study_images = []
-                images.append(image)
-                if verbose:
-                    if total % 1000 == 0:
-                        print('Images processed {0}'.format(total))
-                total += 1
-    x = 0
-    try:
-        while len(images) < 30:
-            images.append(images[x])
-            x += 1
-        if len(images) > 30:
-            images = images[0:30]
-    except IndexError:
-        pass
-
-    print('-'*50)
-    print('All DICOM in {0} images loaded.'.format(from_dir))
-    print('-'*50)
-
-    current_study_images.append(images)
-    study_to_images[current_study] = np.array(current_study_images)
-    if current_study != "":
-        ids.append(current_study)
-
-    return ids, study_to_images
-
-
-def map_studies_results():
-    """
-    Maps studies to their respective targets.
-    """
-    id_to_results = dict()
-    train_csv = open('data/train.csv')
+def read_labels(file_path):
+    id2labels = {}
+    train_csv = open(file_path)
     lines = train_csv.readlines()
     i = 0
     for item in lines:
         if i == 0:
             i = 1
             continue
-        id, diastole, systole = item.replace('\n', '').split(',')
-        id_to_results[id] = [float(diastole), float(systole)]
+        id, systole, diastole = item.replace('\n', '').split(',')
+        id2labels[int(id)] = [float(systole), float(diastole)]
+    return id2labels
 
-    return id_to_results
+
+def read_patients_data(paths):
+    data_dict = {}
+    for p in paths:
+        patient_id = int(re.search(r'/(\d+)/', p).group(1))
+        data_dict[patient_id] = read_patient(p)
+    return data_dict
 
 
-def write_train_npy():
+def read_patient(path):
+    slices_paths = sorted(glob.glob(path + '/*.pkl'))
+    slices_dict = {}
+    for sp in slices_paths:
+        slice = re.search(r'/(\w+\d+)*\.pkl$', sp).group(1)
+        slices_dict[slice] = read_slice(sp)
+    return slices_dict
+
+
+def read_slice(path):
+    with open(path) as f:
+        d = pickle.load(f)['data']
+    return d
+
+
+def sample_augmentation_parameters(transformation):
+    shift_x = config().rng.uniform(*transformation['translation_range'])
+    shift_y = config().rng.uniform(*transformation['translation_range'])
+    translation = (shift_x, shift_y)
+    rotation = config().rng.uniform(*transformation['rotation_range'])
+    shear = config().rng.uniform(*transformation['shear_range'])
+    return {'translation': translation, 'rotation': rotation, 'shear': shear}
+
+
+def transform(data, transformation):
     """
-    Loads the training data set including X and y and saves it to .npy file.
+    :param data: (30, height, width) matrix from one slice of MRI
+    :param transformation:
+    :return:
     """
-    print('-'*50)
-    print('Writing training data to .npy file...')
-    print('-'*50)
+    out_shape = (data.shape[0],) + transformation['patch_size']
+    out_data = np.zeros(out_shape, dtype='float32')
+    # need same random transform for the whole sequence
+    augment = any([transformation['rotation_range'],
+                   transformation['translation_range'],
+                   transformation['shear_range']])
+    if augment:
+        random_augmentation_params = sample_augmentation_parameters(transformation)
 
-    study_ids, images = load_images('/mnt/storage/data/dsb15/train')  # load images and their ids
-    studies_to_results = map_studies_results()  # load the dictionary of studies to targets
-    X = []
-    y = []
+    for i in xrange(len(data)):
+        scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
 
-    for study_id in study_ids:
-        study = images[study_id]
-        outputs = studies_to_results[study_id]
-        for i in range(study.shape[0]):
-            X.append(study[i, :, :, :])
-            y.append(outputs)
+        tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
+        total_tform = tform
 
-    X = np.array(X, dtype=np.uint8)
-    y = np.array(y)
-    np.save('data/X_train.npy', X)
-    np.save('data/y_train.npy', y)
-    print('Done.')
+        if augment:
+            tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
+
+            augment_tform = build_augmentation_transform(rotation=random_augmentation_params['rotation'],
+                                                         shear=random_augmentation_params['shear'],
+                                                         translation=random_augmentation_params['translation'])
+            total_tform = tform + tform_uncenter + augment_tform + tform_center
+
+        out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
+
+    return out_data
 
 
-def write_validation_npy():
+tform_identity = skimage.transform.AffineTransform()
+
+
+def fast_warp(img, tf, output_shape, mode='constant', order=1):
     """
-    Loads the validation data set including X and study ids and saves it to .npy file.
+    This wrapper function is faster than skimage.transform.warp
     """
-    print('-'*50)
-    print('Writing validation data to .npy file...')
-    print('-'*50)
-
-    ids, images = load_images('/mnt/storage/data/dsb15/validate')
-    study_ids = []
-    X = []
-
-    for study_id in ids:
-        study = images[study_id]
-        for i in range(study.shape[0]):
-            study_ids.append(study_id)
-            X.append(study[i, :, :, :])
-
-    X = np.array(X, dtype=np.uint8)
-    np.save('data/X_validate.npy', X)
-    np.save('data/ids_validate.npy', study_ids)
-    print('Done.')
+    m = tf.params  # tf._matrix is
+    return skimage.transform._warps_cy._warp_fast(img, m, output_shape=output_shape, mode=mode, order=order)
 
 
-write_train_npy()
-write_validation_npy()
+def build_centering_transform(image_shape, target_shape=(50, 50)):
+    rows, cols = image_shape
+    trows, tcols = target_shape
+    shift_x = (cols - tcols) / 2.0
+    shift_y = (rows - trows) / 2.0
+    return skimage.transform.SimilarityTransform(translation=(shift_x, shift_y))
+
+
+def build_rescale_transform(downscale_factor, image_shape, target_shape):
+    """
+    estimating the correct rescaling transform is slow, so just use the
+    downscale_factor to define a transform directly. This probably isn't
+    100% correct, but it shouldn't matter much in practice.
+    """
+    rows, cols = image_shape
+    trows, tcols = target_shape
+    tform_ds = skimage.transform.AffineTransform(scale=(downscale_factor, downscale_factor))
+
+    # centering
+    shift_x = cols / (2.0 * downscale_factor) - tcols / 2.0
+    shift_y = rows / (2.0 * downscale_factor) - trows / 2.0
+    tform_shift_ds = skimage.transform.SimilarityTransform(translation=(shift_x, shift_y))
+    return tform_shift_ds + tform_ds
+
+
+def build_center_uncenter_transforms(image_shape):
+    """
+    These are used to ensure that zooming and rotation happens around the center of the image.
+    Use these transforms to center and uncenter the image around such a transform.
+    """
+    center_shift = np.array(
+        [image_shape[1], image_shape[0]]) / 2.0 - 0.5  # need to swap rows and cols here apparently! confusing!
+    tform_uncenter = skimage.transform.SimilarityTransform(translation=-center_shift)
+    tform_center = skimage.transform.SimilarityTransform(translation=center_shift)
+    return tform_center, tform_uncenter
+
+
+def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip=False, zoom=(1.0, 1.0)):
+    if flip:
+        shear += 180
+        rotation += 180
+        # shear by 180 degrees is equivalent to rotation by 180 degrees + flip.
+        # So after that we rotate it another 180 degrees to get just the flip.
+
+    tform_augment = skimage.transform.AffineTransform(scale=(1 / zoom[0], 1 / zoom[1]), rotation=np.deg2rad(rotation),
+                                                      shear=np.deg2rad(shear), translation=translation)
+    return tform_augment

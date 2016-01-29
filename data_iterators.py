@@ -1,4 +1,3 @@
-import buffering
 from data import *
 import glob
 import re
@@ -77,24 +76,26 @@ class TransformSliceDataGenerator(PatientsDataGenerator):
 
 
 class SlicesDataGenerator(object):
-    def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False, random=True,
-                 **kwargs):
+    def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False,
+                 random=True, infinite=False, **kwargs):
         self.patient_paths = sorted(glob.glob(data_path + '/*/study/'),
                                     key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))
         self.slice_paths = [sorted(glob.glob(p + '/*.pkl')) for p in self.patient_paths]
         self.slice_paths = list(itertools.chain(*self.slice_paths))
         self.slice_paths = [s for s in self.slice_paths if 'sax' in s]
-        self.nslices = len(self.slice_paths)
+        self.nsamples = len(self.slice_paths)
         self.batch_size = batch_size
         self.rng = np.random.RandomState(42)
         self.full_batch = full_batch
         self.random = random
+        self.infinite = infinite
         self.id2labels = read_labels(labels_path) if labels_path else None
         self.transformation_params = transform_params
 
     def generate(self):
         x_batch = np.zeros((self.batch_size, 30) + self.transformation_params['patch_size'], dtype='float32')
-        y_batch = np.zeros((self.batch_size, 2), dtype='float32')
+        y0_batch = np.zeros((self.batch_size, 1), dtype='float32')
+        y1_batch = np.zeros((self.batch_size, 1), dtype='float32')
 
         def _gen():
             while True:
@@ -103,16 +104,19 @@ class SlicesDataGenerator(object):
                     self.rng.shuffle(rand_idxs)
                 for pos in xrange(0, len(rand_idxs), self.batch_size):
                     idxs_batch = rand_idxs[pos:pos + self.batch_size]
+                    nb = len(idxs_batch)
                     for i, j in enumerate(idxs_batch):
                         x_batch[i] = transform(read_slice(self.slice_paths[j]), self.transformation_params)
                         patient_id = int(re.search(r'/(\d+)/', self.slice_paths[j]).group(1))
-                        y_batch[i, 0] = self.id2labels[patient_id][0]
-                        y_batch[i, 1] = self.id2labels[patient_id][1]
+                        y0_batch[i, 0] = self.id2labels[patient_id][0]
+                        y1_batch[i, 1] = self.id2labels[patient_id][1]
                     if self.full_batch:
-                        if len(idxs_batch) == self.batch_size:
-                            yield [x_batch], [y_batch]
+                        if nb == self.batch_size:
+                            yield [x_batch], [y0_batch, y1_batch]
                     else:
-                        yield [x_batch], [y_batch]
+                        yield [x_batch[:nb]], [y0_batch[:nb], y1_batch[:nb]]
 
-        # return buffering.buffered_gen_threaded(_gen())
+                if not self.infinite:
+                    break
+
         return _gen()

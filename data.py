@@ -60,7 +60,7 @@ def transform(data, transformation):
     :param transformation:
     :return:
     """
-    out_shape = (data.shape[0],) + transformation['patch_size']
+    out_shape = (30,) + transformation['patch_size']
     out_data = np.zeros(out_shape, dtype='float32')
     # need same random transform for the whole sequence
     augment = any([transformation['rotation_range'],
@@ -69,7 +69,7 @@ def transform(data, transformation):
     if augment:
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
-    for i in xrange(len(data)):
+    for i in xrange(data.shape[0]):
         scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
 
         tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
@@ -84,6 +84,12 @@ def transform(data, transformation):
             total_tform = tform + tform_uncenter + augment_tform + tform_center
 
         out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
+
+    if data.shape[0] < out_shape[0]:
+        for i, j in enumerate(xrange(data.shape[0], out_shape[0])):
+            out_data[j] = out_data[i]  # TODO
+    if data.shape[0] > out_shape[0]:
+        out_data = out_data[:30]
 
     return out_data
 

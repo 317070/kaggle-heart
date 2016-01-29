@@ -11,6 +11,8 @@ import theano.tensor as T
 import utils
 from configuration import config, set_configuration
 
+# import buffering
+
 if len(sys.argv) < 2:
     sys.exit("Usage: train.py <configuration_name>")
 config_name = sys.argv[1]
@@ -46,27 +48,28 @@ for layer in all_layers:
     print '    %s %s %s' % (name, num_param, layer.output_shape)
 
 train_loss = config().build_objective(model)
-valid_loss = config().build_objective(model, deterministic=True)
 
 learning_rate_schedule = config().learning_rate_schedule
 learning_rate = theano.shared(np.float32(learning_rate_schedule[0]))
 updates = config().build_updates(train_loss, model, learning_rate)
 
-idx = T.lscalar('idx')
 xs_shared = [nn.utils.shared_empty(dim=len(l.shape)) for l in model.l_ins]
 ys_shared = [nn.utils.shared_empty(dim=len(l.shape)) for l in model.l_targets]
 
-givens = {}
+givens_in = {}
 for l_in, x in izip(model.l_ins, xs_shared):
-    givens[l_in.input_var] = x
+    givens_in[l_in.input_var] = x
 
+givens_out = {}
 for l_target, y in izip(model.l_targets, ys_shared):
-    givens[l_target.input_var] = y
+    givens_out[l_target.input_var] = y
 
-iter_train = theano.function([], train_loss,
-                             givens=givens, updates=updates)
-iter_validate = theano.function([], valid_loss,
-                                givens=givens)
+givens = dict(givens_in.items() + givens_out.items())
+
+# theano functions
+iter_train = theano.function([], train_loss, givens=givens, updates=updates)
+iter_validate = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
+                                givens=givens_in)
 
 if config().restart_from_save and os.path.isfile(metadata_path):
     print 'Load model parameters for resuming'
@@ -88,30 +91,61 @@ else:
 train_data_iterator = config().train_data_iterator
 valid_data_iterator = config().valid_data_iterator
 
+print
+print 'Data'
+print 'n train: %d' % train_data_iterator.nsamples
+print 'n validation: %d' % valid_data_iterator.nsamples
+
+print
 print 'Train model'
 start_time = time.time()
 prev_time = start_time
+tmp_losses_train = []
 
+# buffering.buffered_gen_threaded(_gen())
 for iter_idx, (xs_batch, ys_batch) in izip(iter_idxs, train_data_iterator.generate()):
-    print 'Batch %d/%d' % (iter_idx + 1, config().max_niter)
-
     if iter_idx in learning_rate_schedule:
         lr = np.float32(learning_rate_schedule[iter_idx])
         print '  setting learning rate to %.7f' % lr
+        print
         learning_rate.set_value(lr)
 
+    prev_time = time.clock()
     # load data to GPU and make one iteration
     for x_shared, x in zip(xs_shared, xs_batch):
-        print x.shape
         x_shared.set_value(x)
     for y_shared, y in zip(ys_shared, ys_batch):
-        print y.shape
         y_shared.set_value(y)
     loss = iter_train()
-    print loss
+    print loss, time.clock() - prev_time
+    tmp_losses_train.append(loss)
 
     if ((iter_idx + 1) % config().validate_every) == 0:
-        pass
+        print
+        print 'Iteration %d/%d' % (iter_idx + 1, config().max_niter)
+        batch_valid_predictions, batch_valid_targets = [], []
+        for xs_batch, ys_batch in valid_data_iterator.generate():
+            for x_shared, x in zip(xs_shared, xs_batch):
+                x_shared.set_value(x)
+            batch_valid_targets.append(ys_batch)
+            batch_valid_predictions.append(iter_validate())
+        # for p, t in zip(batch_valid_predictions, batch_valid_predictions):
+        #     for pp, tt in zip(p, t):
+        #         print 'pred', pp.shape
+        #         print 'targets', tt.shape
+
+        # calculate validation loss across validation set
+        valid_loss = config().get_mean_validation_loss(batch_valid_predictions, batch_valid_targets)
+        print 'Validation loss: ',  valid_loss
+
+        valid_crps = config().get_mean_crps_loss(batch_valid_predictions, batch_valid_targets)
+        print 'Validation CRPS: ', valid_crps
+
+        # calculate mean train loss since the last validation phase
+        mean_train_loss = np.mean(tmp_losses_train)
+        print 'Mean train loss: %7f' % mean_train_loss
+        losses_train.append(mean_train_loss)
+        tmp_losses_train = []
 
     if ((iter_idx + 1) % config().save_every) == 0:
         print
@@ -120,7 +154,7 @@ for iter_idx, (xs_batch, ys_batch) in izip(iter_idxs, train_data_iterator.genera
         with open(metadata_path, 'w') as f:
             pickle.dump({
                 'configuration_file': config_name,
-                'git_revision_hash': utils.get_git_revision_hash(),
+                'git_revision_hash': 0,  # utils.get_git_revision_hash(),
                 'experiment_id': expid,
                 'chunks_since_start': iter_idx,
                 'losses_train': losses_train,

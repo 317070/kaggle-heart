@@ -1,4 +1,4 @@
-from data_iterators import *
+import data_iterators
 import pickle
 
 # iterator = PatientsDataGenerator('data/train', labels_path='data/train.csv', batch_size=2)
@@ -31,10 +31,11 @@ set_configuration('test')
 # iterator = SlicesDataGenerator(data_path='data/train', labels_path='data/train.csv', batch_size=32,
 #                                transform_params=train_transformation_params, full_batch=True)
 
-train_data_iterator = SlicesDataGenerator(data_path='/data/dsb15_pkl/pkl_train', batch_size=32,
+train_data_iterator = data_iterators.SlicesDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
+                                                         batch_size=32,
                                                          transform_params=train_transformation_params,
                                                          labels_path='/data/dsb15_pkl/train.csv', full_batch=True,
-                                                         random=True)
+                                                         random=True, infinite=True)
 
 for x, y in train_data_iterator.generate():
     print x.shape, y

@@ -60,14 +60,5 @@ def real_to_cdf(y, sigma):
     return cdf
 
 
-def heaviside_function(y):
-    cdf = np.zeros((y.shape[0], 600))
-    for i in range(y.shape[0]):
-        cdf[i] = np.float32((np.linspace(0, 599, 600) - y[i]) >= 0)
-    return cdf
-
-
-def crps(predictions, targets, sigma):
-    predictions_cdf = real_to_cdf(predictions, sigma)
-    target_cdf = heaviside_function(targets)
-    return np.mean((predictions_cdf - target_cdf) ** 2)
+def heaviside_function(x):
+    return np.float32((np.linspace(0, 599, 600) - x) >= 0)

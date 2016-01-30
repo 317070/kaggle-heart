@@ -41,7 +41,7 @@ print '  number of parameters: %d' % num_params
 print string.ljust('  layer output shapes:', 36),
 print string.ljust('#params:', 10),
 print 'output shape:'
-for layer in all_layers:
+for layer in all_layers[:-1]:
     name = string.ljust(layer.__class__.__name__, 32)
     num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
     num_param = string.ljust(num_param.__str__(), 10)
@@ -69,6 +69,8 @@ givens = dict(givens_in.items() + givens_out.items())
 # theano functions
 iter_train = theano.function([], train_loss, givens=givens, updates=updates)
 iter_validate = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
+                                givens=givens_in)
+test = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_params],
                                 givens=givens_in)
 
 if config().restart_from_save and os.path.isfile(metadata_path):
@@ -129,17 +131,19 @@ for iter_idx, (xs_batch, ys_batch) in izip(iter_idxs, train_data_iterator.genera
                 x_shared.set_value(x)
             batch_valid_targets.append(ys_batch)
             batch_valid_predictions.append(iter_validate())
-        # for p, t in zip(batch_valid_predictions, batch_valid_predictions):
-        #     for pp, tt in zip(p, t):
-        #         print 'pred', pp.shape
-        #         print 'targets', tt.shape
+            print '---------------------------------------'
+            norm_params = test()
+            print 'MU_0', norm_params[0]
+            print 'sigma_0', norm_params[1]
+            print 'MU_1', norm_params[2]
+            print 'sigma_1', norm_params[3]
 
-        # calculate validation loss across validation set
-        valid_loss = config().get_mean_validation_loss(batch_valid_predictions, batch_valid_targets)
-        print 'Validation loss: ',  valid_loss
-
-        valid_crps = config().get_mean_crps_loss(batch_valid_predictions, batch_valid_targets)
-        print 'Validation CRPS: ', valid_crps
+        # # calculate validation loss across validation set
+        # valid_loss = config().get_mean_validation_loss(batch_valid_predictions, batch_valid_targets)
+        # print 'Validation loss: ',  valid_loss
+        #
+        # valid_crps = config().get_mean_crps_loss(batch_valid_predictions, batch_valid_targets)
+        # print 'Validation CRPS: ', valid_crps
 
         # calculate mean train loss since the last validation phase
         mean_train_loss = np.mean(tmp_losses_train)

@@ -38,14 +38,12 @@ learning_rate_schedule = {
 }
 
 from preprocess import preprocess, preprocess_with_augmentation
-from postprocess import postprocess_value
+from postprocess import postprocess_onehot
 preprocess_train = preprocess_with_augmentation  # no augmentation
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess  # no augmentation
 
 build_updates = build_adam_updates
-
-postprocess = postprocess_value
 
 data_sizes = {
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
@@ -91,7 +89,7 @@ def build_model():
 
     l = lasagne.layers.PadLayer(l, width=(1, 1))
     l = MaxPool2DDNNLayer(l, pool_size=(2, 2), stride=(2, 2))
-    l = lasagne.layers.DropoutLayer(l, p=0.25)
+    #l = lasagne.layers.DropoutLayer(l, p=0.25)
 
     # ---------------------------------------------------------------
     l = Conv2DDNNLayer(l, num_filters=96, filter_size=(3, 3),
@@ -105,7 +103,7 @@ def build_model():
 
     l = lasagne.layers.PadLayer(l, width=(1, 1))
     l = MaxPool2DDNNLayer(l, pool_size=(2, 2), stride=(2, 2))
-    l = lasagne.layers.DropoutLayer(l, p=0.25)
+    #l = lasagne.layers.DropoutLayer(l, p=0.25)
 
     # ---------------------------------------------------------------
     l = Conv2DDNNLayer(l, num_filters=128, filter_size=(2, 2),
@@ -140,7 +138,7 @@ def build_model():
 
     l = lasagne.layers.PadLayer(l, width=(1, 1))
     l = MaxPool2DDNNLayer(l, pool_size=(2, 2), stride=(2, 2))
-    l = lasagne.layers.DropoutLayer(l, p=0.25)
+    #l = lasagne.layers.DropoutLayer(l, p=0.25)
 
     # ---------------------------------------------------------------
     l = Conv2DDNNLayer(l, num_filters=96, filter_size=(3, 3),
@@ -154,7 +152,7 @@ def build_model():
 
     l = lasagne.layers.PadLayer(l, width=(1, 1))
     l = MaxPool2DDNNLayer(l, pool_size=(2, 2), stride=(2, 2))
-    l = lasagne.layers.DropoutLayer(l, p=0.25)
+    #l = lasagne.layers.DropoutLayer(l, p=0.25)
 
     # ---------------------------------------------------------------
     l = Conv2DDNNLayer(l, num_filters=128, filter_size=(2, 2),

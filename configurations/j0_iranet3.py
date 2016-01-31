@@ -21,13 +21,13 @@ from updates import build_adam_updates
 validate_every = 100
 validate_train_set = False
 save_every = 100
-restart_from_save = True
+restart_from_save = False
 
 dump_network_loaded_data = False
 
-batches_per_chunk = 32
+batches_per_chunk = 1
 
-batch_size = 32
+batch_size = 1024
 sunny_batch_size = 4
 num_chunks_train = 20000
 
@@ -38,14 +38,12 @@ learning_rate_schedule = {
 }
 
 from preprocess import preprocess, preprocess_with_augmentation
-from postprocess import postprocess_value
+from postprocess import postprocess_onehot
 preprocess_train = preprocess_with_augmentation  # no augmentation
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess  # no augmentation
 
 build_updates = build_adam_updates
-
-postprocess = postprocess_value
 
 data_sizes = {
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
@@ -191,5 +189,6 @@ def build_model():
 def build_objective(interface_layers):
     l2_penalty = lasagne.regularization.regularize_layer_params_weighted(interface_layers["regularizable"], lasagne.regularization.l2)
 
-    return objectives.KaggleValidationMSEObjective(interface_layers["outputs"], penalty=l2_penalty)
+    return objectives.MSEObjective(interface_layers["outputs"], penalty=l2_penalty)
+    #return objectives.KaggleValidationMSEObjective(interface_layers["outputs"], penalty=l2_penalty)
 

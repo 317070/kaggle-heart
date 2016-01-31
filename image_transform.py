@@ -14,7 +14,8 @@ import utils
 tform_identity = skimage.transform.AffineTransform()
 
 def resize_to_make_it_fit(images, output_shape=(50, 50)):
-    final_shape = (len(images),) + images[0].shape[:-2] + output_shape
+    max_time = max(images[i].shape[0] for i in xrange(len(images)))
+    final_shape = (len(images),max_time) + output_shape
     result = np.zeros(final_shape, dtype="float32")
 
     #result.reshape((final_shape[0],-1) + output_shape)
@@ -32,13 +33,14 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
 
 
 def resize_and_augment(images, output_shape=(50, 50), augment=None):
-    final_shape = (len(images),) + images[0].shape[:-2] + output_shape
+    max_time = max(images[i].shape[0] for i in xrange(len(images)))
+    final_shape = (len(images),max_time) + output_shape
     result = np.zeros(final_shape, dtype="float32")
 
     #result.reshape((final_shape[0],-1) + output_shape)
     for i, mri_slice in enumerate(images):
         mri_slice = mri_slice.reshape((-1,)+mri_slice.shape[-2:])
-        scaling = max(mri_slice[0].shape[-2]/output_shape[-2], mri_slice[0].shape[-1]/output_shape[-1])
+        scaling = max(1.0*mri_slice[0].shape[-2]/output_shape[-2], 1.0*mri_slice[0].shape[-1]/output_shape[-1])
         tform = build_rescale_transform(scaling, mri_slice[0].shape[-2:], target_shape=output_shape)
         # add rotation
         # add skew

@@ -18,10 +18,10 @@ import theano_printer
 from lasagne.layers.dnn import Conv2DDNNLayer, MaxPool2DDNNLayer
 from updates import build_adam_updates
 
-validate_every = 100
+validate_every = 20
 validate_train_set = False
-save_every = 100
-restart_from_save = True
+save_every = 20
+restart_from_save = False
 
 dump_network_loaded_data = False
 
@@ -44,7 +44,6 @@ preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess  # no augmentation
 
 build_updates = build_adam_updates
-
 postprocess = postprocess_value
 
 data_sizes = {
@@ -190,6 +189,5 @@ def build_model():
 
 def build_objective(interface_layers):
     l2_penalty = lasagne.regularization.regularize_layer_params_weighted(interface_layers["regularizable"], lasagne.regularization.l2)
-
     return objectives.KaggleValidationMSEObjective(interface_layers["outputs"], penalty=l2_penalty)
 

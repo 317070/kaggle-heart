@@ -3,6 +3,7 @@ import lasagne
 import theano
 import theano.tensor as T
 import theano_printer
+import utils
 
 class TargetVarDictObjective(object):
     def __init__(self, input_layers, penalty=0):
@@ -51,9 +52,9 @@ class KaggleObjective(TargetVarDictObjective):
         return CRPS + self.penalty
 
 
-class MSObjective(TargetVarDictObjective):
+class MSEObjective(TargetVarDictObjective):
     def __init__(self, input_layers, *args, **kwargs):
-        super(RMSObjective, self).__init__(input_layers, *args, **kwargs)
+        super(MSEObjective, self).__init__(input_layers, *args, **kwargs)
         self.input_systole = input_layers["systole:value"]
         self.input_diastole = input_layers["diastole:value"]
 
@@ -68,23 +69,21 @@ class MSObjective(TargetVarDictObjective):
         diastole_target = self.target_vars["diastole:value"]
 
         if not average:
-            # The following is not strictly correct
-            loss = 0.5 * (network_systole  - systole_target )**2 + \
-                   0.5 * (network_diastole - diastole_target)**2
+            loss = 0.5 * (network_systole  - systole_target )**2 + 0.5 * (network_diastole - diastole_target)**2
             return loss
 
-        loss = T.mean(0.5 * (network_systole  - systole_target )**2 + \
-                      0.5 * (network_diastole - diastole_target)**2, axis=(0,)
-                             )
+        arg = 0.5 * (network_systole  - systole_target )**2 + 0.5 * (network_diastole - diastole_target)**2
+        #theano_printer.print_me_this("arg", arg)
+        loss = T.mean(arg, axis=(0,) )
         return loss + self.penalty
 
 
-class KaggleValidationMSObjective(MSObjective):
+class KaggleValidationMSEObjective(MSEObjective):
     """
     This is the objective as defined by Kaggle: https://www.kaggle.com/c/second-annual-data-science-bowl/details/evaluation
     """
     def __init__(self, input_layers, *args, **kwargs):
-        super(KaggleValidationRMSObjective, self).__init__(input_layers, *args, **kwargs)
+        super(KaggleValidationMSEObjective, self).__init__(input_layers, *args, **kwargs)
         self.target_vars["systole"]  = T.fmatrix("systole_target_kaggle")
         self.target_vars["diastole"] = T.fmatrix("diastole_target_kaggle")
 
@@ -94,16 +93,9 @@ class KaggleValidationMSObjective(MSObjective):
 
         sigma = T.sqrt(self.get_loss() - self.penalty)
 
-        def theano_mu_sigma_erf(mu_erf, sigma_erf):
-            eps = 1e-7
-            x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x',0)
-            sigma_erf = T.clip(sigma_erf.dimshuffle('x','x'), eps, 1)
-            x = (x_axis - mu_erf.dimshuffle(0,'x')) / (sigma_erf * np.sqrt(2).astype('float32'))
-            return (T.erf(x) + 1)/2
-
-        network_systole  = theano_mu_sigma_erf(lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)[:,0],
+        network_systole  = utils.theano_mu_sigma_erf(lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)[:,0],
                                                                                 sigma)
-        network_diastole = theano_mu_sigma_erf(lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)[:,0],
+        network_diastole = utils.theano_mu_sigma_erf(lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)[:,0],
                                                                                 sigma)
 
         systole_target = self.target_vars["systole"]
@@ -175,6 +167,78 @@ class KaggleValidationLogLossObjective(LogLossObjective):
             return CRPS
 
 
+def log_loss(y, t, eps=1e-7):
+    """
+    cross entropy loss, summed over classes, mean over batches
+    """
+    y = T.clip(y, eps, 1 - eps)
+    loss = -T.mean(t * np.log(y) + (1-t) * np.log(1-y), axis=(1,))
+    return loss
+
+
+
+
+class WeightedLogLossObjective(TargetVarDictObjective):
+    def __init__(self, input_layers, *args, **kwargs):
+        super(WeightedLogLossObjective, self).__init__(input_layers, *args, **kwargs)
+        self.input_systole  = input_layers["systole:onehot"]
+        self.input_diastole = input_layers["diastole:onehot"]
+
+        self.target_vars["systole"]  = T.fmatrix("systole_target")
+        self.target_vars["diastole"] = T.fmatrix("diastole_target")
+        self.target_vars["systole:onehot"]  = T.fmatrix("systole_target_onehot")
+        self.target_vars["diastole:onehot"] = T.fmatrix("diastole_target_onehot")
+        self.target_vars["systole:class_weight"]  = T.fmatrix("systole_target_weights")
+        self.target_vars["diastole:class_weight"] = T.fmatrix("diastole_target_weights")
+
+    def get_loss(self, *args, **kwargs):
+        network_systole  = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)
+        network_diastole = lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)
+
+        systole_target = self.target_vars["systole:onehot"]
+        diastole_target = self.target_vars["diastole:onehot"]
+        systole_weights = self.target_vars["systole:class_weight"]
+        diastole_weights = self.target_vars["diastole:class_weight"]
+
+        if "average" in kwargs and not kwargs["average"]:
+            ll = 0.5 * weighted_log_loss(network_systole, systole_target, weights=systole_weights) + \
+                 0.5 * weighted_log_loss(network_diastole, diastole_target, weights=diastole_weights)
+            return ll
+
+        ll = 0.5 * T.mean(weighted_log_loss(network_systole, systole_target, weights=systole_weights),  axis = (0,)) + \
+             0.5 * T.mean(weighted_log_loss(network_diastole, diastole_target, weights=diastole_weights), axis = (0,))
+        return ll + self.penalty
+
+    def get_kaggle_loss(self, validation=False, average=True, *args, **kwargs):
+        if not validation:
+            return theano.shared([-1])
+
+        network_systole  = T.clip(T.extra_ops.cumsum(lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs), axis=1), 0.0, 1.0)
+        network_diastole = T.clip(T.extra_ops.cumsum(lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs), axis=1), 0.0, 1.0)
+
+        systole_target = self.target_vars["systole"]
+        diastole_target = self.target_vars["diastole"]
+
+        if not average:
+            CRPS = (T.mean((network_systole - systole_target)**2,  axis = (1,)) +
+                    T.mean((network_diastole - diastole_target)**2, axis = (1,)) )/2
+            return CRPS
+        else:
+            CRPS = (T.mean((network_systole - systole_target)**2,  axis = (0,1)) +
+                    T.mean((network_diastole - diastole_target)**2, axis = (0,1)) )/2
+            return CRPS
+
+
+def weighted_log_loss(y, t, weights, eps=1e-7):
+    """
+    cross entropy loss, summed over classes, mean over batches
+    """
+    y = T.clip(y, eps, 1 - eps)
+    loss = -T.mean(weights * (t * np.log(y) + (1-t) * np.log(1-y)), axis=(1,))
+    return loss
+
+
+
 class BinaryCrossentropyImageObjective(TargetVarDictObjective):
     def __init__(self, input_layers, *args, **kwargs):
         super(BinaryCrossentropyImageObjective, self).__init__(input_layers, *args, **kwargs)
@@ -215,13 +279,7 @@ class UpscaledImageObjective(BinaryCrossentropyImageObjective):
         segmentation_target = self.target_vars["segmentation"]
         return log_loss(network_output.flatten(ndim=2), segmentation_target[:,4::8,4::8].flatten(ndim=2)) + self.penalty
 
-def log_loss(y, t, eps=1e-7):
-    """
-    cross entropy loss, summed over classes, mean over batches
-    """
-    y = T.clip(y, eps, 1 - eps)
-    loss = -T.mean(t * np.log(y) + (1-t) * np.log(1-y), axis=(1,))
-    return loss
+
 
 
 class R2Objective(TargetVarDictObjective):

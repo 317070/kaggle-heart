@@ -21,13 +21,13 @@ from updates import build_adam_updates
 validate_every = 100
 validate_train_set = False
 save_every = 100
-restart_from_save = True
+restart_from_save = False
 
 dump_network_loaded_data = False
 
-batches_per_chunk = 32
+batches_per_chunk = 8
 
-batch_size = 32
+batch_size = 128
 sunny_batch_size = 4
 num_chunks_train = 20000
 
@@ -44,13 +44,13 @@ preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess  # no augmentation
 
 build_updates = build_adam_updates
-
 postprocess = postprocess_value
 
 data_sizes = {
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:singleslice:middle": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
@@ -73,7 +73,7 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_size = data_sizes["sliced:data:singleslice"]
+    input_size = data_sizes["sliced:data:singleslice:middle"]
 
     l0 = InputLayer(input_size)
     # add channel layer
@@ -175,7 +175,7 @@ def build_model():
 
     return {
         "inputs":{
-            "sliced:data:singleslice": l0
+            "sliced:data:singleslice:middle": l0
         },
         "outputs": {
             "systole:value": l_systole,

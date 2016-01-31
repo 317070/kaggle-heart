@@ -16,6 +16,34 @@ def sample_augmentation_parameters():
     return res
 
 
+def put_in_the_middle(target_tensor, data_tensor):
+    """
+    put data_sensor with arbitrary number of dimensions in the middle of target tensor.
+    if data_Sensor is bigger, data is cut off
+    if target_sensor is bigger, original values (probably zeros) are kept
+    :param target_tensor:
+    :param data_tensor:
+    :return:
+    """
+    target_shape = target_tensor.shape
+    data_shape = data_tensor.shape
+
+    def get_indices(target_width, data_width):
+        if target_width>data_width:
+            diff = target_width - data_width
+            target_slice = slice(diff/2, target_width-(diff-diff/2))
+            data_slice = slice(None, None)
+        else:
+            diff = data_width - target_width
+            data_slice = slice(diff/2, data_width-(diff-diff/2))
+            target_slice = slice(None, None)
+        return target_slice, data_slice
+
+    t_sh = [get_indices(l1,l2) for l1, l2 in zip(target_shape, data_shape)]
+    target_indices, data_indices = zip(*t_sh)
+    target_tensor[target_indices] = data_tensor[data_indices]
+
+
 def sunny_preprocess(chunk_x, img, chunk_y, lbl):
     image = uint_to_float(img).astype(np.float32)
     chunk_x[:, :] = resize_to_make_sunny_fit(image, output_shape=chunk_x.shape[-2:])
@@ -53,20 +81,14 @@ def preprocess(patient_data, result, index):
         # try to fit data into the desired shape
         if tag.startswith("sliced:data:singleslice"):
             patient_4d_tensor = resize_to_make_it_fit([patient_data[tag]], output_shape=desired_shape[-2:])[0]
-            patient_shape = patient_4d_tensor.shape
-            t_sh = [min(l1,l2) for l1, l2 in zip(desired_shape, patient_shape)]
-            result[tag][index][:t_sh[0],:t_sh[1],:t_sh[2]] = patient_4d_tensor[:t_sh[0],:t_sh[1],:t_sh[2]]
+            put_in_the_middle(result[tag][index], patient_4d_tensor)
+
         elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
             patient_4d_tensor = np.swapaxes(
                                         resize_to_make_it_fit(patient_data[tag], output_shape=desired_shape[-2:])
                                         ,1,0)
-            patient_shape = patient_4d_tensor.shape
-
-            # TODO: find a better way to adapt the number of images per patient
-            t_sh = [min(l1,l2) for l1, l2 in zip(desired_shape, patient_shape)]
-
-            result[tag][index][:t_sh[0],:t_sh[1],:t_sh[2],:t_sh[3]] = patient_4d_tensor[:t_sh[0],:t_sh[1],:t_sh[2],:t_sh[3]]
+            put_in_the_middle(result[tag][index], patient_4d_tensor)
         if tag.startswith("sliced:data:shape"):
             result[tag][index] = patient_data[tag]
         if tag.startswith("sliced:meta:"):
@@ -90,21 +112,14 @@ def preprocess_with_augmentation(patient_data, result, index):
         # try to fit data into the desired shape
         if tag.startswith("sliced:data:singleslice"):
             patient_4d_tensor = resize_and_augment([patient_data[tag]], output_shape=desired_shape[-2:], augment=augmentation_parameters)[0]
-            patient_shape = patient_4d_tensor.shape
-            t_sh = [min(l1,l2) for l1, l2 in zip(desired_shape, patient_shape)]
-            result[tag][index][:t_sh[0],:t_sh[1],:t_sh[2]] = patient_4d_tensor[:t_sh[0],:t_sh[1],:t_sh[2]]
+            put_in_the_middle(result[tag][index], patient_4d_tensor)
         elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
 
             patient_4d_tensor = np.swapaxes(
                                         resize_and_augment(patient_data[tag], output_shape=desired_shape[-2:], augment=augmentation_parameters)
                                         ,1,0)
-            patient_shape = patient_4d_tensor.shape
-
-            # TODO: find a better way to adapt the number of images per patient
-            t_sh = [min(l1,l2) for l1, l2 in zip(desired_shape, patient_shape)]
-
-            result[tag][index][:t_sh[0],:t_sh[1],:t_sh[2],:t_sh[3]] = patient_4d_tensor[:t_sh[0],:t_sh[1],:t_sh[2],:t_sh[3]]
+            put_in_the_middle(result[tag][index], patient_4d_tensor)
         if tag.startswith("sliced:data:shape"):
             result[tag][index] = patient_data[tag]
         if tag.startswith("sliced:meta:"):

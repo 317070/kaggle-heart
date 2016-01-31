@@ -50,8 +50,7 @@ def train_model(expid):
         print "    %s %s %s" % (name,  num_param, layer.output_shape)
 
     obj = config().build_objective(interface_layers)
-
-    train_loss_theano = obj.get_loss()
+    train_loss_theano = obj.get_loss(deterministic=True)
     kaggle_loss_theano = obj.get_kaggle_loss()
     segmentation_loss_theano = obj.get_segmentation_loss()
 
@@ -160,8 +159,7 @@ def train_model(expid):
         print "  load training data onto GPU"
 
         if config().dump_network_loaded_data:
-            pickle.dump(train_data, open("data_loader_dump.pkl", "wb"))
-            crash
+            pickle.dump(train_data, open("data_loader_dump_train_%d.pkl"%e, "wb"))
 
         for key in xs_shared:
             xs_shared[key].set_value(train_data["input"][key])
@@ -215,6 +213,9 @@ def train_model(expid):
                 for validation_data in buffering.buffered_gen_threaded(create_gen()):
                     num_batches_chunk_eval = config().batches_per_chunk
 
+                    if config().dump_network_loaded_data:
+                        pickle.dump(validation_data, open("data_loader_dump_valid_%d.pkl"%e, "wb"))
+
                     for key in xs_shared:
                         xs_shared[key].set_value(validation_data["input"][key])
 
@@ -241,7 +242,6 @@ def train_model(expid):
                 #print losses[:num_valid_samples]
                 #print kaggle_losses[:regular_len]
                 #print segmentation_losses[:sunny_len]
-
                 print "  mean training loss:\t\t%.6f" % np.mean(losses[:num_valid_samples])
                 print "  mean kaggle loss:\t\t%.6f"   % np.mean(kaggle_losses[:regular_len])
                 print "  mean segment loss:\t\t%.6f"  % np.mean(segmentation_losses[:sunny_len])

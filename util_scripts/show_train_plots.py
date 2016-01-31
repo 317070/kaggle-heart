@@ -5,7 +5,7 @@ import numpy as np
 import cPickle as pickle
 
 print "Looking for the metadata files..."
-files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/*iranet*.pkl")))
+files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/*weight*.pkl")))
 print "Plotting..."
 
 for file in files:
@@ -28,7 +28,10 @@ for file in files:
     if len(valid_losses)>=1:
         x_valid = np.arange(0,len(train_losses),1.0*len(train_losses)/len(valid_losses))+1
         plt.plot(x_valid, valid_losses)
-        plt.plot(x_valid, kaggle_losses)
+        x_kaggle = np.arange(0,len(train_losses),1.0*len(train_losses)/len(kaggle_losses))+1
+        plt.plot(x_kaggle, kaggle_losses)
+    print "min kaggle loss:", min(kaggle_losses)
+    print "end kaggle loss:", kaggle_losses[-1]
     plt.show()
 
 print "done"

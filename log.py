@@ -8,7 +8,11 @@ This changes the print-function, such that all output is also copied to a log fi
 def print_to_file(filename):
     import sys
     old_stdout = sys.stdout
-    logfile = open(filename, "w")
+    try:
+        logfile = open(filename, "w")
+    except:
+        yield
+
     class CustomPrint():
         def __init__(self, stdout, logfile):
             self.old_stdout = stdout

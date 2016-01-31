@@ -2,7 +2,9 @@ import time
 import platform
 import numpy as np
 import gzip
-
+from scipy.special import erf
+import theano
+import theano.tensor as T
 
 def hms(seconds):
     seconds = np.floor(seconds)
@@ -110,3 +112,35 @@ def detect_nans(loss, xs_shared, ys_shared, all_params):
         for k, v in ys_shared.iteritems():
             if not np.isfinite(v).all():
                 print "Nan detected in loaded data: %s"%k
+
+
+def theano_mu_sigma_erf(mu_erf, sigma_erf):
+    eps = 1e-7
+    x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x',0)
+    sigma_erf = T.clip(sigma_erf.dimshuffle('x','x'), eps, 1)
+    x = (x_axis - mu_erf.dimshuffle(0,'x')) / (sigma_erf * np.sqrt(2).astype('float32'))
+    return (T.erf(x) + 1)/2
+
+
+def numpy_mu_sigma_erf(mu_erf, sigma_erf):
+    eps = 1e-7
+    batch_size = mu_erf.shape[0]
+    x_axis = np.tile(np.arange(0, 600, dtype='float32'), (batch_size, 1))
+    mu_erf = np.tile(mu_erf[:,None], (1, 600))
+    sigma_erf = np.tile(sigma_erf[:,None], (1, 600)) + 1e-7
+
+    x = (x_axis - mu_erf) / (sigma_erf * np.sqrt(2))
+    return (erf(x) + 1)/2
+
+
+def linear_weighted(value):
+    """
+    create a (600, ) array which is linear weighted around the desired value
+    :param value:
+    :return:
+    """
+    n = np.arange(600, dtype='float32')
+    dist = np.abs(n-value)
+    normed = dist / np.mean(dist)
+    return normed
+

@@ -6,6 +6,7 @@ import cPickle as pickle
 import utils
 from validation_set import get_cross_validation_indices
 import random
+from itertools import chain
 
 print "Loading data"
 ################
@@ -59,7 +60,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
     }
 
     for tag in wanted_output_tags:
-        if tag in ["systole", "diastole", "systole:onehot", "diastole:onehot"]:
+        if tag in ["systole", "diastole", "systole:onehot", "diastole:onehot", "systole:class_weight", "diastole:class_weight"]:
             result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32')
         if tag in ["systole:value", "diastole:value"]:
             result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, ), dtype='float32')
@@ -132,12 +133,37 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
             V_diastole = regular_labels[id-1, 2]
             if "systole:onehot" in wanted_output_tags:
                 result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1
-            if "systole" in wanted_output_tags:
-                result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1
             if "diastole:onehot" in wanted_output_tags:
                 result["output"]["diastole:onehot"][i][int(np.ceil(V_diastole))] = 1
+            if "systole" in wanted_output_tags:
+                result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1
             if "diastole" in wanted_output_tags:
                 result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1
+            if "systole:value" in wanted_output_tags:
+                result["output"]["systole:value"][i] = V_systole
+            if "diastole:value" in wanted_output_tags:
+                result["output"]["diastole:value"][i] = V_diastole
+            if "diastole:class_weight" in wanted_output_tags:
+                result["output"]["diastole:class_weight"][i] = utils.linear_weighted(V_diastole)
+            if "systole:class_weight" in wanted_output_tags:
+                result["output"]["systole:class_weight"][i] = utils.linear_weighted(V_systole)
+
+
+    # Check if any of the inputs or outputs are still empty!
+    for key, value in chain(result["input"].iteritems(), result["output"].iteritems()):
+        if not np.any(value): #there are only zeros in value
+            raise Exception("there is an empty value at key %s" % key)
+        if not np.isfinite(value).all(): #there are NaN's or infinites somewhere
+            print value
+            raise Exception("there is a NaN at key %s" % key)
+
+        if set=="train" and sum([0 if 0<=i<len(train_patient_folders) else 1 for i in indices]) > 0:
+            raise Exception("not filled train batch at key %s" % key)
+
+        for idx, sample in enumerate(value[:len(folders)]):
+            if not np.any(value): #there are only zeros in value
+                print value
+                raise Exception("there is an empty sample at key %s" % key)
 
     return result
 
@@ -206,13 +232,16 @@ def generate_train_batch(required_input_keys, required_output_keys):
 
 def generate_validation_batch(required_input_keys, required_output_keys, set="validation"):
     # generate sunny data
-    print "set:", set
     sunny_length = get_lenght_of_set(name="sunny", set=set)
     regular_length = get_lenght_of_set(name="regular", set=set)
 
     sunny_batches = int(np.ceil(sunny_length / float(config().sunny_batch_size)))
     regular_batches = int(np.ceil(regular_length / float(config().batch_size)))
-    num_batches = max(sunny_batches, regular_batches)
+
+    if "sunny" in required_input_keys or "segmentation" in required_output_keys:
+        num_batches = max(sunny_batches, regular_batches)
+    else:
+        num_batches = regular_batches
 
     num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
 

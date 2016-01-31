@@ -144,3 +144,8 @@ def linear_weighted(value):
     normed = dist / np.mean(dist)
     return normed
 
+
+def CRSP(distribution, value):
+    target = np.zeros( (600,) , dtype='float32')
+    target[int(np.ceil(value)):] = 1  # don't forget to ceil!
+    return np.mean( (distribution - target)**2 )

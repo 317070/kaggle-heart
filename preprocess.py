@@ -3,16 +3,27 @@ import re
 from configuration import config
 from image_transform import resize_to_make_it_fit, resize_to_make_sunny_fit, resize_and_augment_sunny, \
     resize_and_augment
-
+import quasi_random
+from itertools import izip
+from functools import partial
 
 def uint_to_float(img):
     return img / np.float32(255.0)
 
+
+quasi_random_generator = None
+
 def sample_augmentation_parameters():
+    global quasi_random_generator
     augmentation_params = config().augmentation_params
+    if quasi_random_generator is None:
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
+                                                                     permutation='Braaten-Weller')
     res = dict()
-    for key, (a, b) in augmentation_params.iteritems():
-        res[key] = config().rng.uniform(a,b)
+    sample = quasi_random_generator.next()
+    for rand, (key, (a, b)) in izip(sample, augmentation_params.iteritems()):
+        #res[key] = config().rng.uniform(a,b)
+        res[key] = a + rand*(b-a)
     return res
 
 
@@ -67,8 +78,7 @@ def sunny_preprocess_validation(chunk_x, img, chunk_y, lbl):
     chunk_y[:] = resize_to_make_sunny_fit(segmentation, output_shape=chunk_y.shape[-2:])
 
 
-
-def preprocess(patient_data, result, index):
+def preprocess_with_augmentation(patient_data, result, index, augment=True):
     """
     Load the resulting data, augment it if needed, and put it in result at the correct index
     :param patient_data:
@@ -76,36 +86,10 @@ def preprocess(patient_data, result, index):
     :param index:
     :return:
     """
-    for tag, data in patient_data.iteritems():
-        desired_shape = result[tag][index].shape
-        # try to fit data into the desired shape
-        if tag.startswith("sliced:data:singleslice"):
-            patient_4d_tensor = resize_to_make_it_fit([patient_data[tag]], output_shape=desired_shape[-2:])[0]
-            put_in_the_middle(result[tag][index], patient_4d_tensor)
-
-        elif tag.startswith("sliced:data"):
-            # put time dimension first, then axis dimension
-            patient_4d_tensor = np.swapaxes(
-                                        resize_to_make_it_fit(patient_data[tag], output_shape=desired_shape[-2:])
-                                        ,1,0)
-            put_in_the_middle(result[tag][index], patient_4d_tensor)
-        if tag.startswith("sliced:data:shape"):
-            result[tag][index] = patient_data[tag]
-        if tag.startswith("sliced:meta:"):
-            # TODO: this probably doesn't work very well yet
-            result[tag][index] = patient_data[tag]
-    return
-
-
-def preprocess_with_augmentation(patient_data, result, index):
-    """
-    Load the resulting data, augment it if needed, and put it in result at the correct index
-    :param patient_data:
-    :param result:
-    :param index:
-    :return:
-    """
-    augmentation_parameters = sample_augmentation_parameters()
+    if augment:
+        augmentation_parameters = sample_augmentation_parameters()
+    else:
+        augmentation_parameters = None
 
     for tag, data in patient_data.iteritems():
         desired_shape = result[tag][index].shape
@@ -126,3 +110,5 @@ def preprocess_with_augmentation(patient_data, result, index):
             # TODO: this probably doesn't work very well yet
             result[tag][index] = patient_data[tag]
     return
+
+preprocess = partial(preprocess_with_augmentation, augment=False)

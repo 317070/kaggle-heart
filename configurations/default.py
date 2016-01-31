@@ -22,7 +22,7 @@ rng = np.random
 create_train_gen = generate_train_batch
 create_eval_valid_gen = partial(generate_validation_batch, set="validation")
 create_eval_train_gen = partial(generate_validation_batch, set="train")
-create_test_gen = partial(generate_test_batch, set="test")
+create_test_gen = partial(generate_test_batch, set=None)  # validate as well by default
 
 sunny_preprocess_train = sunny_preprocess_with_augmentation
 sunny_preprocess_validation = sunny_preprocess_validation
@@ -31,6 +31,8 @@ sunny_preprocess_test = sunny_preprocess_validation
 preprocess_train = preprocess_with_augmentation
 preprocess_validation = preprocess
 preprocess_test = preprocess
+
+test_time_augmentations = 1
 
 postprocess = postprocess
 

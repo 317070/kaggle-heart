@@ -213,19 +213,19 @@ class WeightedLogLossObjective(TargetVarDictObjective):
         if not validation:
             return theano.shared([-1])
 
-        network_systole  = T.clip(T.extra_ops.cumsum(lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs), axis=1), 0.0, 1.0)
-        network_diastole = T.clip(T.extra_ops.cumsum(lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs), axis=1), 0.0, 1.0)
+        network_systole  = T.clip(T.extra_ops.cumsum(lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs), axis=1), 0.0, 1.0).astype('float32')
+        network_diastole = T.clip(T.extra_ops.cumsum(lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs), axis=1), 0.0, 1.0).astype('float32')
 
-        systole_target = self.target_vars["systole"]
-        diastole_target = self.target_vars["diastole"]
+        systole_target = self.target_vars["systole"].astype('float32')
+        diastole_target = self.target_vars["diastole"].astype('float32')
 
         if not average:
-            CRPS = (T.mean((network_systole - systole_target)**2,  axis = (1,)) +
-                    T.mean((network_diastole - diastole_target)**2, axis = (1,)) )/2
+            CRPS = T.mean((network_systole - systole_target)**2 + (network_diastole - diastole_target)**2, axis = 1)/2
             return CRPS
         else:
             CRPS = (T.mean((network_systole - systole_target)**2,  axis = (0,1)) +
                     T.mean((network_diastole - diastole_target)**2, axis = (0,1)) )/2
+            theano_printer.print_me_this("CRPS", CRPS)
             return CRPS
 
 

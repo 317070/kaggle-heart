@@ -5,22 +5,15 @@ from default import *
 import theano.tensor as T
 from layers import MuLogSigmaErfLayer, CumSumLayer
 import objectives
-
-from lasagne.layers.dnn import Conv2DDNNLayer as ConvLayer
-from lasagne.layers.dnn import MaxPool2DDNNLayer as MaxPoolLayer
-from lasagne.layers import InputLayer
-from lasagne.layers import reshape
-from lasagne.layers import DenseLayer
+from lasagne.layers import InputLayer, reshape, DenseLayer, DenseLayer, batch_norm
 from postprocess import upsample_segmentation
 from volume_estimation_layers import GaussianApproximationVolumeLayer
 import theano_printer
-from functools import partial
 from updates import build_adam_updates
 
-
-validate_every = 1
+validate_every = 10
 validate_train_set = False
-save_every = 1000
+save_every = 10
 restart_from_save = True
 
 batches_per_chunk = 16
@@ -32,24 +25,15 @@ num_chunks_train = 20000
 image_size = 64
 
 learning_rate_schedule = {
-    0:     0.01,
-    200:   0.001,
+    0:     0.0001,
+    200:   0.00001,
 }
 
 from postprocess import postprocess_onehot
 from preprocess import preprocess, preprocess_with_augmentation
-preprocess_train = preprocess_with_augmentation  # no augmentation
+preprocess_train = preprocess_with_augmentation  # with augmentation
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess  # no augmentation
-
-test_time_augmentations = 1  # They will be sampled quasi-randomly from the augmentations
-
-#    validation kaggle loss: 0.070946
-#         train kaggle loss: 0.044801
-
-#    validation kaggle loss: 0.047190
-#         train kaggle loss: 0.049539
-
 
 build_updates = build_adam_updates
 postprocess = postprocess_onehot
@@ -73,70 +57,70 @@ def build_model():
     # Regular model #
     #################
     l0 = InputLayer(data_sizes["sliced:data:ax"])
-    l0r = reshape(l0, (-1, 1, ) + data_sizes["sliced:data:ax"][1:])
+    l0r = batch_norm(reshape(l0, (-1, 1, ) + data_sizes["sliced:data:ax"][1:]))
 
     # (batch, channel, time, axis, x, y)
 
     # convolve over time
-    l1 = ConvolutionOverAxisLayer(l0r, num_filters=16, filter_size=(3,), axis=(2,), channel=1,
+    l1 = batch_norm(ConvolutionOverAxisLayer(l0r, num_filters=16, filter_size=(3,), axis=(2,), channel=1,
                                    W=lasagne.init.Orthogonal(),
                                    b=lasagne.init.Constant(0.0),
-                                   )
-    l1b = ConvolutionOverAxisLayer(l1, num_filters=16, filter_size=(3,), axis=(2,), channel=1,
+                                   ))
+    l1b = batch_norm(ConvolutionOverAxisLayer(l1, num_filters=16, filter_size=(3,), axis=(2,), channel=1,
                                    W=lasagne.init.Orthogonal(),
                                    b=lasagne.init.Constant(0.0),
-                                   )
-    l1m = MaxPoolOverAxisLayer(l1b, pool_size=(4,), axis=(2,))
+                                   ))
+    l1m = batch_norm(MaxPoolOverAxisLayer(l1b, pool_size=(4,), axis=(2,)))
 
     # convolve over x and y
-    l2a = ConvolutionOver2DAxisLayer(l1m, num_filters=32, filter_size=(3, 3),
+    l2a = batch_norm(ConvolutionOver2DAxisLayer(l1m, num_filters=32, filter_size=(3, 3),
                                      axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.0),
-                                     )
-    l2b = ConvolutionOver2DAxisLayer(l2a, num_filters=32, filter_size=(3, 3),
+                                     ))
+    l2b = batch_norm(ConvolutionOver2DAxisLayer(l2a, num_filters=32, filter_size=(3, 3),
                                      axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.0),
-                                     )
-    l2m = MaxPoolOver2DAxisLayer(l2b, pool_size=(2, 2), axis=(4,5))
+                                     ))
+    l2m = batch_norm(MaxPoolOver2DAxisLayer(l2b, pool_size=(2, 2), axis=(4,5)))
 
     # convolve over x, y, time
-    l3a = ConvolutionOver3DAxisLayer(l2m, num_filters=64, filter_size=(3, 3, 3),
+    l3a = batch_norm(ConvolutionOver3DAxisLayer(l2m, num_filters=64, filter_size=(3, 3, 3),
                                      axis=(2,4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     )
+                                     ))
 
-    l3b = ConvolutionOver2DAxisLayer(l3a, num_filters=64, filter_size=(3, 3),
+    l3b = batch_norm(ConvolutionOver2DAxisLayer(l3a, num_filters=64, filter_size=(3, 3),
                                      axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     )
-    l3m = MaxPoolOver2DAxisLayer(l3b, pool_size=(2, 2), axis=(4,5))
+                                     ))
+    l3m = batch_norm(MaxPoolOver2DAxisLayer(l3b, pool_size=(2, 2), axis=(4,5)))
 
     # convolve over time
-    l4 = ConvolutionOverAxisLayer(l3m, num_filters=64, filter_size=(3,), axis=(2,), channel=1,
+    l4 = batch_norm(ConvolutionOverAxisLayer(l3m, num_filters=64, filter_size=(3,), axis=(2,), channel=1,
                                    W=lasagne.init.Orthogonal(),
                                    b=lasagne.init.Constant(0.1),
-                                   )
-    l4m = MaxPoolOverAxisLayer(l4, pool_size=(2,), axis=(2,))
+                                   ))
+    l4m = batch_norm(MaxPoolOverAxisLayer(l4, pool_size=(2,), axis=(2,)))
 
     # maxpool over axis
-    l5 = MaxPoolOverAxisLayer(l3m, pool_size=(4,), axis=(3,))
+    l5 = batch_norm(MaxPoolOverAxisLayer(l3m, pool_size=(4,), axis=(3,)))
 
     # convolve over x and y
-    l6a = ConvolutionOver2DAxisLayer(l5, num_filters=128, filter_size=(3, 3),
+    l6a = batch_norm(ConvolutionOver2DAxisLayer(l5, num_filters=128, filter_size=(3, 3),
                                      axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     )
-    l6b = ConvolutionOver2DAxisLayer(l6a, num_filters=128, filter_size=(3, 3),
+                                     ))
+    l6b = batch_norm(ConvolutionOver2DAxisLayer(l6a, num_filters=128, filter_size=(3, 3),
                                      axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     )
-    l6m = MaxPoolOver2DAxisLayer(l6b, pool_size=(2, 2), axis=(4,5))
+                                     ))
+    l6m = batch_norm(MaxPoolOver2DAxisLayer(l6b, pool_size=(2, 2), axis=(4,5)))
 
     # convolve over time and x,y
     l7 = ConvolutionOver3DAxisLayer(l6m, num_filters=128, filter_size=(3,3,3), axis=(2,4,5), channel=1,
@@ -151,7 +135,7 @@ def build_model():
 
     l_d3b = lasagne.layers.DropoutLayer(l_d3a)
 
-    l_systole = lasagne.layers.DenseLayer(l8,
+    l_systole = lasagne.layers.DenseLayer(l_d3b,
                               num_units=600,
                               nonlinearity=lasagne.nonlinearities.softmax)
 
@@ -161,7 +145,7 @@ def build_model():
 
     l_d3d = lasagne.layers.DropoutLayer(l_d3c)
 
-    l_diastole = lasagne.layers.DenseLayer(l8,
+    l_diastole = lasagne.layers.DenseLayer(l_d3d,
                               num_units=600,
                               nonlinearity=lasagne.nonlinearities.softmax)
 

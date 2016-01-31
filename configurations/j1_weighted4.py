@@ -14,13 +14,11 @@ from lasagne.layers import DenseLayer
 from postprocess import upsample_segmentation
 from volume_estimation_layers import GaussianApproximationVolumeLayer
 import theano_printer
-from functools import partial
 from updates import build_adam_updates
 
-
-validate_every = 1
+validate_every = 10
 validate_train_set = False
-save_every = 1000
+save_every = 10
 restart_from_save = True
 
 batches_per_chunk = 16
@@ -32,24 +30,15 @@ num_chunks_train = 20000
 image_size = 64
 
 learning_rate_schedule = {
-    0:     0.01,
-    200:   0.001,
+    0:     0.0001,
+    200:   0.00001,
 }
 
 from postprocess import postprocess_onehot
 from preprocess import preprocess, preprocess_with_augmentation
-preprocess_train = preprocess_with_augmentation  # no augmentation
+preprocess_train = preprocess_with_augmentation  # with augmentation
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess  # no augmentation
-
-test_time_augmentations = 1  # They will be sampled quasi-randomly from the augmentations
-
-#    validation kaggle loss: 0.070946
-#         train kaggle loss: 0.044801
-
-#    validation kaggle loss: 0.047190
-#         train kaggle loss: 0.049539
-
 
 build_updates = build_adam_updates
 postprocess = postprocess_onehot

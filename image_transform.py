@@ -33,6 +33,9 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
 
 
 def resize_and_augment(images, output_shape=(50, 50), augment=None):
+    if augment is None:
+        return resize_to_make_it_fit(images, output_shape=output_shape)
+
     max_time = max(images[i].shape[0] for i in xrange(len(images)))
     final_shape = (len(images),max_time) + output_shape
     result = np.zeros(final_shape, dtype="float32")

@@ -10,11 +10,11 @@ def postprocess(network_outputs_dict):
     """
     kaggle_systoles, kaggle_diastoles = None, None
     if "systole" in network_outputs_dict:
-        kaggle_systoles = network_outputs_dict["systole:onehot"]
+        kaggle_systoles = network_outputs_dict["systole"]
     if "diastole" in network_outputs_dict:
-        kaggle_diastoles = network_outputs_dict["diastole:onehot"]
+        kaggle_diastoles = network_outputs_dict["diastole"]
     if kaggle_systoles is None or kaggle_diastoles is None:
-        raise "This is the wrong postprocessing for this model"
+        raise Exception("This is the wrong postprocessing for this model")
     return kaggle_systoles, kaggle_diastoles
 
 
@@ -28,7 +28,7 @@ def postprocess_onehot(network_outputs_dict):
     if "diastole:onehot" in network_outputs_dict:
         kaggle_diastoles = np.clip(np.cumsum(network_outputs_dict["diastole:onehot"], axis=1), 0.0, 1.0)
     if kaggle_systoles is None or kaggle_diastoles is None:
-        raise "This is the wrong postprocessing for this model"
+        raise Exception("This is the wrong postprocessing for this model")
     return kaggle_systoles, kaggle_diastoles
 
 
@@ -55,7 +55,7 @@ def postprocess_value(network_outputs_dict):
             sigma = np.zeros_like(mu)
         kaggle_diastoles = utils.numpy_mu_sigma_erf(mu, sigma)
     if kaggle_systoles is None or kaggle_diastoles is None:
-        raise "This is the wrong postprocessing for this model"
+        raise Exception("This is the wrong postprocessing for this model")
     return kaggle_systoles, kaggle_diastoles
 
 

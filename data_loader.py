@@ -7,8 +7,10 @@ import utils
 from validation_set import get_cross_validation_indices
 import random
 from itertools import chain
+import itertools
 
 print "Loading data"
+
 ################
 # Regular data #
 ################
@@ -27,6 +29,11 @@ regular_labels = pickle.load(open("/data/dsb15_pkl/train.pkl","r"))
 
 test_patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_validate/*/study/"), key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))  # glob is non-deterministic!
 
+NUM_TRAIN_PATIENTS = len(validation_patient_folders)
+NUM_VALID_PATIENTS = len(train_patient_folders)
+NUM_TEST_PATIENTS = len(test_patient_folders)
+
+NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
 
 ##############
 # Sunny data #
@@ -46,7 +53,7 @@ sunny_validation_labels = np.array(sunny_data['labels'])[validation_sunny_indice
 
 
 def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train",
-                     train_preprocess=False, validate_preprocess=False, test_preprocess=False):
+                     preprocess_function=None):
     """
     return a dict with the desired data matched to the required tags
     :param wanted_data_tags:
@@ -112,13 +119,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
                 patient_result[tag] = [pickle.load(open(f, "r"))['metadata'][key] for f in files]
             # add others when needed
 
-        if train_preprocess:
-            config().preprocess_train(patient_result, result=result["input"], index=i)
-        elif validate_preprocess:
-            config().preprocess_validation(patient_result, result=result["input"], index=i)
-        elif test_preprocess:
-            config().preprocess_test(patient_result, result=result["input"], index=i)
-
+        preprocess_function(patient_result, result=result["input"], index=i)
 
         # load the labels
         # find the id of the current patient in the folder name (=safer)
@@ -131,22 +132,29 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
             assert regular_labels[id-1, 0]==id
             V_systole = regular_labels[id-1, 1]
             V_diastole = regular_labels[id-1, 2]
-            if "systole:onehot" in wanted_output_tags:
-                result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1
-            if "diastole:onehot" in wanted_output_tags:
-                result["output"]["diastole:onehot"][i][int(np.ceil(V_diastole))] = 1
+
             if "systole" in wanted_output_tags:
-                result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1
+                result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1.0
             if "diastole" in wanted_output_tags:
-                result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1
+                result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1.0
+
+            if "systole:onehot" in wanted_output_tags:
+                result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1.0
+            if "diastole:onehot" in wanted_output_tags:
+                result["output"]["diastole:onehot"][i][int(np.ceil(V_diastole))] = 1.0
+
             if "systole:value" in wanted_output_tags:
                 result["output"]["systole:value"][i] = V_systole
             if "diastole:value" in wanted_output_tags:
                 result["output"]["diastole:value"][i] = V_diastole
+
             if "diastole:class_weight" in wanted_output_tags:
                 result["output"]["diastole:class_weight"][i] = utils.linear_weighted(V_diastole)
             if "systole:class_weight" in wanted_output_tags:
                 result["output"]["systole:class_weight"][i] = utils.linear_weighted(V_systole)
+        else:
+            if set!="test":
+                raise Exception("unknown patient in train or validation set")
 
 
     # Check if any of the inputs or outputs are still empty!
@@ -157,6 +165,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
             print value
             raise Exception("there is a NaN at key %s" % key)
 
+        """
         if set=="train" and sum([0 if 0<=i<len(train_patient_folders) else 1 for i in indices]) > 0:
             raise Exception("not filled train batch at key %s" % key)
 
@@ -164,7 +173,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
             if not np.any(value): #there are only zeros in value
                 print value
                 raise Exception("there is an empty sample at key %s" % key)
-
+        """
     return result
 
 
@@ -223,7 +232,7 @@ def generate_train_batch(required_input_keys, required_output_keys):
 
         indices = config().rng.randint(0, len(train_patient_folders), chunk_size)  #
         kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do, set="train",
-                                       train_preprocess=True)
+                                       preprocess_function=config().preprocess_train)
 
         result = utils.merge(result, kaggle_data)
 
@@ -265,29 +274,41 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
 
         indices = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
         kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do, set=set,
-                                       validate_preprocess=True)
+                                       preprocess_function=config().preprocess_validation)
 
         result = utils.merge(result, kaggle_data)
 
         yield result
 
 
-def generate_test_batch(required_input_keys, required_output_keys, set="test"):
-    regular_length = get_lenght_of_set(name="regular", set=set)
-    num_batches = int(np.ceil(regular_length / float(config().batch_size)))
-    regular_chunk_size = config().batches_per_chunk * config().batch_size
-    num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
+def generate_test_batch(required_input_keys, required_output_keys, augmentation=False, set=None):
+    if set is None:
+        sets = ["train", "validation", "test"]
+    else:
+        sets=[set]
 
-    for n in xrange(num_chunks):
+    input_keys_to_do  = list(required_input_keys)  # clone
+    output_keys_to_do = list(required_output_keys) # clone
 
-        input_keys_to_do  = list(required_input_keys)  # clone
-        output_keys_to_do = list(required_output_keys) # clone
+    for set in sets:
+        regular_length = get_lenght_of_set(name="regular", set=set)
+        num_batches = int(np.ceil(regular_length / float(config().batch_size)))
+        regular_chunk_size = config().batches_per_chunk * config().batch_size
+        num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
 
-        indices = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
-        kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do, set=set,
-                                       test_preprocess=True)
+        indices_for_this_set = xrange(regular_length)
+        indices_for_this_set = list(itertools.chain.from_iterable(
+            itertools.repeat(x, config().test_time_augmentations) for x in indices_for_this_set))
 
-        yield kaggle_data
+        for n in xrange(num_chunks):
+
+            test_sample_numbers = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
+            indices = [indices_for_this_set[i] for i in test_sample_numbers if i<len(indices_for_this_set)]
+            kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do,
+                                           set=set,
+                                           preprocess_function=config().preprocess_test)
+
+            yield kaggle_data
 
 
 def get_number_of_validation_samples(set="validation"):
@@ -297,9 +318,11 @@ def get_number_of_validation_samples(set="validation"):
     return min(sunny_length, regular_length)
 
 
-def get_number_of_test_batches(set="test"):
-    regular_length = get_lenght_of_set(name="regular", set=set)
-    num_batches = int(np.ceil(regular_length / float(config().batch_size)))
+def get_number_of_test_batches(sets=["train", "validation", "test"]):
+    num_batches = 0
+    for set in sets:
+        regular_length = get_lenght_of_set(name="regular", set=set) * config().test_time_augmentations
+        num_batches += int(np.ceil(regular_length / float(config().batch_size)))
 
     return num_batches
 

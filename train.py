@@ -4,7 +4,7 @@ import argparse
 from configuration import config, set_configuration
 import numpy as np
 import string
-from data_loader import get_lenght_of_set, get_number_of_validation_samples, validation_patients_indices
+from data_loader import get_lenght_of_set, get_number_of_validation_samples, validation_patients_indices, NUM_TRAIN_PATIENTS
 from predict import predict_model
 import utils
 import cPickle as pickle
@@ -22,7 +22,6 @@ from functools import partial
 import theano_printer
 from theano.compile.nanguardmode import NanGuardMode
 import buffering
-
 
 def train_model(expid):
     metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % expid
@@ -50,7 +49,7 @@ def train_model(expid):
         print "    %s %s %s" % (name,  num_param, layer.output_shape)
 
     obj = config().build_objective(interface_layers)
-    train_loss_theano = obj.get_loss(deterministic=True)
+    train_loss_theano = obj.get_loss()
     kaggle_loss_theano = obj.get_kaggle_loss()
     segmentation_loss_theano = obj.get_segmentation_loss()
 
@@ -150,6 +149,7 @@ def train_model(expid):
 
     for e, train_data in izip(chunks_train_idcs, buffering.buffered_gen_threaded(create_train_gen())):
         print "Chunk %d/%d" % (e + 1, config().num_chunks_train)
+        print "  Epoch %.1f" % (1.0 * config().batch_size * config().batches_per_chunk * (e+1) / NUM_TRAIN_PATIENTS)
 
         if e in learning_rate_schedule:
             lr = np.float32(learning_rate_schedule[e])
@@ -205,9 +205,9 @@ def train_model(expid):
 
             for subset, create_gen, losses_validation, losses_kgl in zip(subsets, gens, losses_eval, losses_kaggle):
 
-                losses = []
-                kaggle_losses = []
-                segmentation_losses = []
+                vld_losses = []
+                vld_kaggle_losses = []
+                vld_segmentation_losses = []
                 print "  %s set (%d samples)" % (subset, get_number_of_validation_samples(set=subset))
 
                 for validation_data in buffering.buffered_gen_threaded(create_gen()):
@@ -226,13 +226,13 @@ def train_model(expid):
 
                     for b in xrange(num_batches_chunk_eval):
                         loss, kaggle_loss, segmentation_loss = tuple(iter_validate(b)[:3])
-                        losses.extend(loss)
-                        kaggle_losses.extend(kaggle_loss)
-                        segmentation_losses.extend(segmentation_loss)
+                        vld_losses.extend(loss)
+                        vld_kaggle_losses.extend(kaggle_loss)
+                        vld_segmentation_losses.extend(segmentation_loss)
 
-                losses = np.array(losses)
-                kaggle_losses = np.array(kaggle_losses)
-                segmentation_losses = np.array(segmentation_losses)
+                vld_losses = np.array(vld_losses)
+                vld_kaggle_losses = np.array(vld_kaggle_losses)
+                vld_segmentation_losses = np.array(vld_segmentation_losses)
 
                 # now select only the relevant section to average
                 sunny_len = get_lenght_of_set(name="sunny", set=subset)
@@ -242,16 +242,16 @@ def train_model(expid):
                 #print losses[:num_valid_samples]
                 #print kaggle_losses[:regular_len]
                 #print segmentation_losses[:sunny_len]
-                print "  mean training loss:\t\t%.6f" % np.mean(losses[:num_valid_samples])
-                print "  mean kaggle loss:\t\t%.6f"   % np.mean(kaggle_losses[:regular_len])
-                print "  mean segment loss:\t\t%.6f"  % np.mean(segmentation_losses[:sunny_len])
+                print "  mean training loss:\t\t%.6f" % np.mean(vld_losses[:num_valid_samples])
+                print "  mean kaggle loss:\t\t%.6f"   % np.mean(vld_kaggle_losses[:regular_len])
+                print "  mean segment loss:\t\t%.6f"  % np.mean(vld_segmentation_losses[:sunny_len])
                 # print "    acc:\t%.2f%%" % (acc * 100)
                 print
 
-                loss_to_save = np.mean(losses[:num_valid_samples])
+                loss_to_save = np.mean(vld_losses[:num_valid_samples])
                 losses_validation.append(loss_to_save)
 
-                kaggle_to_save = np.mean(kaggle_losses[:regular_len])
+                kaggle_to_save = np.mean(vld_kaggle_losses[:regular_len])
                 losses_kgl.append(kaggle_to_save)
 
         now = time.time()

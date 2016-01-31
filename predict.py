@@ -1,6 +1,7 @@
 from __future__ import division
 import argparse
 from functools import partial
+import itertools
 from itertools import izip
 from datetime import timedelta, datetime
 import lasagne
@@ -10,12 +11,14 @@ import buffering
 from configuration import config, set_configuration
 import numpy as np
 import string
-from data_loader import get_number_of_test_batches
+from data_loader import get_number_of_test_batches, validation_patients_indices, train_patients_indices, regular_labels
 import theano_printer
 import utils
 import theano.tensor as T
 import cPickle as pickle
 import csv
+from data_loader import NUM_PATIENTS
+from utils import CRSP
 
 def predict_model(expid):
     metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % expid
@@ -78,7 +81,7 @@ def predict_model(expid):
     resume_metadata = np.load(metadata_path)
     lasagne.layers.set_all_param_values(top_layer, resume_metadata['param_values'])
     num_batches_chunk = config().batches_per_chunk
-    num_batches = get_number_of_test_batches(set="test")
+    num_batches = get_number_of_test_batches()
     num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
 
     chunks_train_idcs = range(1, num_chunks+1)
@@ -93,14 +96,15 @@ def predict_model(expid):
     prev_time = start_time
 
 
-    predictions = [{"patient": i+501,
-                    "systole":np.zeros((0,600)),
-                    "diastole":np.zeros((0,600))
-                    } for i in xrange(200)]
+    predictions = [{"patient": i+1,
+                    "systole": np.zeros((0,600)),
+                    "diastole": np.zeros((0,600))
+                    } for i in xrange(NUM_PATIENTS)]
 
 
     #for e, test_data in izip(chunks_train_idcs, buffering.buffered_gen_threaded(create_test_gen())):
-    for e, test_data in izip(chunks_train_idcs, create_test_gen()):
+    #for e, test_data in izip(chunks_train_idcs, create_test_gen()):
+    for e, test_data in izip(itertools.count(start=1), create_test_gen()):
         print "  load training data onto GPU"
 
         for key in xs_shared:
@@ -108,7 +112,7 @@ def predict_model(expid):
 
 
         patient_ids = test_data["output"]["patients"]
-        print patient_ids
+        print "  patients:", " ".join(map(str, patient_ids))
         print "  chunk %d/%d" % (e, num_chunks)
 
         for b in xrange(num_batches_chunk):
@@ -118,12 +122,12 @@ def predict_model(expid):
             kaggle_systoles, kaggle_diastoles = config().postprocess(network_outputs_dict)
 
             for idx, patient_id in enumerate(patient_ids[b*config().batch_size:(b+1)*config().batch_size]):
-                if 500 < patient_id <= 700:
-                    index = patient_id-501
+                if patient_id != 0:
+                    index = patient_id-1
                     patient_data = predictions[index]
                     assert patient_id==patient_data["patient"]
-                    patient_data["systole"] = np.concatenate((patient_data["systole"], kaggle_systoles[idx:idx+1,:]),axis=0)
-                    patient_data["diastole"] = np.concatenate((patient_data["diastole"], kaggle_systoles[idx:idx+1,:]),axis=0)
+                    patient_data["systole"] =  np.concatenate((patient_data["systole"],  kaggle_systoles[idx:idx+1,:]),axis=0)
+                    patient_data["diastole"] = np.concatenate((patient_data["diastole"], kaggle_diastoles[idx:idx+1,:]),axis=0)
 
         now = time.time()
         time_since_start = now - start_time
@@ -137,8 +141,33 @@ def predict_model(expid):
         print
 
     for prediction in predictions:
-        prediction["systole_average"] = np.mean(prediction["systole"], axis=0)
-        prediction["diastole_average"] = np.mean(prediction["diastole"], axis=0)
+        if prediction["systole"].size>0 and prediction["diastole"].size>0:
+            prediction["systole_average"] = np.mean(prediction["systole"], axis=0)
+            prediction["diastole_average"] = np.mean(prediction["diastole"], axis=0)
+
+
+    print "Calculating training and validation set scores for reference"
+
+    validation_dict = {}
+    for patient_ids, set_name in [(validation_patients_indices, "validation"),
+                                      (train_patients_indices,  "train")]:
+        errors = []
+        for patient in patient_ids:
+            prediction = predictions[patient-1]
+            if "systole_average" in prediction:
+                assert patient == regular_labels[patient-1, 0]
+                error = CRSP(prediction["systole_average"], regular_labels[patient-1, 1])
+                errors.append(error)
+                error = CRSP(prediction["diastole_average"], regular_labels[patient-1, 2])
+                errors.append(error)
+        if len(errors)>0:
+            errors = np.array(errors)
+            estimated_CRSP = np.mean(errors)
+            print "  %s kaggle loss: %f" % (string.rjust(set_name, 12), estimated_CRSP)
+            validation_dict[set_name] = estimated_CRSP
+        else:
+            print "  %s kaggle loss: not calculated" % (string.rjust(set_name, 12))
+
 
     print "dumping prediction file to %s" % prediction_path
     with open(prediction_path, 'w') as f:
@@ -152,6 +181,7 @@ def predict_model(expid):
                         'time_since_start': time_since_start,
                         'param_values': lasagne.layers.get_all_param_values(top_layer),
                         'predictions': predictions,
+                        'validation_errors': validation_dict,
                     }, f, pickle.HIGHEST_PROTOCOL)
     print "prediction file dumped"
 
@@ -162,9 +192,12 @@ def predict_model(expid):
         for prediction in predictions:
             # the submission only has patients 501 to 700
             if 500 < prediction["patient"] <= 700:
+                if "diastole_average" not in prediction or "systole_average" not in prediction:
+                    raise Exception("Not all test-set patients were predicted")
                 csvwriter.writerow(["%d_Diastole" % prediction["patient"]] + ["%.18f" % p for p in prediction["diastole_average"].flatten()])
                 csvwriter.writerow(["%d_Systole" % prediction["patient"]] + ["%.18f" % p for p in prediction["systole_average"].flatten()])
     print "submission file dumped"
+
     return
 
 

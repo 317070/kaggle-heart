@@ -9,6 +9,7 @@ import numpy as np
 import theano
 from datetime import datetime, timedelta
 import utils
+import logger
 import theano.tensor as T
 import buffering
 from configuration import config, set_configuration
@@ -23,14 +24,14 @@ print "Experiment ID: %s" % expid
 print
 
 # metadata
-if not os.path.isdir('metadata'):
-    os.mkdir('metadata')
-metadata_path = '/mnt/storage/metadata/kaggle-heart/train/%s.pkl' % expid
+if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/train/ira'):
+    os.mkdir('/mnt/storage/metadata/kaggle-heart/train/ira/')
+metadata_path = '/mnt/storage/metadata/kaggle-heart/train/ira/%s.pkl' % expid
 
 # logs
-if not os.path.isdir('logs'):
-    os.mkdir('logs')
-# sys.stdout = open('/mnt/storage/metadata/kaggle-heart/logs/%s.log' % expid, 'w')  # use 2>&1 when running the script
+if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/logs/ira'):
+    os.mkdir('/mnt/storage/metadata/kaggle-heart/logs/ira')
+sys.stdout = logger.Logger('/mnt/storage/metadata/kaggle-heart/logs/ira/%s.log' % expid)
 
 print 'Build model'
 model = config().build_model()
@@ -123,7 +124,7 @@ for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
     # make nbatches_chunk iterations
     for b in xrange(config().nbatches_chunk):
         loss = iter_train(b)
-        print loss
+        # print loss
         tmp_losses_train.append(loss)
 
     if ((chunk_idx + 1) % config().validate_every) == 0:

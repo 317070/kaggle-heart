@@ -135,21 +135,16 @@ def build_updates(train_loss, model, learning_rate):
 
 def get_mean_validation_loss(batch_predictions, batch_targets):
     nbatches = len(batch_predictions)
-    npredictions = len(batch_predictions[0])
-    losses = []
-    for i in xrange(npredictions):
-        x, y = [], []
-        for j in xrange(nbatches):
-            x.append(batch_predictions[j][i])
-            y.append(batch_targets[j][i])
-        x, y = np.vstack(x), np.vstack(y)
-        losses.append(np.sqrt(np.mean((x - y) ** 2)))
-    return losses
+    x, y = [], []
+    for j in xrange(nbatches):
+        x.append(batch_predictions[j][1])
+        y.append(batch_targets[j][1])
+    x, y = np.vstack(x), np.vstack(y)
+    return np.sqrt(np.mean((x - y) ** 2))
 
 
 def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
     nbatches = len(batch_predictions)
-    npredictions = len(batch_predictions[0])
 
     patient_ids = []
     for i in xrange(nbatches):
@@ -159,22 +154,19 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
     for i, pid in enumerate(patient_ids):
         patient2idxs[pid].append(i)
 
-    crpss = []
-    for i in xrange(npredictions):
-        # collect predictions over batches
-        p, t = [], []
-        for j in xrange(nbatches):
-            p.append(batch_predictions[j][i])
-            t.append(batch_targets[j][i])
-        p, t = np.vstack(p), np.vstack(t)
+    # collect predictions over batches
+    p, t = [], []
+    for j in xrange(nbatches):
+        p.append(batch_predictions[j][1])
+        t.append(batch_targets[j][1])
+    p, t = np.vstack(p), np.vstack(t)
 
-        # collect crps over patients
-        patient_crpss = []
-        for patient_id, patient_idxs in patient2idxs.iteritems():
-            prediction_cdf = utils.heaviside_function(p[patient_idxs])
-            avg_prediction_cdf = np.mean(prediction_cdf, axis=0)
-            target_cdf = utils.heaviside_function(t[patient_idxs])[0]
-            patient_crpss.append(utils.crps(avg_prediction_cdf, target_cdf))
+    # collect crps over patients
+    patient_crpss = []
+    for patient_id, patient_idxs in patient2idxs.iteritems():
+        prediction_cdf = utils.heaviside_function(p[patient_idxs])
+        avg_prediction_cdf = np.mean(prediction_cdf, axis=0)
+        target_cdf = utils.heaviside_function(t[patient_idxs])[0]
+        patient_crpss.append(utils.crps(avg_prediction_cdf, target_cdf))
 
-        crpss.append(np.mean(patient_crpss))
-    return crpss
+    return np.mean(patient_crpss)

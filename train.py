@@ -7,11 +7,11 @@ from itertools import izip
 import lasagne as nn
 import numpy as np
 import theano
-import theano.tensor as T
+from datetime import datetime, timedelta
 import utils
+import theano.tensor as T
+import buffering
 from configuration import config, set_configuration
-
-# import buffering
 
 if len(sys.argv) < 2:
     sys.exit("Usage: train.py <configuration_name>")
@@ -56,39 +56,39 @@ updates = config().build_updates(train_loss, model, learning_rate)
 xs_shared = [nn.utils.shared_empty(dim=len(l.shape)) for l in model.l_ins]
 ys_shared = [nn.utils.shared_empty(dim=len(l.shape)) for l in model.l_targets]
 
-givens_in = {}
+idx = T.lscalar('idx')
+givens_train = {}
 for l_in, x in izip(model.l_ins, xs_shared):
-    givens_in[l_in.input_var] = x
-
-givens_out = {}
+    givens_train[l_in.input_var] = x[idx * config().batch_size:(idx + 1) * config().batch_size]
 for l_target, y in izip(model.l_targets, ys_shared):
-    givens_out[l_target.input_var] = y
+    givens_train[l_target.input_var] = y[idx * config().batch_size:(idx + 1) * config().batch_size]
 
-givens = dict(givens_in.items() + givens_out.items())
+givens_valid = {}
+for l_in, x in izip(model.l_ins, xs_shared):
+    givens_valid[l_in.input_var] = x
 
 # theano functions
-iter_train = theano.function([], train_loss, givens=givens, updates=updates)
+iter_train = theano.function([idx], train_loss, givens=givens_train, updates=updates, on_unused_input='ignore')
 iter_validate = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
-                                givens=givens_in)
-test = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_params],
-                                givens=givens_in)
+                                givens=givens_valid)
 
 if config().restart_from_save and os.path.isfile(metadata_path):
     print 'Load model parameters for resuming'
     resume_metadata = np.load(metadata_path)
     nn.layers.set_all_param_values(model.l_top, resume_metadata['param_values'])
-    start_iter_idx = resume_metadata['iters_since_start'] + 1
-    iter_idxs = range(start_iter_idx, config().max_niter)
+    start_chunk_idx = resume_metadata['chunks_since_start'] + 1
+    chunk_idxs = range(start_chunk_idx, config().max_nchunks)
 
-    lr = np.float32(utils.current_learning_rate(learning_rate_schedule, start_iter_idx))
+    lr = np.float32(utils.current_learning_rate(learning_rate_schedule, start_chunk_idx))
     print '  setting learning rate to %.7f' % lr
     learning_rate.set_value(lr)
     losses_train = resume_metadata['losses_train']
     losses_eval_valid = resume_metadata['losses_eval_valid']
 else:
-    iter_idxs = range(config().max_niter)
+    chunk_idxs = range(config().max_nchunks)
     losses_train = []
     losses_eval_valid = []
+    start_chunk_idx = 0
 
 train_data_iterator = config().train_data_iterator
 valid_data_iterator = config().valid_data_iterator
@@ -100,67 +100,79 @@ print 'n validation: %d' % valid_data_iterator.nsamples
 
 print
 print 'Train model'
+chunk_idx = 0
 start_time = time.time()
 prev_time = start_time
 tmp_losses_train = []
 
-# buffering.buffered_gen_threaded(_gen())
-for iter_idx, (xs_batch, ys_batch) in izip(iter_idxs, train_data_iterator.generate()):
-    if iter_idx in learning_rate_schedule:
-        lr = np.float32(learning_rate_schedule[iter_idx])
+# use buffering.buffered_gen_threaded()
+for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
+                                               buffering.buffered_gen_threaded(train_data_iterator.generate())):
+    if chunk_idx in learning_rate_schedule:
+        lr = np.float32(learning_rate_schedule[chunk_idx])
         print '  setting learning rate to %.7f' % lr
         print
         learning_rate.set_value(lr)
 
-    prev_time = time.clock()
-    # load data to GPU and make one iteration
-    for x_shared, x in zip(xs_shared, xs_batch):
+    # load chunk to GPU
+    for x_shared, x in zip(xs_shared, xs_chunk):
         x_shared.set_value(x)
-    for y_shared, y in zip(ys_shared, ys_batch):
+    for y_shared, y in zip(ys_shared, ys_chunk):
         y_shared.set_value(y)
-    loss = iter_train()
-    print loss, time.clock() - prev_time
-    tmp_losses_train.append(loss)
 
-    if ((iter_idx + 1) % config().validate_every) == 0:
+    # make nbatches_chunk iterations
+    for b in xrange(config().nbatches_chunk):
+        loss = iter_train(b)
+        print loss
+        tmp_losses_train.append(loss)
+
+    if ((chunk_idx + 1) % config().validate_every) == 0:
         print
-        print 'Iteration %d/%d' % (iter_idx + 1, config().max_niter)
-        batch_valid_predictions, batch_valid_targets = [], []
-        for xs_batch, ys_batch in valid_data_iterator.generate():
-            for x_shared, x in zip(xs_shared, xs_batch):
-                x_shared.set_value(x)
-            batch_valid_targets.append(ys_batch)
-            batch_valid_predictions.append(iter_validate())
-            print '---------------------------------------'
-            norm_params = test()
-            print 'MU_0', norm_params[0]
-            print 'sigma_0', norm_params[1]
-            print 'MU_1', norm_params[2]
-            print 'sigma_1', norm_params[3]
-
-        # # calculate validation loss across validation set
-        # valid_loss = config().get_mean_validation_loss(batch_valid_predictions, batch_valid_targets)
-        # print 'Validation loss: ',  valid_loss
-        #
-        # valid_crps = config().get_mean_crps_loss(batch_valid_predictions, batch_valid_targets)
-        # print 'Validation CRPS: ', valid_crps
-
+        print 'Chunk %d/%d' % (chunk_idx + 1, config().max_nchunks)
         # calculate mean train loss since the last validation phase
         mean_train_loss = np.mean(tmp_losses_train)
         print 'Mean train loss: %7f' % mean_train_loss
         losses_train.append(mean_train_loss)
         tmp_losses_train = []
 
-    if ((iter_idx + 1) % config().save_every) == 0:
+        # load validation data to GPU
+        batch_valid_predictions, batch_valid_targets, batch_valid_ids = [], [], []
+        for xs_batch_valid, ys_batch_valid, ids_batch in valid_data_iterator.generate():
+            for x_shared, x in zip(xs_shared, xs_batch_valid):
+                x_shared.set_value(x)
+
+            batch_valid_targets.append(ys_batch_valid)
+            batch_valid_predictions.append(iter_validate())
+            batch_valid_ids.append(ids_batch)
+
+        # calculate validation loss across validation set
+        valid_loss = config().get_mean_validation_loss(batch_valid_predictions, batch_valid_targets)
+        print 'Validation loss: ', valid_loss
+
+        valid_crps = config().get_mean_crps_loss(batch_valid_predictions, batch_valid_targets, batch_valid_ids)
+        print 'Validation CRPS: ', valid_crps
+
+        now = time.time()
+        time_since_start = now - start_time
+        time_since_prev = now - prev_time
+        prev_time = now
+        est_time_left = time_since_start * (config().max_nchunks - chunk_idx + 1.) / (chunk_idx + 1. - start_chunk_idx)
+        eta = datetime.now() + timedelta(seconds=est_time_left)
+        eta_str = eta.strftime("%c")
+        print "  %s since start (%.2f s)" % (utils.hms(time_since_start), time_since_prev)
+        print "  estimated %s to go (ETA: %s)" % (utils.hms(est_time_left), eta_str)
+        print
+
+    if ((chunk_idx + 1) % config().save_every) == 0:
         print
         print 'Saving metadata, parameters'
 
         with open(metadata_path, 'w') as f:
             pickle.dump({
                 'configuration_file': config_name,
-                'git_revision_hash': 0,  # utils.get_git_revision_hash(),
+                'git_revision_hash': utils.get_git_revision_hash(),
                 'experiment_id': expid,
-                'chunks_since_start': iter_idx,
+                'chunks_since_start': chunk_idx,
                 'losses_train': losses_train,
                 'losses_eval_valid': losses_eval_valid,
                 'param_values': nn.layers.get_all_param_values(model.l_top)
@@ -168,6 +180,3 @@ for iter_idx, (xs_batch, ys_batch) in izip(iter_idxs, train_data_iterator.genera
 
         print '  saved to %s' % metadata_path
         print
-
-    if iter_idx >= config().max_niter:
-        break

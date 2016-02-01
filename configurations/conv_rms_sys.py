@@ -1,12 +1,12 @@
 from collections import namedtuple
 import lasagne as nn
 from lasagne.layers.dnn import Conv2DDNNLayer, MaxPool2DDNNLayer
-from nn_heart import NormalizationLayer, NormalCDFLayer
+from nn_heart import NormalizationLayer
 import data_iterators
 import numpy as np
-import theano
 import theano.tensor as T
 import utils
+from collections import defaultdict
 
 restart_from_save = None
 rng = np.random.RandomState(42)
@@ -25,35 +25,38 @@ valid_transformation_params = {
     'shear_range': None
 }
 
-batch_size = 4
-max_niter = 15000
-learning_rate_schedule = {
-    0: 0.0001,
-    5000: 0.0001,
-    10000: 0.00003
-}
-validate_every = 50
-save_every = 50
-l2_weight = 1e-3
+batch_size = 32
+nbatches_chunk = 32
+chunk_size = batch_size * nbatches_chunk
 
-train_data_iterator = data_iterators.SlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted_small/train',
-                                                               batch_size=batch_size,
+train_data_iterator = data_iterators.SlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
+                                                               batch_size=chunk_size,
                                                                transform_params=train_transformation_params,
                                                                labels_path='/data/dsb15_pkl/train.csv', full_batch=True,
                                                                random=True, infinite=True)
 
-valid_data_iterator = data_iterators.SlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted_small/train',
+valid_data_iterator = data_iterators.SlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
                                                                batch_size=batch_size,
                                                                transform_params=valid_transformation_params,
                                                                labels_path='/data/dsb15_pkl/train.csv',
-                                                               full_batch=False,
-                                                               random=False)
+                                                               full_batch=False, random=False, infinite=False)
 
 test_data_iterator = data_iterators.SlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
                                                               batch_size=batch_size,
                                                               transform_params=valid_transformation_params,
                                                               full_batch=False,
                                                               random=False)
+nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
+max_nchunks = nchunks_per_epoch * 150
+learning_rate_schedule = {
+    0: 0.0001,
+    int(max_nchunks * 0.25): 0.00007,
+    int(max_nchunks * 0.5): 0.00003,
+    int(max_nchunks * 0.75): 0.00001,
+}
+validate_every = nchunks_per_epoch
+save_every = nchunks_per_epoch
+l2_weight = 0.0005
 
 
 def build_model():
@@ -93,42 +96,36 @@ def build_model():
                        b=nn.init.Constant(0.1), pad='same')
     l = MaxPool2DDNNLayer(l, pool_size=(2, 2))
     # --------------------------------------------------------------
-    l_d0 = nn.layers.DenseLayer(nn.layers.dropout(l, p=0.5), num_units=512, nonlinearity=nn.nonlinearities.tanh)
-    l_mu0 = nn.layers.DenseLayer(l_d0, num_units=1, nonlinearity=nn.nonlinearities.identity)
-    l_log_sigma0 = nn.layers.DenseLayer(l_d0, num_units=1, nonlinearity=nn.nonlinearities.identity)
+    l_d0 = nn.layers.DenseLayer(nn.layers.dropout(l, p=0.25), num_units=1024, W=nn.init.Orthogonal("relu"),
+                                b=nn.init.Constant(0.1))
+    l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d0, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 
-    # ---------------------------------------------------------------
-    l_d1 = nn.layers.DenseLayer(nn.layers.dropout(l, p=0.5), num_units=512, nonlinearity=nn.nonlinearities.tanh)
-    l_mu1 = nn.layers.DenseLayer(l_d1, num_units=1, nonlinearity=nn.nonlinearities.identity)
-    l_log_sigma1 = nn.layers.DenseLayer(l_d1, num_units=1, nonlinearity=nn.nonlinearities.identity)
-
-    l_outs = [l_mu0, l_log_sigma0, l_mu1, l_log_sigma1]
-    l_top = nn.layers.MergeLayer(l_outs)
+    l_outs = [l_mu0, l_mu0]
+    l_top = l_mu0
 
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
-
     l_targets = [l_target_mu0, l_target_mu1]
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'l_params'])([l_in], l_outs, l_targets, l_top,
-                                                                                      [l_mu0, l_log_sigma0, l_mu1,
-                                                                                       l_log_sigma1])
+
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'regularizable_layers'])([l_in], l_outs,
+                                                                                                  l_targets, l_top,
+                                                                                                  [l_d0])
 
 
 def build_objective(model, deterministic=False):
-    mu0 = nn.layers.get_output(model.l_outs[0], deterministic=deterministic)
-    log_sigma0 = nn.layers.get_output(model.l_outs[1], deterministic=deterministic)
-    mu1 = nn.layers.get_output(model.l_outs[2], deterministic=deterministic)
-    log_sigma1 = nn.layers.get_output(model.l_outs[3], deterministic=deterministic)
+    p0 = nn.layers.get_output(model.l_outs[0], deterministic=deterministic)
+    t0 = nn.layers.get_output(model.l_targets[0])
 
-    mu0_target = nn.layers.get_output(model.l_targets[0])
-    mu1_target = nn.layers.get_output(model.l_targets[1])
+    if model.regularizable_layers:
+        regularization_dict = {}
+        for l in model.regularizable_layers:
+            regularization_dict[l] = l2_weight
+        l2_penalty = nn.regularization.regularize_layer_params_weighted(regularization_dict,
+                                                                        nn.regularization.l2)
+    else:
+        l2_penalty = 0.0
 
-    d_kl0 = T.mean(
-        0.5 * (mu0_target ** 2 - 2. * mu0_target * mu0 + mu0 ** 2 + T.exp(log_sigma0) - 1. - log_sigma0))
-    d_kl1 = T.mean(
-        0.5 * (mu1_target ** 2 - 2. * mu1_target * mu1 + mu1 ** 2 + T.exp(log_sigma1) - 1. - log_sigma1))
-
-    return d_kl0 + d_kl1
+    return T.sqrt(T.mean((p0 - t0) ** 2)) + l2_penalty
 
 
 def build_updates(train_loss, model, learning_rate):
@@ -136,21 +133,48 @@ def build_updates(train_loss, model, learning_rate):
     return updates
 
 
-def get_mean_crps_loss(batch_predictions, batch_targets):
+def get_mean_validation_loss(batch_predictions, batch_targets):
+    nbatches = len(batch_predictions)
+    npredictions = len(batch_predictions[0])
+    losses = []
+    for i in xrange(npredictions):
+        x, y = [], []
+        for j in xrange(nbatches):
+            x.append(batch_predictions[j][i])
+            y.append(batch_targets[j][i])
+        x, y = np.vstack(x), np.vstack(y)
+        losses.append(np.sqrt(np.mean((x - y) ** 2)))
+    return losses
+
+
+def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
     nbatches = len(batch_predictions)
     npredictions = len(batch_predictions[0])
 
+    patient_ids = []
+    for i in xrange(nbatches):
+        patient_ids += batch_ids[i]
+
+    patient2idxs = defaultdict(list)
+    for i, pid in enumerate(patient_ids):
+        patient2idxs[pid].append(i)
+
     crpss = []
     for i in xrange(npredictions):
+        # collect predictions over batches
         p, t = [], []
         for j in xrange(nbatches):
             p.append(batch_predictions[j][i])
             t.append(batch_targets[j][i])
         p, t = np.vstack(p), np.vstack(t)
 
-        crpss.append(np.mean((p - t) ** 2))
-    return np.mean(crpss)
+        # collect crps over patients
+        patient_crpss = []
+        for patient_id, patient_idxs in patient2idxs.iteritems():
+            prediction_cdf = utils.heaviside_function(p[patient_idxs])
+            avg_prediction_cdf = np.mean(prediction_cdf, axis=0)
+            target_cdf = utils.heaviside_function(t[patient_idxs])[0]
+            patient_crpss.append(utils.crps(avg_prediction_cdf, target_cdf))
 
-
-def get_mean_validation_loss(batch_predictions, batch_targets):
-    return get_mean_crps_loss(batch_predictions, batch_targets)
+        crpss.append(np.mean(patient_crpss))
+    return crpss

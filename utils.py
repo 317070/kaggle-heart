@@ -3,6 +3,7 @@ import platform
 import numpy as np
 import gzip
 from scipy.stats import norm
+import subprocess
 
 
 def hms(seconds):
@@ -22,12 +23,14 @@ def hostname():
 
 
 def generate_expid(arch_name):
-    return "%s-%s-0" % (arch_name, hostname())
+    return "%s-%s-%s" % (arch_name, hostname(), timestamp())
 
 
 def get_git_revision_hash():
-    import subprocess
-    return subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip()
+    try:
+        return subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip()
+    except:
+        return 0
 
 
 def load_gz(path):  # load a .npy.gz file
@@ -53,7 +56,11 @@ def rmse(predictions, targets):
     return np.sqrt(np.mean((predictions - targets) ** 2))
 
 
-def real_to_cdf(y, sigma):
+def crps(prediction_cdf, target_cdf):
+    return np.mean((prediction_cdf - target_cdf) ** 2)
+
+
+def real_to_cdf(y, sigma=1e-10):
     cdf = np.zeros((y.shape[0], 600))
     for i in range(y.shape[0]):
         cdf[i] = norm.cdf(np.linspace(0, 599, 600), y[i], sigma)

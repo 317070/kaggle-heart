@@ -28,14 +28,14 @@ learning_rate_schedule = {
     0:     0.0001,
 }
 
-from postprocess import postprocess_onehot
+from postprocess import postprocess_onehot, postprocess
 from preprocess import preprocess, preprocess_with_augmentation
 preprocess_train = preprocess_with_augmentation  # with augmentation
 preprocess_validation = preprocess  # no augmentation
-preprocess_test = preprocess  # no augmentation
+preprocess_test = preprocess_with_augmentation  # no augmentation
 
 build_updates = build_adam_updates
-postprocess = postprocess_onehot
+postprocess = postprocess
 
 data_sizes = {
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
@@ -129,22 +129,11 @@ def build_model():
 
     l8 = lasagne.layers.DropoutLayer(l7, p=0.5)
 
-    l_d3a = lasagne.layers.DenseLayer(l8,
-                              num_units=128)
-
-    l_d3b = lasagne.layers.DropoutLayer(l_d3a)
-
-    l_systole = CumSumLayer(lasagne.layers.DenseLayer(l_d3b,
+    l_systole = CumSumLayer(lasagne.layers.DenseLayer(l8,
                               num_units=600,
                               nonlinearity=lasagne.nonlinearities.softmax))
 
-
-    l_d3c = lasagne.layers.DenseLayer(l8,
-                              num_units=128)
-
-    l_d3d = lasagne.layers.DropoutLayer(l_d3c)
-
-    l_diastole = CumSumLayer(lasagne.layers.DenseLayer(l_d3d,
+    l_diastole = CumSumLayer(lasagne.layers.DenseLayer(l8,
                               num_units=600,
                               nonlinearity=lasagne.nonlinearities.softmax))
 

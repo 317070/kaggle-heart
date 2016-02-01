@@ -5,7 +5,7 @@ import numpy as np
 import cPickle as pickle
 
 print "Looking for the metadata files..."
-files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/*weighted*.pkl")))
+files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/*weighted5*.pkl")))
 print "Plotting..."
 
 for file in files:

@@ -14,7 +14,7 @@ from updates import build_adam_updates
 validate_every = 10
 validate_train_set = False
 save_every = 10
-restart_from_save = False
+restart_from_save = True
 
 batches_per_chunk = 2
 
@@ -25,8 +25,9 @@ num_chunks_train = 20000
 image_size = 64
 
 learning_rate_schedule = {
-    0:     0.001,
-    200:   0.0001,
+    0:     0.0001,
+    40:    0.00001,
+    400:   0.000001,
 }
 
 from postprocess import postprocess_onehot

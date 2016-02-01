@@ -149,14 +149,14 @@ def train_model(expid):
 
     for e, train_data in izip(chunks_train_idcs, buffering.buffered_gen_threaded(create_train_gen())):
         print "Chunk %d/%d" % (e + 1, config().num_chunks_train)
-        print "  Epoch %.1f" % (1.0 * config().batch_size * config().batches_per_chunk * (e+1) / NUM_TRAIN_PATIENTS)
+        epoch = (1.0 * config().batch_size * config().batches_per_chunk * (e+1) / NUM_TRAIN_PATIENTS)
+        print "  Epoch %.1f" % epoch
 
-        if e in learning_rate_schedule:
-            lr = np.float32(learning_rate_schedule[e])
-            print "  setting learning rate to %.7f" % lr
-            learning_rate.set_value(lr)
-
-        print "  load training data onto GPU"
+        for keys, rate in learning_rate_schedule:
+            if epoch >= key:
+                lr = np.float32(rate)
+                learning_rate.set_value(lr)
+        print "  learning rate %.7f" % lr
 
         if config().dump_network_loaded_data:
             pickle.dump(train_data, open("data_loader_dump_train_%d.pkl"%e, "wb"))
@@ -168,7 +168,6 @@ def train_model(expid):
             ys_shared[key].set_value(train_data["output"][key])
 
         #print "train:", sorted(train_data["output"]["patients"])
-        print "  batch SGD"
         losses = []
         kaggle_losses = []
         segmentation_losses = []

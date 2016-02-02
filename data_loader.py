@@ -23,29 +23,68 @@ print "Loading data"
 # Regular data #
 ################
 _DATA_FOLDER = os.path.join("data", "dsb15_pkl")
+_TRAIN_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_train")
+_TEST_DATA_FOLDER = os.path.joini(_DATA_FOLDER, "pkl_validate")
+_TRAIN_LABELS_FILE = os.path.join(_DATA_FOLDER, "train.pkl")
 
-# Find all patient folders
-_patient_folder_format = os.path.join(_DATA_FOLDER, "pkl_train", "*", "study")
-_extract_patient_id = lambda folder: int(re.search(r'/(\d+)/', folder).group(1)) 
-patient_folders = glob.glob(_patient_folder_format)
-patient_folders.sort(key=_extract_patient_id)
-
-# Construct train and validation splits
 ALL_PATIENT_IDS = range(1, 501)
-validation_patients_indices = validation_set.get_cross_validation_indices(
-    indices=ALL_PATIENT_IDS, validation_index=0)
-train_patients_indices = [
-    i for i in ALL_PATIENT_IDS if i not in validation_patients_indices]
 
-# TODO
-VALIDATION_REGEX = "|".join(["(/%d/)"%i for i in validation_patients_indices])
 
-train_patient_folders = [folder for folder in patient_folders if re.search(VALIDATION_REGEX, folder) is None]
-validation_patient_folders = [folder for folder in patient_folders if folder not in train_patient_folders]
+def _find_patient_folders(root_folder):
+    """Finds and sorts all patient folders.
+    """
+    patient_folder_format = os.path.join(root_folder, "*", "study")
+    extract_id = lambda folder: int(re.search(r'/(\d+)/', folder).group(1)) 
+    patient_folders = glob.glob(patient_folder_format)
+    patient_folders.sort(key=extract_id)
+    return patient_folders
 
-regular_labels = pickle.load(open("/data/dsb15_pkl/train.pkl","r"))
 
-test_patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_validate/*/study/"), key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))  # glob is non-deterministic!
+def _split_train_val(patient_folders):
+    """Splits the patient folders into train and validation splits.
+    """
+    # Construct train and validation splits using default parameters
+    validation_patients_indices = validation_set.get_cross_validation_indices(
+        indices=ALL_PATIENT_IDS, validation_index=0)
+    train_patients_indices = [
+        i for i in ALL_PATIENT_IDS if i not in validation_patients_indices]
+
+    # Split the folder names accordingly
+    # This regex is a big OR-clause if the folder corresponds to any of the
+    # validation indices:
+    _VALIDATION_REGEX = "|".join(
+        ["(/%d/)"%i for i in validation_patients_indices])
+    train_patient_folders = [
+        folder for folder in patient_folders
+        if not re.search(_VALIDATION_REGEX, folder)]
+    validation_patient_folders = [
+        folder for folder in patient_folders
+        if folder not in train_patient_folders]
+
+    return train_patient_folders, validation_patient_folders
+
+
+def _load_regular_labels():
+    """Loads the train labels.
+    """
+    with open(_TRAIN_LABELS_FILE, "r") as f:
+        labels = pickle.load(f)
+    return labels
+
+# Find train patients and split off validation
+train_patient_folders, validation_patient_folders = (
+    _split_train_val(_find_patient_folders(_TRAIN_DATA_FOLDER)))
+# Find test patients
+test_patient_folders = _find_patient_folders(_TEST_DATA_FOLDER)
+# Aggregate in a dict
+patient_folders = {
+    "train": train_patient_folders,
+    "validate": validation_patient_folders,
+    "test": test_patient_folders,
+}
+
+# Load the labels
+regular_labels = _load_regular_labels()
 
 NUM_TRAIN_PATIENTS = len(train_patient_folders)
 NUM_VALID_PATIENTS = len(validation_patient_folders)

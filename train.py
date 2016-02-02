@@ -144,7 +144,7 @@ for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
             for x_shared, x in zip(xs_shared, xs_batch_valid):
                 x_shared.set_value(x)
 
-            batch_valid_targets.append(ys_batch_valid)
+            batch_valid_targets.append([e.copy() for e in ys_batch_valid])
             batch_valid_predictions.append(iter_validate())
             batch_valid_ids.append(ids_batch)
 

@@ -139,6 +139,7 @@ class SlicesVolumeDataGenerator(object):
 class PreloadingSlicesVolumeDataGenerator(object):
     def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False,
                  random=True, infinite=False, **kwargs):
+        self.data_path = data_path
         self.patient_paths = glob.glob(data_path + '/*/study/')
         self.slice_paths = [sorted(glob.glob(p + '/*.pkl')) for p in self.patient_paths]
         self.slice_paths = list(itertools.chain(*self.slice_paths))
@@ -154,23 +155,31 @@ class PreloadingSlicesVolumeDataGenerator(object):
         self.infinite = infinite
         self.id2labels = read_labels(labels_path) if labels_path else None
         self.transformation_params = transform_params
+        # data
+        self.slice2npy = None
+        self.x_batch, self.y0_batch, self.y1_batch = None, None, None
 
-        if not os.path.isfile(data_path + '.pkl'):
-            print 'loading data from %s' % data_path
+    def load_data(self):
+        if not os.path.isfile(self.data_path + '.pkl'):
+            print 'loading data from %s' % self.data_path
             self.slice2npy = {}
             for s in self.slice_paths:
                 self.slice2npy[s] = read_slice(s)
-            utils.save_pkl(self.slice2npy, data_path + '.pkl')
-            print 'saved to %s.pkl' % data_path
+            utils.save_pkl(self.slice2npy, self.data_path + '.pkl')
+            print 'saved to %s.pkl' % self.data_path
         else:
-            print 'loading data from %s.pkl' % data_path
-            self.slice2npy = utils.load_pkl(data_path + '.pkl')
+            print 'loading data from %s.pkl' % self.data_path
+            self.slice2npy = utils.load_pkl(self.data_path + '.pkl')
 
+        # make empty batch
         self.x_batch = np.zeros((self.batch_size, 30) + self.transformation_params['patch_size'], dtype='float32')
         self.y0_batch = np.zeros((self.batch_size, 1), dtype='float32')
         self.y1_batch = np.zeros((self.batch_size, 1), dtype='float32')
 
     def generate(self):
+        if not self.slice2npy:
+            self.load_data()
+
         while True:
             rand_idxs = np.arange(len(self.slice_paths))
             if self.random:

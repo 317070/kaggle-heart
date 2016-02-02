@@ -183,6 +183,5 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
             avg_prediction_cdf = np.mean(prediction_cdf, axis=0)
             target_cdf = utils.heaviside_function(t[patient_idxs])[0]
             patient_crpss.append(utils.crps(avg_prediction_cdf, target_cdf))
-
         crpss.append(np.mean(patient_crpss))
     return crpss

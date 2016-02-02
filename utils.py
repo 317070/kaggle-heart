@@ -104,8 +104,9 @@ def get_avg_patient_predictions(batch_predictions, batch_patient_ids):
             p.append(batch_predictions[j][i])
         p = np.vstack(p)
 
-        # average predictions over patient's predeictions
+        # average predictions over patient's predictions
         for patient_id, patient_idxs in patient2idxs.iteritems():
+            #print patient_id, p[patient_idxs]
             prediction_cdfs = heaviside_function(p[patient_idxs])
             avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
             patient2cdf[patient_id].append(avg_prediction_cdf)

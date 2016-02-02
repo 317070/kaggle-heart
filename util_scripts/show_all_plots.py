@@ -5,10 +5,8 @@ import numpy as np
 import cPickle as pickle
 
 print "Looking for the metadata files..."
-files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/j2*.pkl")))
+files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/*slice*.pkl")))
 print "Plotting..."
-
-NUM_TRAIN_PATIENTS = 417
 
 fig = plt.figure()
 

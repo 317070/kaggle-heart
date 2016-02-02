@@ -57,9 +57,7 @@ l2_weight = 0.0005
 def build_model():
     l_in = nn.layers.InputLayer((None, 30) + patch_size)
 
-    l_norm = NormalizationLayer(l_in)
-
-    l = Conv2DDNNLayer(l_norm, num_filters=64, filter_size=(3, 3),
+    l = Conv2DDNNLayer(l_in, num_filters=64, filter_size=(3, 3),
                        W=nn.init.Orthogonal('relu'),
                        b=nn.init.Constant(0.1),
                        pad='same')
@@ -91,12 +89,12 @@ def build_model():
                        b=nn.init.Constant(0.1), pad='same')
     l = MaxPool2DDNNLayer(l, pool_size=(2, 2))
     # --------------------------------------------------------------
-    l_d0 = nn.layers.DenseLayer(nn.layers.dropout(l, p=0.25), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d1 = nn.layers.DenseLayer(nn.layers.dropout(l, p=0.25), num_units=1024, W=nn.init.Orthogonal("relu"),
                                 b=nn.init.Constant(0.1))
-    l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d0, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
+    l_mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d1, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 
-    l_outs = [l_mu0, l_mu0]
-    l_top = l_mu0
+    l_outs = [l_mu1, l_mu1]
+    l_top = l_mu1
 
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
@@ -104,12 +102,12 @@ def build_model():
 
     return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'regularizable_layers'])([l_in], l_outs,
                                                                                                   l_targets, l_top,
-                                                                                                  [l_d0])
+                                                                                                  [l_d1])
 
 
 def build_objective(model, deterministic=False):
-    p0 = nn.layers.get_output(model.l_outs[0], deterministic=deterministic)
-    t0 = nn.layers.get_output(model.l_targets[0])
+    p1 = nn.layers.get_output(model.l_outs[1], deterministic=deterministic)
+    t1 = nn.layers.get_output(model.l_targets[1])
 
     if model.regularizable_layers:
         regularization_dict = {}
@@ -120,7 +118,7 @@ def build_objective(model, deterministic=False):
     else:
         l2_penalty = 0.0
 
-    return T.sqrt(T.mean((p0 - t0) ** 2)) + l2_penalty
+    return T.sqrt(T.mean((p1 - t1) ** 2)) + l2_penalty
 
 
 def build_updates(train_loss, model, learning_rate):
@@ -132,8 +130,8 @@ def get_mean_validation_loss(batch_predictions, batch_targets):
     nbatches = len(batch_predictions)
     x, y = [], []
     for j in xrange(nbatches):
-        x.append(batch_predictions[j][0])
-        y.append(batch_targets[j][0])
+        x.append(batch_predictions[j][1])
+        y.append(batch_targets[j][1])
     x, y = np.vstack(x), np.vstack(y)
     return np.sqrt(np.mean((x - y) ** 2))
 
@@ -152,8 +150,8 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
     # collect predictions over batches
     p, t = [], []
     for j in xrange(nbatches):
-        p.append(batch_predictions[j][0])
-        t.append(batch_targets[j][0])
+        p.append(batch_predictions[j][1])
+        t.append(batch_targets[j][1])
     p, t = np.vstack(p), np.vstack(t)
 
     # collect crps over patients

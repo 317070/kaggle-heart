@@ -4,8 +4,8 @@ import re
 import numpy as np
 import skimage.io
 import skimage.transform
-from scipy.misc import imresize
 from configuration import config
+import timeit
 
 
 def read_labels(file_path):
@@ -40,8 +40,7 @@ def read_patient(path):
 
 
 def read_slice(path):
-    with open(path) as f:
-        d = pickle.load(f)['data']
+    d = pickle.load(open(path, 'r'))['data']
     return d
 
 
@@ -60,6 +59,7 @@ def transform(data, transformation):
     :param transformation:
     :return:
     """
+    start_time = timeit.default_timer()
     out_shape = (30,) + transformation['patch_size']
     out_data = np.zeros(out_shape, dtype='float32')
     # need same random transform for the whole sequence
@@ -87,10 +87,9 @@ def transform(data, transformation):
 
     if data.shape[0] < out_shape[0]:
         for i, j in enumerate(xrange(data.shape[0], out_shape[0])):
-            out_data[j] = out_data[i]  # TODO
+            out_data[j] = out_data[i]
     if data.shape[0] > out_shape[0]:
         out_data = out_data[:30]
-
     return out_data
 
 

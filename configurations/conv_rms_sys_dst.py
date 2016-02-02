@@ -1,11 +1,11 @@
 from collections import namedtuple
 import lasagne as nn
 from lasagne.layers.dnn import Conv2DDNNLayer, MaxPool2DDNNLayer
-from nn_heart import NormalizationLayer
 import data_iterators
 import numpy as np
 import theano.tensor as T
 import utils
+import nn_heart
 from collections import defaultdict
 
 restart_from_save = None
@@ -19,33 +19,28 @@ train_transformation_params = {
 }
 
 valid_transformation_params = {
-    'patch_size': (64, 64),
+    'patch_size': patch_size,
     'rotation_range': None,
     'translation_range': None,
     'shear_range': None
 }
 
 batch_size = 32
-nbatches_chunk = 64
+nbatches_chunk = 16
 chunk_size = batch_size * nbatches_chunk
 
-train_data_iterator = data_iterators.SlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
-                                                               batch_size=chunk_size,
-                                                               transform_params=train_transformation_params,
-                                                               labels_path='/data/dsb15_pkl/train.csv', full_batch=True,
-                                                               random=True, infinite=True)
+train_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
+                                                                         batch_size=chunk_size,
+                                                                         transform_params=train_transformation_params,
+                                                                         labels_path='/data/dsb15_pkl/train.csv',
+                                                                         full_batch=True, random=True, infinite=True)
 
-valid_data_iterator = data_iterators.SlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
-                                                               batch_size=batch_size,
-                                                               transform_params=valid_transformation_params,
-                                                               labels_path='/data/dsb15_pkl/train.csv',
-                                                               full_batch=False, random=False, infinite=False)
+valid_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
+                                                                         batch_size=chunk_size,
+                                                                         transform_params=valid_transformation_params,
+                                                                         labels_path='/data/dsb15_pkl/train.csv',
+                                                                         full_batch=False, random=False, infinite=False)
 
-test_data_iterator = data_iterators.SlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
-                                                              batch_size=batch_size,
-                                                              transform_params=valid_transformation_params,
-                                                              full_batch=False,
-                                                              random=False)
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
 max_nchunks = nchunks_per_epoch * 150
 learning_rate_schedule = {
@@ -62,7 +57,7 @@ l2_weight = 0.0005
 def build_model():
     l_in = nn.layers.InputLayer((None, 30) + patch_size)
 
-    l_norm = NormalizationLayer(l_in)
+    l_norm = nn_heart.NormalizationLayer(l_in)
 
     l = Conv2DDNNLayer(l_norm, num_filters=64, filter_size=(3, 3),
                        W=nn.init.Orthogonal('relu'),
@@ -98,14 +93,14 @@ def build_model():
     # --------------------------------------------------------------
     l_d01 = nn.layers.DenseLayer(nn.layers.dropout(l, p=0.25), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
-    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
     # ---------------------------------------------------------------
 
     l_d11 = nn.layers.DenseLayer(nn.layers.dropout(l, p=0.25), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
-    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 

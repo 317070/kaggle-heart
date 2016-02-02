@@ -1,7 +1,6 @@
 from collections import namedtuple
 import lasagne as nn
 from lasagne.layers.dnn import Conv2DDNNLayer, MaxPool2DDNNLayer
-from nn_heart import NormalizationLayer
 import data_iterators
 import numpy as np
 import theano.tensor as T
@@ -57,9 +56,7 @@ l2_weight = 0.0005
 def build_model():
     l_in = nn.layers.InputLayer((None, 30) + patch_size)
 
-    l_norm = NormalizationLayer(l_in)
-
-    l = Conv2DDNNLayer(l_norm, num_filters=64, filter_size=(3, 3),
+    l = Conv2DDNNLayer(l_in, num_filters=64, filter_size=(3, 3),
                        W=nn.init.Orthogonal('relu'),
                        b=nn.init.Constant(0.1),
                        pad='same')

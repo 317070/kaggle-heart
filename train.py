@@ -85,10 +85,12 @@ if config().restart_from_save and os.path.isfile(metadata_path):
     learning_rate.set_value(lr)
     losses_train = resume_metadata['losses_train']
     losses_eval_valid = resume_metadata['losses_eval_valid']
+    crps_eval_valid = resume_metadata['crps_eval_valid']
 else:
     chunk_idxs = range(config().max_nchunks)
     losses_train = []
     losses_eval_valid = []
+    crps_eval_valid = []
     start_chunk_idx = 0
 
 train_data_iterator = config().train_data_iterator
@@ -149,9 +151,11 @@ for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
         # calculate validation loss across validation set
         valid_loss = config().get_mean_validation_loss(batch_valid_predictions, batch_valid_targets)
         print 'Validation loss: ', valid_loss
+        losses_eval_valid.append(valid_loss)
 
         valid_crps = config().get_mean_crps_loss(batch_valid_predictions, batch_valid_targets, batch_valid_ids)
         print 'Validation CRPS: ', valid_crps
+        crps_eval_valid.append(valid_crps)
 
         now = time.time()
         time_since_start = now - start_time
@@ -170,14 +174,15 @@ for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
 
         with open(metadata_path, 'w') as f:
             pickle.dump({
-                'configuration_file': config_name,
+                'configuration': config_name,
                 'git_revision_hash': utils.get_git_revision_hash(),
                 'experiment_id': expid,
                 'chunks_since_start': chunk_idx,
                 'losses_train': losses_train,
                 'losses_eval_valid': losses_eval_valid,
+                'crps_eval_valid': crps_eval_valid,
                 'param_values': nn.layers.get_all_param_values(model.l_top)
             }, f, pickle.HIGHEST_PROTOCOL)
 
-        print '  saved to %s' % metadata_path
-        print
+            print '  saved to %s' % metadata_path
+            print

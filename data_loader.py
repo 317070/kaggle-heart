@@ -1,26 +1,43 @@
-import glob
-import numpy as np
-import re
-from configuration import config
+"""Module responsible for loading and splitting the data.
+"""
 import cPickle as pickle
-import utils
-from validation_set import get_cross_validation_indices
-import random
-from itertools import chain
+import glob
 import itertools
+import os
+import random
+import re
+
+import numpy as np
+
+import configuration
 import disk_access
+import utils
+import validation_set
+
+config = configuration.config  # shortcut for configuration
+
 
 print "Loading data"
 
 ################
 # Regular data #
 ################
+_DATA_FOLDER = os.path.join("data", "dsb15_pkl")
 
-patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_train/*/study/"), key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))  # glob is non-deterministic!
+# Find all patient folders
+_patient_folder_format = os.path.join(_DATA_FOLDER, "pkl_train", "*", "study")
+_extract_patient_id = lambda folder: int(re.search(r'/(\d+)/', folder).group(1)) 
+patient_folders = glob.glob(_patient_folder_format)
+patient_folders.sort(key=_extract_patient_id)
 
-validation_patients_indices = get_cross_validation_indices(indices=range(1,501), validation_index=0)
-train_patients_indices = [i for i in range(1,501) if i not in validation_patients_indices]
+# Construct train and validation splits
+ALL_PATIENT_IDS = range(1, 501)
+validation_patients_indices = validation_set.get_cross_validation_indices(
+    indices=ALL_PATIENT_IDS, validation_index=0)
+train_patients_indices = [
+    i for i in ALL_PATIENT_IDS if i not in validation_patients_indices]
 
+# TODO
 VALIDATION_REGEX = "|".join(["(/%d/)"%i for i in validation_patients_indices])
 
 train_patient_folders = [folder for folder in patient_folders if re.search(VALIDATION_REGEX, folder) is None]
@@ -43,7 +60,7 @@ NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
 sunny_data = pickle.load(open("/data/dsb15_pkl/pkl_annotated/data.pkl","rb"))
 num_sunny_images = len(sunny_data["images"])
 
-validation_sunny_indices = get_cross_validation_indices(indices=range(num_sunny_images))
+validation_sunny_indices = validation_set.get_cross_validation_indices(indices=range(num_sunny_images))
 train_sunny_indices = [i for i in range(num_sunny_images) if i not in validation_sunny_indices]
 
 sunny_train_images = np.array(sunny_data['images'])[train_sunny_indices]
@@ -160,7 +177,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
 
 
     # Check if any of the inputs or outputs are still empty!
-    for key, value in chain(result["input"].iteritems(), result["output"].iteritems()):
+    for key, value in itertools.chain(result["input"].iteritems(), result["output"].iteritems()):
         if not np.any(value): #there are only zeros in value
             raise Exception("there is an empty value at key %s" % key)
         if not np.isfinite(value).all(): #there are NaN's or infinites somewhere

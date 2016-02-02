@@ -8,6 +8,7 @@ from validation_set import get_cross_validation_indices
 import random
 from itertools import chain
 import itertools
+import disk_access
 
 print "Loading data"
 
@@ -50,6 +51,7 @@ sunny_train_labels = np.array(sunny_data['labels'])[train_sunny_indices]
 
 sunny_validation_images = np.array(sunny_data['images'])[validation_sunny_indices]
 sunny_validation_labels = np.array(sunny_data['labels'])[validation_sunny_indices]
+
 
 
 def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train",
@@ -102,21 +104,21 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
                     f = l[len(l)/2]
                 else:
                     f = random.choice(l)
-                patient_result[tag] = pickle.load(open(f, "r"))['data'].astype('float32')
+                patient_result[tag] = disk_access.load_data_from_file(f)
                 if "difference" in tag:
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
-            elif tag.startswith("sliced:data"):
-                patient_result[tag] = [pickle.load(open(f, "r"))['data'].astype('float32') for f in files]
             elif tag.startswith("sliced:data:ax"):
-                patient_result[tag] = [pickle.load(open(f, "r"))['data'].astype('float32') for f in files if "sax" in f]
+                patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
             elif tag.startswith("sliced:data:shape"):
-                patient_result[tag] = [pickle.load(open(f, "r"))['data'].shape for f in files]
-            elif tag.startswith("sliced:meta:"):
+                patient_result[tag] = [disk_access.load_data_from_file(f).shape for f in files]
+            elif tag.startswith("sliced:data"):
+                patient_result[tag] = [disk_access.load_data_from_file(f) for f in files]
+            elif tag.startswith("sliced:meta"):
                 # get the key used in the pickle
-                key = tag[len("slided:meta:"):]
-                patient_result[tag] = [pickle.load(open(f, "r"))['metadata'][key] for f in files]
+                key = tag[len("slided:meta"):]
+                patient_result[tag] = [_load_metadata_from_file(f)[key] for f in files]
             # add others when needed
 
         preprocess_function(patient_result, result=result["input"], index=i)

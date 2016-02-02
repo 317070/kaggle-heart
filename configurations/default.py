@@ -7,7 +7,6 @@ from updates import build_nesterov_updates
 from data_loader import generate_train_batch, generate_validation_batch, generate_test_batch
 from functools import partial
 import lasagne
-import lasagne.layers.cuda_convnet
 from postprocess import postprocess
 
 """

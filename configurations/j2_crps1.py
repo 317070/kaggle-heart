@@ -32,7 +32,7 @@ from preprocess import preprocess, preprocess_with_augmentation
 preprocess_train = preprocess_with_augmentation  # with augmentation
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess_with_augmentation  # no augmentation
-test_time_augmentations = 100
+test_time_augmentations = 10
 
 build_updates = build_adam_updates
 postprocess = postprocess

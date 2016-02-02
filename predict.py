@@ -133,7 +133,7 @@ def predict_model(expid):
         time_since_start = now - start_time
         time_since_prev = now - prev_time
         prev_time = now
-        est_time_left = time_since_start * (float(config().num_chunks_train - (e + 1)) / float(e + 1 - chunks_train_idcs[0]))
+        est_time_left = time_since_start * (float(num_chunks - (e + 1)) / float(e + 1 - chunks_train_idcs[0]))
         eta = datetime.now() + timedelta(seconds=est_time_left)
         eta_str = eta.strftime("%c")
         print "  %s since start (%.2f s)" % (utils.hms(time_since_start), time_since_prev)

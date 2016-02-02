@@ -17,6 +17,7 @@ save_every = 10
 restart_from_save = True
 
 batches_per_chunk = 2
+
 batch_size = 8
 sunny_batch_size = 4
 num_epochs_train = 200
@@ -85,13 +86,13 @@ def build_model():
 
 
     # convolve over x, y, time
-    l3a = batch_norm(ConvolutionOver3DAxisLayer(l2m, num_filters=64, filter_size=(3, 3, 3),
+    l3a = batch_norm(ConvolutionOver3DAxisLayer(l2m, num_filters=32, filter_size=(3, 3, 3),
                                      axis=(3,4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
                                      ))
 
-    l3b = batch_norm(ConvolutionOver2DAxisLayer(l3a, num_filters=64, filter_size=(3, 3),
+    l3b = batch_norm(ConvolutionOver2DAxisLayer(l3a, num_filters=32, filter_size=(3, 3),
                                      axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
@@ -99,7 +100,7 @@ def build_model():
     l3m = batch_norm(MaxPoolOver2DAxisLayer(l3b, pool_size=(2, 2), axis=(4,5)))
 
     # convolve over time
-    l4 = batch_norm(ConvolutionOverAxisLayer(l3m, num_filters=64, filter_size=(3,), axis=(3,), channel=1,
+    l4 = batch_norm(ConvolutionOverAxisLayer(l3m, num_filters=32, filter_size=(3,), axis=(3,), channel=1,
                                    W=lasagne.init.Orthogonal(),
                                    b=lasagne.init.Constant(0.1),
                                    ))
@@ -129,22 +130,11 @@ def build_model():
 
     l8 = lasagne.layers.DropoutLayer(l7, p=0.5)
 
-    l_d3a = lasagne.layers.DenseLayer(l8,
-                              num_units=128)
-
-    l_d3b = lasagne.layers.DropoutLayer(l_d3a)
-
-    l_systole = CumSumLayer(lasagne.layers.DenseLayer(l_d3b,
+    l_systole = CumSumLayer(lasagne.layers.DenseLayer(l8,
                               num_units=600,
                               nonlinearity=lasagne.nonlinearities.softmax))
 
-
-    l_d3c = lasagne.layers.DenseLayer(l8,
-                              num_units=128)
-
-    l_d3d = lasagne.layers.DropoutLayer(l_d3c)
-
-    l_diastole = CumSumLayer(lasagne.layers.DenseLayer(l_d3d,
+    l_diastole = CumSumLayer(lasagne.layers.DenseLayer(l8,
                               num_units=600,
                               nonlinearity=lasagne.nonlinearities.softmax))
 
@@ -157,10 +147,6 @@ def build_model():
             "diastole": l_diastole,
         },
         "regularizable": {
-            l_d3a: 0.25,
-            l_d3c: 0.25,
-            l_systole: 0.25,
-            l_diastole: 0.25,
         }
     }
 

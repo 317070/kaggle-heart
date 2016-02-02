@@ -32,14 +32,15 @@ preprocess_train = preprocess_with_augmentation
 preprocess_validation = preprocess
 preprocess_test = preprocess
 
-test_time_augmentations = 1
+test_time_augmentations = 100
 
 postprocess = postprocess
 
 build_updates = build_nesterov_updates
 
 # In total, you train 'chunk_size' samples 'num_chunks_train' time, and you do updates every 'batch_size'
-num_chunks_train = 840
+# you train until the train set has passed by 'num_epochs_train' times
+num_epochs_train = 150
 
 validate_every = 20
 save_every = 20

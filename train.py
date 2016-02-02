@@ -41,12 +41,14 @@ def train_model(expid):
     print "  number of parameters: %d" % num_params
     print string.ljust("  layer output shapes:",36),
     print string.ljust("#params:",10),
+    print string.ljust("#data:",10),
     print "output shape:"
     for layer in all_layers[:-1]:
         name = string.ljust(layer.__class__.__name__, 32)
         num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
         num_param = string.ljust(num_param.__str__(), 10)
-        print "    %s %s %s" % (name,  num_param, layer.output_shape)
+        num_size = string.ljust(np.prod(layer.output_shape).__str__(), 10)
+        print "    %s %s %s %s" % (name,  num_param, num_size, layer.output_shape)
 
     obj = config().build_objective(interface_layers)
     train_loss_theano = obj.get_loss()
@@ -101,12 +103,14 @@ def train_model(expid):
     iter_validate = theano.function([idx], [validation_train_loss, validation_kaggle_loss, validation_segmentation_loss] + theano_printer.get_the_stuff_to_print(),
                                     givens=givens, on_unused_input="ignore")
 
+    num_chunks_train = int(config().num_epochs_train * NUM_TRAIN_PATIENTS / (config().batch_size * config().batches_per_chunk))
+    print "Will train for %d chunks" % num_chunks_train
     if config().restart_from_save and os.path.isfile(metadata_path):
         print "Load model parameters for resuming"
         resume_metadata = np.load(metadata_path)
         lasagne.layers.set_all_param_values(top_layer, resume_metadata['param_values'])
         start_chunk_idx = resume_metadata['chunks_since_start'] + 1
-        chunks_train_idcs = range(start_chunk_idx, config().num_chunks_train)
+        chunks_train_idcs = range(start_chunk_idx, num_chunks_train)
 
         # set lr to the correct value
         current_lr = np.float32(utils.current_learning_rate(learning_rate_schedule, start_chunk_idx))
@@ -118,7 +122,7 @@ def train_model(expid):
         losses_eval_valid_kaggle = [] #resume_metadata['losses_eval_valid_kaggle']
         losses_eval_train_kaggle = [] #resume_metadata['losses_eval_train_kaggle']
     else:
-        chunks_train_idcs = range(config().num_chunks_train)
+        chunks_train_idcs = range(num_chunks_train)
         losses_train = []
         losses_eval_valid = []
         losses_eval_train = []
@@ -148,11 +152,11 @@ def train_model(expid):
     num_batches_chunk = config().batches_per_chunk
 
     for e, train_data in izip(chunks_train_idcs, buffering.buffered_gen_threaded(create_train_gen())):
-        print "Chunk %d/%d" % (e + 1, config().num_chunks_train)
+        print "Chunk %d/%d" % (e + 1, num_chunks_train)
         epoch = (1.0 * config().batch_size * config().batches_per_chunk * (e+1) / NUM_TRAIN_PATIENTS)
         print "  Epoch %.1f" % epoch
 
-        for keys, rate in learning_rate_schedule:
+        for key, rate in learning_rate_schedule.iteritems():
             if epoch >= key:
                 lr = np.float32(rate)
                 learning_rate.set_value(lr)
@@ -257,7 +261,7 @@ def train_model(expid):
         time_since_start = now - start_time
         time_since_prev = now - prev_time
         prev_time = now
-        est_time_left = time_since_start * (float(config().num_chunks_train - (e + 1)) / float(e + 1 - chunks_train_idcs[0]))
+        est_time_left = time_since_start * (float(num_chunks_train - (e + 1)) / float(e + 1 - chunks_train_idcs[0]))
         eta = datetime.now() + timedelta(seconds=est_time_left)
         eta_str = eta.strftime("%c")
         print "  %s since start (%.2f s)" % (utils.hms(time_since_start), time_since_prev)

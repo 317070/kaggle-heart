@@ -51,8 +51,8 @@ class KaggleObjective(TargetVarDictObjective):
                0.5 * T.mean((network_diastole - diastole_target)**2, axis = (0,1))
         return CRPS + self.penalty
 
-    def get_kaggle_loss(self, *args, **kwargs):
-        return get_loss(*args, **kwargs)
+    #def get_kaggle_loss(self, *args, **kwargs):
+    #    return self.get_loss(*args, **kwargs)
 
 
 class MSEObjective(TargetVarDictObjective):

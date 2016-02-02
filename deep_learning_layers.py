@@ -232,10 +232,10 @@ class MaxPoolOver2DAxisLayer(MaxPool2DDNNLayer):
 class ConvolutionOver3DAxisLayer(Conv3DDNNLayer):
     def __init__(self, incoming, num_filters, filter_size, channel=1, axis=(2,3,4), **kwargs):
         super(ConvolutionOver3DAxisLayer, self).__init__(incoming,
-                                                         num_filters,
-                                                         filter_size=filter_size,
-                                                         check_shape=False,
-                                                         **kwargs)
+                                                 num_filters,
+                                                 filter_size=filter_size,
+                                                 check_shape=False,
+                                                 **kwargs)
         self.axis = axis
         self.channel = channel
 
@@ -340,11 +340,8 @@ class MaxPoolOver3DAxisLayer(MaxPool3DDNNLayer):
 class ConvolutionOverAxisLayer(ConvolutionOver2DAxisLayer):
 
     def __init__(self, incoming, num_filters, filter_size, channel=1, axis=(2,), **kwargs):
-        assert channel != 0, "using batch as either axis or channel is not supported"
-        if axis[0] == len(incoming.output_shape)-1:
-            axis = (axis[0], len(incoming.output_shape)-2)
-        else:
-            axis = (axis[0], len(incoming.output_shape)-1)
+        assert axis != 0 and channel != 0, "using batch as either axis or channel is not supported"
+        axis = (axis[0], 0)
         filter_size = (filter_size[0], 1)
         super(ConvolutionOverAxisLayer, self).__init__(incoming,
                                                      num_filters,
@@ -357,11 +354,9 @@ class ConvolutionOverAxisLayer(ConvolutionOver2DAxisLayer):
 class MaxPoolOverAxisLayer(MaxPoolOver2DAxisLayer):
 
     def __init__(self, incoming, pool_size, axis=(2,), **kwargs):
-        if axis[0] == len(incoming.output_shape)-1:
-            axis = (len(incoming.output_shape)-2, axis[0])
-        else:
-            axis = (len(incoming.output_shape)-1, axis[0])
-        pool_size = (1, pool_size[0])
+        assert axis != 0, "using batch as either axis or channel is not supported"
+        axis = (axis[0], 0)
+        pool_size = (pool_size[0], 1)
         super(MaxPoolOverAxisLayer, self).__init__(incoming,
                                              pool_size=pool_size,
                                              axis=axis,

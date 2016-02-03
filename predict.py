@@ -19,6 +19,7 @@ import cPickle as pickle
 import csv
 from data_loader import NUM_PATIENTS
 from utils import CRSP
+from postprocess import make_monotone_distribution, test_if_valid_distribution
 
 def predict_model(expid):
     metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % expid
@@ -103,7 +104,7 @@ def predict_model(expid):
 
 
     for e, test_data in izip(itertools.count(start=1), buffering.buffered_gen_threaded(create_test_gen())):
-        print "  load training data onto GPU"
+        print "  load testing data onto GPU"
 
         for key in xs_shared:
             xs_shared[key].set_value(test_data["input"][key])
@@ -118,7 +119,7 @@ def predict_model(expid):
             network_outputs = tuple(iter_result[:len(output_layers)])
             network_outputs_dict = {output_layers.keys()[i]: network_outputs[i] for i in xrange(len(output_layers))}
             kaggle_systoles, kaggle_diastoles = config().postprocess(network_outputs_dict)
-
+            kaggle_systoles, kaggle_diastoles = kaggle_systoles.astype('float64'), kaggle_diastoles.astype('float64')
             for idx, patient_id in enumerate(patient_ids[b*config().batch_size:(b+1)*config().batch_size]):
                 if patient_id != 0:
                     index = patient_id-1
@@ -142,6 +143,14 @@ def predict_model(expid):
         if prediction["systole"].size>0 and prediction["diastole"].size>0:
             prediction["systole_average"] = np.mean(prediction["systole"], axis=0)
             prediction["diastole_average"] = np.mean(prediction["diastole"], axis=0)
+            try:
+                test_if_valid_distribution(prediction["systole_average"])
+                test_if_valid_distribution(prediction["diastole_average"])
+            except:
+                print "WARNING: These distributions are not distributions"
+
+                prediction["systole_average"] = make_monotone_distribution(prediction["systole_average"])
+                prediction["diastole_average"] = make_monotone_distribution(prediction["diastole_average"])
 
 
     print "Calculating training and validation set scores for reference"

@@ -5,6 +5,7 @@ import gzip
 from scipy.special import erf
 import theano
 import theano.tensor as T
+from compressed_cache import simple_memoized
 
 def hms(seconds):
     seconds = np.floor(seconds)
@@ -27,7 +28,7 @@ def generate_expid(arch_name):
     # Configurations need to be deterministic!
     return "%s" % (arch_name, )
 
-
+@simple_memoized  # solves memory crash
 def get_git_revision_hash():
     import subprocess
     return subprocess.check_output(['git', 'rev-parse', 'HEAD']).strip()

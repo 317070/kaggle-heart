@@ -11,6 +11,8 @@ from volume_estimation_layers import GaussianApproximationVolumeLayer
 import theano_printer
 from updates import build_adam_updates
 
+caching = None
+
 validate_every = 10
 validate_train_set = False
 save_every = 10

@@ -6,10 +6,9 @@ import utils
 
 
 def make_monotone_distribution(distribution):
-    for i in xrange(len(distribution)):
-        for j in xrange(len(distribution[0])-1):
-            if not distribution[i,j] <= distribution[i,j+1]:
-                distribution[i,j+1] = distribution[i,j]
+    for j in xrange(len(distribution)-1):
+        if not distribution[j] <= distribution[j+1]:
+            distribution[j+1] = distribution[j]
     distribution = np.clip(distribution, 0.0, 1.0)
     return distribution
 
@@ -17,19 +16,14 @@ def test_if_valid_distribution(distribution):
     print distribution.shape
     if not np.isfinite(distribution).all():
         raise Exception("There is a non-finite numer in there")
-    """
-    for i in xrange(len(distribution)):
-        for j in xrange(len(distribution[0])):
-            if not 0.0<=distribution[i,j]<=1.0:
-                raise Exception("There is a number smaller than 0 or bigger than 1: %.18f" % distribution[i,j])
-    """
-    for i in xrange(len(distribution)):
-        for j in xrange(len(distribution[0])-1):
-            if not distribution[i,j] <= distribution[i,j+1]:
-                print distribution[i]
-                print distribution.shape
-                print distribution.dtype
-                raise Exception("This distribution is non-monotone: %.18f > %.18f" % (distribution[i,j], distribution[i,j+1]))
+
+    for j in xrange(len(distribution)):
+        if not 0.0<=distribution[j]<=1.0:
+            raise Exception("There is a number smaller than 0 or bigger than 1: %.18f" % distribution[j])
+
+    for j in xrange(len(distribution)-1):
+        if not distribution[j] <= distribution[j+1]:
+            raise Exception("This distribution is non-monotone: %.18f > %.18f" % (distribution[j], distribution[j+1]))
 
 
 def postprocess(network_outputs_dict):
@@ -38,22 +32,11 @@ def postprocess(network_outputs_dict):
     """
     kaggle_systoles, kaggle_diastoles = None, None
     if "systole" in network_outputs_dict:
-        kaggle_systoles = make_monotone_distribution(network_outputs_dict["systole"])
-        #kaggle_systoles = np.clip(network_outputs_dict["systole"], 0.0, 1.0)
+        kaggle_systoles = network_outputs_dict["systole"]
     if "diastole" in network_outputs_dict:
-        kaggle_diastoles = make_monotone_distribution(network_outputs_dict["diastole"])
-        #kaggle_diastoles = np.clip(network_outputs_dict["diastole"], 0.0, 1.0)
+        kaggle_diastoles = network_outputs_dict["diastole"]
     if kaggle_systoles is None or kaggle_diastoles is None:
         raise Exception("This is the wrong postprocessing for this model")
-
-    try:
-        test_if_valid_distribution(kaggle_systoles)
-        test_if_valid_distribution(kaggle_diastoles)
-    except:
-        print "These distributions are not distributions"
-
-    kaggle_systoles  = make_monotone_distribution(kaggle_systoles)
-    kaggle_diastoles  = make_monotone_distribution(kaggle_diastoles)
 
     return kaggle_systoles, kaggle_diastoles
 

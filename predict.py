@@ -102,9 +102,7 @@ def predict_model(expid):
                     } for i in xrange(NUM_PATIENTS)]
 
 
-    #for e, test_data in izip(chunks_train_idcs, buffering.buffered_gen_threaded(create_test_gen())):
-    #for e, test_data in izip(chunks_train_idcs, create_test_gen()):
-    for e, test_data in izip(itertools.count(start=1), create_test_gen()):
+    for e, test_data in izip(itertools.count(start=1), buffering.buffered_gen_threaded(create_test_gen())):
         print "  load training data onto GPU"
 
         for key in xs_shared:

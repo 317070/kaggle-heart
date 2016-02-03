@@ -100,9 +100,10 @@ def preprocess_with_augmentation(patient_data, result, index, augment=True):
         elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
 
-            patient_4d_tensor = np.swapaxes(
-                                        resize_and_augment(patient_data[tag], output_shape=desired_shape[-2:], augment=augmentation_parameters)
-                                        ,1,0)
+            patient_4d_tensor = resize_and_augment(patient_data[tag], output_shape=desired_shape[-2:], augment=augmentation_parameters)
+            if "noswitch" not in tag:
+                patient_4d_tensor = np.swapaxes(patient_4d_tensor,1,0)
+
             put_in_the_middle(result[tag][index], patient_4d_tensor)
         if tag.startswith("sliced:data:shape"):
             result[tag][index] = patient_data[tag]

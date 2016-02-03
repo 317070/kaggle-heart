@@ -366,3 +366,12 @@ class MaxPoolOverAxisLayer(MaxPoolOver2DAxisLayer):
                                              pool_size=pool_size,
                                              axis=axis,
                                              **kwargs)
+
+
+class FixedScaleLayer(Layer):
+    def __init__(self, incoming, scale=1, **kwargs):
+        super(FixedScaleLayer, self).__init__(incoming, **kwargs)
+        self.scale = scale
+      
+    def get_output_for(self, input, **kwargs):
+        return input * self.scale

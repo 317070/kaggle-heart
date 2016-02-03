@@ -227,7 +227,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 result["output"]["systole:class_weight"][i] = utils.linear_weighted(V_systole)
             if "diastole:class_weight" in wanted_output_tags:
                 result["output"]["diastole:class_weight"][i] = utils.linear_weighted(V_diastole)
-            
+
         else:
             if set!="test":
                 raise Exception("unknown patient in train or validation set")

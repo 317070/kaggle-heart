@@ -23,9 +23,9 @@ print "Loading data"
 # Regular data #
 ################
 # We don't load the regular data directly into memory, since it's too big.
-_DATA_FOLDER = os.path.join("data", "dsb15_pkl")
+_DATA_FOLDER = os.path.join("/data", "dsb15_pkl")
 _TRAIN_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_train")
-_TEST_DATA_FOLDER = os.path.joini(_DATA_FOLDER, "pkl_validate")
+_TEST_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_validate")
 _TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 
 ALL_PATIENT_IDS = range(1, 501)
@@ -62,7 +62,9 @@ def _split_train_val(patient_folders):
         folder for folder in patient_folders
         if folder not in train_patient_folders]
 
-    return train_patient_folders, validation_patient_folders
+    return (
+        train_patient_folders, validation_patient_folders,
+        validation_patients_indices, train_patients_indices)
 
 
 def _load_file(path):
@@ -71,7 +73,7 @@ def _load_file(path):
     return data
 
 # Find train patients and split off validation
-train_patient_folders, validation_patient_folders = (
+train_patient_folders, validation_patient_folders, validation_patients_indices, train_patients_indices=(
     _split_train_val(_find_patient_folders(_TRAIN_DATA_FOLDER)))
 # Find test patients
 test_patient_folders = _find_patient_folders(_TEST_DATA_FOLDER)
@@ -82,9 +84,13 @@ patient_folders = {
     "test": test_patient_folders,
 }
 num_patients = {set:len(patient_folders[set]) for set in patient_folders}
+NUM_TRAIN_PATIENTS = num_patients['train']
+NUM_VALIDATE_PATIENTS = num_patients['validate']
+NUM_TEST_PATIENTS = num_patients['test']
+NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALIDATE_PATIENTS + NUM_TEST_PATIENTS
 
 # Load the labels
-regular_labels = _load_data(_TRAIN_LABELS_PATH)
+regular_labels = _load_file(_TRAIN_LABELS_PATH)
 
 
 ##############
@@ -99,12 +105,12 @@ num_sunny_images = len(_sunny_data["images"])
 _validation_sunny_indices = validation_set.get_cross_validation_indices(
     indices=range(num_sunny_images))
 _train_sunny_indices = [
-    i for i in range(num_sunny_images) if i not in validation_sunny_indices]
+    i for i in range(num_sunny_images) if i not in _validation_sunny_indices]
 
-sunny_train_images = np.array(sunny_data["images"])[train_sunny_indices]
-sunny_train_labels = np.array(sunny_data["labels"])[train_sunny_indices]
-sunny_validation_images = np.array(sunny_data["images"])[validation_sunny_indices]
-sunny_validation_labels = np.array(sunny_data["labels"])[validation_sunny_indices]
+sunny_train_images = np.array(_sunny_data["images"])[_train_sunny_indices]
+sunny_train_labels = np.array(_sunny_data["labels"])[_train_sunny_indices]
+sunny_validation_images = np.array(_sunny_data["images"])[_validation_sunny_indices]
+sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indices]
 
 
 ##################################

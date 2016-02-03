@@ -15,8 +15,10 @@ all old config files automatically. Make sure this parameter does not change
 the algorithm of the old files.
 """
 
+caching = "memory"  # by default, cache accessed files in memory
 momentum = 0.9
 rng = np.random
+
 
 create_train_gen = generate_train_batch
 create_eval_valid_gen = partial(generate_validation_batch, set="validation")

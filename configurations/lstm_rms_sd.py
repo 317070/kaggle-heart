@@ -25,26 +25,32 @@ valid_transformation_params = {
     'shear_range': None
 }
 
-batch_size = 32
-nbatches_chunk = 16
+batch_size = 2
+nbatches_chunk = 4
 chunk_size = batch_size * nbatches_chunk
 
-train_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
-                                                                         batch_size=chunk_size,
-                                                                         transform_params=train_transformation_params,
-                                                                         labels_path='/data/dsb15_pkl/train.csv',
-                                                                         full_batch=True, random=True, infinite=True)
+train_data_iterator = data_iterators.PreloadingPatientsGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
+                                                                 batch_size=chunk_size,
+                                                                 transform_params=train_transformation_params,
+                                                                 labels_path='/data/dsb15_pkl/train.csv',
+                                                                 full_batch=True, random=True, infinite=True)
 
-valid_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
-                                                                         batch_size=chunk_size,
-                                                                         transform_params=valid_transformation_params,
-                                                                         labels_path='/data/dsb15_pkl/train.csv',
-                                                                         full_batch=False, random=False, infinite=False)
+valid_data_iterator = data_iterators.PreloadingPatientsGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
+                                                                 batch_size=chunk_size,
+                                                                 transform_params=valid_transformation_params,
+                                                                 labels_path='/data/dsb15_pkl/train.csv',
+                                                                 full_batch=False, random=False, infinite=False)
 
-test_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
-                                                                        batch_size=batch_size,
-                                                                        transform_params=train_transformation_params,
-                                                                        full_batch=False, random=False, infinite=False)
+test_data_iterator = data_iterators.PreloadingPatientsGenerator(data_path='/data/dsb15_pkl/pkl_validate',
+                                                                batch_size=batch_size,
+                                                                transform_params=train_transformation_params,
+                                                                full_batch=False, random=False, infinite=False)
+
+max_slices = max(train_data_iterator.max_slices, valid_data_iterator.max_slices, test_data_iterator.max_slices)
+# fix max_slices for each iterator, so the resulting arrays have equal 2nd dimension
+train_data_iterator.max_slices = max_slices
+valid_data_iterator.max_slices = max_slices
+test_data_iterator.max_slices = max_slices
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
 max_nchunks = nchunks_per_epoch * 150
@@ -57,6 +63,8 @@ learning_rate_schedule = {
 validate_every = nchunks_per_epoch
 save_every = nchunks_per_epoch
 l2_weight = 0.0005
+
+max_slices = 0  # TODO
 
 conv3 = partial(Conv2DDNNLayer,
                 stride=(1, 1),
@@ -73,9 +81,11 @@ max_pool = partial(MaxPool2DDNNLayer,
 
 
 def build_model():
-    l_in = nn.layers.InputLayer((None, 30) + patch_size)
+    l_in = nn.layers.InputLayer((None, max_slices, 30) + patch_size)
 
-    l = conv3(l_in, num_filters=64)
+    l_rshp_inp = nn.layers.ReshapeLayer(l_in, (-1,) + patch_size)
+
+    l = conv3(l_rshp_inp, num_filters=64)
     l = conv3(l, num_filters=64)
 
     l = max_pool(l)
@@ -103,16 +113,35 @@ def build_model():
 
     l = max_pool(l)
 
-    l_d01 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
-                                 b=nn.init.Constant(0.1))
-    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_rshp_conv = nn.layers.ReshapeLayer(l, (-1, 30) + patch_size)
+
+    input_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
+    forget_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), b=nn.init.Constant(5.0))
+    output_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
+    cell = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None,
+                          nonlinearity=nn.nonlinearities.tanh)
+
+    l_lstm = nn.layers.LSTMLayer(l_rshp_conv, num_units=1024,
+                                 ingate=input_gate, forgetgate=forget_gate,
+                                 cell=cell, outgate=output_gate,
+                                 peepholes=False, precompute_input=False,
+                                 learn_init=True, grad_clipping=5, only_return_final=True)
+
+    # systole
+    l_d01 = nn.layers.DenseLayer(l_lstm, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
+
+    l_rshp_d01 = nn.layers.ReshapeLayer(l_d01, (-1, max_slices))
+
+    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_rshp_d01, p=0.25), num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
-    # ---------------------------------------------------------------
 
-    l_d11 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
-                                 b=nn.init.Constant(0.1))
-    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
+    # diastole
+    l_d11 = nn.layers.DenseLayer(l_lstm, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
+
+    l_rshp_d11 = nn.layers.ReshapeLayer(l_d11, (-1, max_slices))
+
+    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_rshp_d11, p=0.25), num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 
@@ -125,8 +154,7 @@ def build_model():
 
     return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'regularizable_layers'])([l_in], l_outs,
                                                                                                   l_targets, l_top,
-                                                                                                  [l_d01, l_d02, l_d11,
-                                                                                                   l_d12])
+                                                                                                  [l_d02, l_d12])
 
 
 def build_objective(model, deterministic=False):

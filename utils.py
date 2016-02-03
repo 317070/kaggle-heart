@@ -1,7 +1,7 @@
 import time
 import platform
 import numpy as np
-import gzip
+import csv
 from scipy.stats import norm
 import subprocess
 import cPickle
@@ -36,22 +36,14 @@ def get_git_revision_hash():
 
 
 def save_pkl(obj, path, protocol=cPickle.HIGHEST_PROTOCOL):
-    with open(path, 'wb') as f:
+    with open(path, 'w') as f:
         cPickle.dump(obj, f, protocol=protocol)
 
 
 def load_pkl(path):
-    with open(path, 'rb') as f:
+    with open(path) as f:
         obj = cPickle.load(f)
     return obj
-
-
-def load_gz(path):  # load a .npy.gz file
-    if path.endswith(".gz"):
-        f = gzip.open(path, 'rb')
-        return np.load(f)
-    else:
-        return np.load(path)
 
 
 def current_learning_rate(schedule, idx):
@@ -65,11 +57,47 @@ def current_learning_rate(schedule, idx):
     return current_lr
 
 
+def save_submisssion(patient_predictions, submission_path):
+    """
+    :param patient_predictions: dict of {patient_id: [systole_cdf, diastole_cdf]}
+    :param submission_path:
+    """
+    fi = csv.reader(open('sample_submission_validate.csv'))
+    f = open(submission_path, 'w+')
+    fo = csv.writer(f, lineterminator='\n')
+    fo.writerow(fi.next())
+    for line in fi:
+        idx = line[0]
+        patient_id, target = idx.split('_')
+        patient_id = int(patient_id)
+        out = [idx]
+        if patient_id in patient_predictions.keys():
+            if target == 'Diastole':
+                out.extend(list(patient_predictions[patient_id][1]))
+            else:
+                out.extend(list(patient_predictions[patient_id][0]))
+        else:
+            print 'missed', idx
+        fo.writerow(out)
+    f.close()
+
+
 def rmse(predictions, targets):
+    """
+    :param predictions: (batch_size, 1)
+    :param targets: (batch_size, 1)
+    :return: RMSE (mean over batch)
+    """
     return np.sqrt(np.mean((predictions - targets) ** 2))
 
 
 def crps(prediction_cdf, target_cdf):
+    """
+    Use it with batch_size of 1
+    :param prediction_cdf: (batch_size, 600)
+    :param target_cdf: (batch_size, 600)
+    :return: CRPS mean over batch
+    """
     return np.mean((prediction_cdf - target_cdf) ** 2)
 
 
@@ -85,6 +113,7 @@ def heaviside_function(x):
 
 
 def get_avg_patient_predictions(batch_predictions, batch_patient_ids):
+    # TODO where is the best place for this function?
     nbatches = len(batch_predictions)
     npredictions = len(batch_predictions[0])
 
@@ -106,7 +135,7 @@ def get_avg_patient_predictions(batch_predictions, batch_patient_ids):
 
         # average predictions over patient's predictions
         for patient_id, patient_idxs in patient2idxs.iteritems():
-            #print patient_id, p[patient_idxs]
+            # print patient_id, p[patient_idxs]
             prediction_cdfs = heaviside_function(p[patient_idxs])
             avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
             patient2cdf[patient_id].append(avg_prediction_cdf)

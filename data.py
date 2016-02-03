@@ -40,7 +40,7 @@ def read_patient(path):
 
 
 def read_slice(path):
-    d = pickle.load(open(path, 'r'))['data']
+    d = pickle.load(open(path))['data']
     return d
 
 
@@ -59,7 +59,6 @@ def transform(data, transformation):
     :param transformation:
     :return:
     """
-    start_time = timeit.default_timer()
     out_shape = (30,) + transformation['patch_size']
     out_data = np.zeros(out_shape, dtype='float32')
     # need same random transform for the whole sequence
@@ -85,9 +84,11 @@ def transform(data, transformation):
 
         out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
 
+    # if the sequence is < 30 timesteps, copy images from the beginning of the sequence
     if data.shape[0] < out_shape[0]:
         for i, j in enumerate(xrange(data.shape[0], out_shape[0])):
             out_data[j] = out_data[i]
+    # if > 30, remove images
     if data.shape[0] > out_shape[0]:
         out_data = out_data[:30]
     return out_data

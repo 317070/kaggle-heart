@@ -7,24 +7,30 @@ import os
 import string
 import utils
 import buffering
-import cPickle as pickle
 from configuration import config, set_configuration
 
 if not (3 <= len(sys.argv) <= 5):
-    sys.exit("Usage: test.py <metadata_path> <test_method>")
+    sys.exit("Usage: test.py <metadata_path> <set: valid|test> <n_tta_iterations>")
 
 metadata_path = sys.argv[1]
-method = sys.argv[2]
+set = sys.argv[2] if len(sys.argv) >= 2 else 'test'
+n_tta_iterations = int(sys.argv[3]) if len(sys.argv) >= 3 else 100
 
-metadata = pickle.load(open('/mnt/storage/metadata/kaggle-heart/train/ira/' + metadata_path))
-config_name = metadata['configuration_file']
+metadata = utils.load_pkl('/mnt/storage/metadata/kaggle-heart/train/ira/' + metadata_path)
+config_name = metadata['configuration']
 set_configuration(config_name)
 
-# predictions
+# predictions paths
 prediction_dir = '/mnt/storage/metadata/kaggle-heart/predictions/ira'
 if not os.path.isdir(prediction_dir):
     os.mkdir(prediction_dir)
-predictions_path = prediction_dir + "/%s--%s.npy" % (metadata['experiment_id'], method)
+prediction_path = prediction_dir + "/%s--%s.pkl" % (metadata['experiment_id'], set)
+
+# submissions paths
+submission_dir = '/mnt/storage/metadata/kaggle-heart/submissions/ira'
+if not os.path.isdir(submission_dir):
+    os.mkdir(submission_dir)
+submission_path = submission_dir + "/%s--%s.csv" % (metadata['experiment_id'], set)
 
 print "Build model"
 model = config().build_model()
@@ -43,12 +49,6 @@ for layer in all_layers[:-1]:
 
 nn.layers.set_all_param_values(model.l_top, metadata['param_values'])
 
-valid_data_iterator = config().valid_data_iterator
-
-print
-print 'Data'
-print 'n test: %d' % valid_data_iterator.nsamples
-
 xs_shared = [nn.utils.shared_empty(dim=len(l.shape)) for l in model.l_ins]
 givens_in = {}
 for l_in, x in izip(model.l_ins, xs_shared):
@@ -57,30 +57,67 @@ for l_in, x in izip(model.l_ins, xs_shared):
 iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
                                 givens=givens_in)
 
-# validation set predictions
-batch_predictions, batch_targets, batch_ids = [], [], []
-for _ in xrange(1):
-    for xs_batch_valid, ys_batch_valid, ids_batch in valid_data_iterator.generate():
-        for x_shared, x in zip(xs_shared, xs_batch_valid):
-            x_shared.set_value(x)
-        batch_targets.append([e.copy() for e in ys_batch_valid])
-        batch_predictions.append(iter_test_det())
-        batch_ids.append(ids_batch)
+if set == 'valid':
+    valid_data_iterator = config().valid_data_iterator
+    if n_tta_iterations > 1:
+        valid_data_iterator.transformation_params = config().train_transformation_params
 
-valid_crps = config().get_mean_crps_loss(batch_predictions, batch_targets, batch_ids)
-print 'Validation CRPS: ', valid_crps
+    print
+    print 'n valid: %d' % valid_data_iterator.nsamples
 
-valid_loss = config().get_mean_validation_loss(batch_predictions, batch_targets)
-print 'Validation loss: ', valid_loss
+    batch_predictions, batch_targets, batch_ids = [], [], []
+    for i in xrange(n_tta_iterations):
+        print 'tta iteration %d' % i
+        for xs_batch_valid, ys_batch_valid, ids_batch in buffering.buffered_gen_threaded(
+                valid_data_iterator.generate()):
+            for x_shared, x in zip(xs_shared, xs_batch_valid):
+                x_shared.set_value(x)
+            batch_targets.append([e.copy() for e in ys_batch_valid])
+            batch_predictions.append(iter_test_det())
+            batch_ids.append(ids_batch)
 
-avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
-patient_targets = utils.get_avg_patient_predictions(batch_targets, batch_ids)
+    valid_crps = config().get_mean_crps_loss(batch_predictions, batch_targets, batch_ids)
+    print 'Validation CRPS: ', valid_crps
+    valid_loss = config().get_mean_validation_loss(batch_predictions, batch_targets)
+    print 'Validation loss: ', valid_loss
 
-assert avg_patient_predictions.viewkeys() == patient_targets.viewkeys()
-crpss_sys, crpss_dst = [], []
-for id in avg_patient_predictions.iterkeys():
-    crpss_sys.append(utils.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
-    crpss_dst.append(utils.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
+    # TODO gives different results
 
-print 'Validation Systole CRPS: ', np.mean(crpss_sys)
-print 'Validation Diastole CRPS: ', np.mean(crpss_dst)
+    avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
+    patient_targets = utils.get_avg_patient_predictions(batch_targets, batch_ids)
+    assert avg_patient_predictions.viewkeys() == patient_targets.viewkeys()
+    crpss_sys, crpss_dst = [], []
+    for id in avg_patient_predictions.iterkeys():
+        crpss_sys.append(utils.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
+        crpss_dst.append(utils.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
+
+    print 'Validation Systole CRPS: ', np.mean(crpss_sys)
+    print 'Validation Diastole CRPS: ', np.mean(crpss_dst)
+
+    utils.save_pkl(avg_patient_predictions, prediction_path)
+    print ' predictions saved to %s' % prediction_path
+    print
+
+if set == 'test':
+    test_data_iterator = config().test_data_iterator
+    if n_tta_iterations > 1:
+        test_data_iterator.transformation_params = config().train_transformation_params
+
+    print 'n test: %d' % test_data_iterator.nsamples
+
+    batch_predictions, batch_ids = [], []
+    for i in xrange(n_tta_iterations):
+        print 'tta iteration %d' % i
+        for xs_batch_valid, _, ids_batch in buffering.buffered_gen_threaded(test_data_iterator.generate()):
+            for x_shared, x in zip(xs_shared, xs_batch_valid):
+                x_shared.set_value(x)
+            batch_predictions.append(iter_test_det())
+            batch_ids.append(ids_batch)
+
+    avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
+
+    utils.save_pkl(avg_patient_predictions, prediction_path)
+    print ' predictions saved to %s' % prediction_path
+
+    utils.save_submisssion(avg_patient_predictions, submission_path)
+    print ' submission saved to %s' % submission_path

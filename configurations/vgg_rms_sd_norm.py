@@ -7,6 +7,7 @@ import theano.tensor as T
 import utils
 from collections import defaultdict
 from functools import partial
+import nn_heart
 
 restart_from_save = None
 rng = np.random.RandomState(42)
@@ -43,7 +44,7 @@ valid_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_pa
 
 test_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
                                                                         batch_size=batch_size,
-                                                                        transform_params=train_transformation_params,
+                                                                        transform_params=valid_transformation_params,
                                                                         full_batch=False, random=False, infinite=False)
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
@@ -75,7 +76,9 @@ max_pool = partial(MaxPool2DDNNLayer,
 def build_model():
     l_in = nn.layers.InputLayer((None, 30) + patch_size)
 
-    l = conv3(l_in, num_filters=64)
+    l_norm = nn_heart.NormalizationLayer(l_in)
+
+    l = conv3(l_norm, num_filters=64)
     l = conv3(l, num_filters=64)
 
     l = max_pool(l)
@@ -103,14 +106,14 @@ def build_model():
 
     l = max_pool(l)
 
-    l_d01 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d01 = nn.layers.DenseLayer(l, num_units=2048, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
     # ---------------------------------------------------------------
 
-    l_d11 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d11 = nn.layers.DenseLayer(l, num_units=2048, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))

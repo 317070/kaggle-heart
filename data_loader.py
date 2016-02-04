@@ -31,13 +31,15 @@ _TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 ALL_PATIENT_IDS = range(1, 501)
 
 
+_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', folder).group(1)) 
+
+
 def _find_patient_folders(root_folder):
     """Finds and sorts all patient folders.
     """
     patient_folder_format = os.path.join(root_folder, "*", "study")
-    extract_id = lambda folder: int(re.search(r'/(\d+)/', folder).group(1)) 
     patient_folders = glob.glob(patient_folder_format)
-    patient_folders.sort(key=extract_id)
+    patient_folders.sort(key=_extract_id_from_path)
     return patient_folders
 
 
@@ -205,7 +207,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
         # load the labels
         # find the id of the current patient in the folder name (=safer)
-        id = extract_id(folder)
+        id = _extract_id_from_path(folder)
         if "patients" in wanted_output_tags:
             result["output"]["patients"][i] = id
 

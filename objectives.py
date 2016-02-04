@@ -2,8 +2,10 @@ import numpy as np
 import lasagne
 import theano
 import theano.tensor as T
+
 import theano_printer
 import utils
+
 
 class TargetVarDictObjective(object):
     def __init__(self, input_layers, penalty=0):
@@ -13,13 +15,24 @@ class TargetVarDictObjective(object):
             self.target_vars = dict()
         self.penalty = penalty
 
-    def get_loss(self, *args, **kwargs):
+    def get_loss(self, average=True, *args, **kwargs):
+        """Compute the loss in Theano.
+        
+        Args:
+            average: Indicates whether the loss should already be averaged over the batch.
+                If not, call the compute_average method on the aggregated losses.
+        """
         raise NotImplementedError
 
-    def get_kaggle_loss(self, *args, **kwargs):
+    def compute_average(self, losses):
+        """Averages the aggregated losses in Numpy."""
+        return losses.mean(axis=0)
+
+    def get_kaggle_loss(self, average=True, *args, **kwargs):
+        """Computes the CRPS score in Theano."""
         return theano.shared([-1])
 
-    def get_segmentation_loss(self, *args, **kwargs):
+    def get_segmentation_loss(self, average=True, *args, **kwargs):
         return theano.shared([-1])
 
 
@@ -71,14 +84,37 @@ class MSEObjective(TargetVarDictObjective):
         systole_target = self.target_vars["systole:value"]
         diastole_target = self.target_vars["diastole:value"]
 
-        if not average:
-            loss = 0.5 * (network_systole  - systole_target )**2 + 0.5 * (network_diastole - diastole_target)**2
-            return loss
-
-        arg = 0.5 * (network_systole  - systole_target )**2 + 0.5 * (network_diastole - diastole_target)**2
-        #theano_printer.print_me_this("arg", arg)
-        loss = T.mean(arg, axis=(0,) )
+        loss = 0.5 * (network_systole  - systole_target )**2 + 0.5 * (network_diastole - diastole_target)**2
+         
+        if average:
+            loss = T.mean(loss, axis=(0,))
         return loss + self.penalty
+
+
+class RMSEObjective(TargetVarDictObjective):
+    def __init__(self, input_layers, *args, **kwargs):
+        super(RMSEObjective, self).__init__(input_layers, *args, **kwargs)
+        self.input_systole = input_layers["systole:value"]
+        self.input_diastole = input_layers["diastole:value"]
+
+        self.target_vars["systole:value"] = T.fvector("systole_target_value")
+        self.target_vars["diastole:value"] = T.fvector("diastole_target_value")
+
+    def get_loss(self, average=True, *args, **kwargs):
+        network_systole = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)[:,0]
+        network_diastole = lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)[:,0]
+
+        systole_target = self.target_vars["systole:value"]
+        diastole_target = self.target_vars["diastole:value"]
+
+        loss = 0.5 * (network_systole - systole_target) ** 2 + 0.5 * (network_diastole - diastole_target)**2
+
+        if average:
+            loss = T.sqrt(T.mean(loss, axis=(0,)))
+        return loss
+
+    def compute_average(self, aggregate):
+        return np.sqrt(np.mean(aggregate, axis=0))
 
 
 class KaggleValidationMSEObjective(MSEObjective):

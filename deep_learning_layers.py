@@ -4,6 +4,7 @@ from lasagne.utils import as_tuple
 import theano
 import theano.tensor as T
 from lasagne.layers import Conv1DLayer, MaxPool1DLayer, Layer
+import numpy as np
 
 
 """
@@ -366,3 +367,19 @@ class MaxPoolOverAxisLayer(MaxPoolOver2DAxisLayer):
                                              pool_size=pool_size,
                                              axis=axis,
                                              **kwargs)
+
+
+class FixedScaleLayer(Layer):
+    def __init__(self, incoming, scale=1, **kwargs):
+        super(FixedScaleLayer, self).__init__(incoming, **kwargs)
+        self.scale = scale
+      
+    def get_output_for(self, input, **kwargs):
+        return input * self.scale
+
+def FixedConstantLayer(constant):
+    theano_var = theano.shared(constant)
+    # Add 0 to the theano var, to prevent it from returning a cudandarray later
+    theano_var += theano.shared(np.array(0.0, dtype='float32'))
+    return lasagne.layers.InputLayer(
+        constant.shape, input_var=theano_var) 

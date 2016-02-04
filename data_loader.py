@@ -1,101 +1,183 @@
-import glob
-import numpy as np
-import re
-from configuration import config
+"""Module responsible for loading and splitting the data.
+"""
 import cPickle as pickle
-import utils
-from validation_set import get_cross_validation_indices
-import random
-from itertools import chain
+import glob
 import itertools
+import os
+import random
+import re
+
+import numpy as np
+
+import configuration
 import disk_access
+import utils
+import validation_set
+
+_config = configuration.config  # shortcut for configuration
+
 
 print "Loading data"
 
 ################
 # Regular data #
 ################
+# We don't load the regular data directly into memory, since it's too big.
+_DATA_FOLDER = os.path.join("/data", "dsb15_pkl")
+_TRAIN_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_train")
+_TEST_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_validate")
+_TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 
-patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_train/*/study/"), key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))  # glob is non-deterministic!
+ALL_PATIENT_IDS = range(1, 501)
 
-validation_patients_indices = get_cross_validation_indices(indices=range(1,501), validation_index=0)
-train_patients_indices = [i for i in range(1,501) if i not in validation_patients_indices]
 
-VALIDATION_REGEX = "|".join(["(/%d/)"%i for i in validation_patients_indices])
+_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1)) 
 
-train_patient_folders = [folder for folder in patient_folders if re.search(VALIDATION_REGEX, folder) is None]
-validation_patient_folders = [folder for folder in patient_folders if folder not in train_patient_folders]
 
-regular_labels = pickle.load(open("/data/dsb15_pkl/train.pkl","r"))
+def _find_patient_folders(root_folder):
+    """Finds and sorts all patient folders.
+    """
+    patient_folder_format = os.path.join(root_folder, "*", "study")
+    patient_folders = glob.glob(patient_folder_format)
+    patient_folders.sort(key=_extract_id_from_path)
+    return patient_folders
 
-test_patient_folders = sorted(glob.glob("/data/dsb15_pkl/pkl_validate/*/study/"), key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))  # glob is non-deterministic!
 
-NUM_TRAIN_PATIENTS = len(train_patient_folders)
-NUM_VALID_PATIENTS = len(validation_patient_folders)
-NUM_TEST_PATIENTS = len(test_patient_folders)
+def _split_train_val(patient_folders):
+    """Splits the patient folders into train and validation splits.
+    """
+    # Construct train and validation splits using default parameters
+    validation_patients_indices = validation_set.get_cross_validation_indices(
+        indices=ALL_PATIENT_IDS, validation_index=0)
+    train_patients_indices = [
+        i for i in ALL_PATIENT_IDS if i not in validation_patients_indices]
 
+    # Split the folder names accordingly
+    # This regex is a big OR-clause if the folder corresponds to any of the
+    # validation indices:
+    _VALIDATION_REGEX = "|".join(
+        ["(/%d/)"%i for i in validation_patients_indices])
+    train_patient_folders = [
+        folder for folder in patient_folders
+        if not re.search(_VALIDATION_REGEX, folder)]
+    validation_patient_folders = [
+        folder for folder in patient_folders
+        if folder not in train_patient_folders]
+
+    return (
+        train_patient_folders, validation_patient_folders,
+        validation_patients_indices, train_patients_indices)
+
+
+def _load_file(path):
+    with open(path, "r") as f:
+        data = pickle.load(f)
+    return data
+
+# Find train patients and split off validation
+train_patient_folders, validation_patient_folders, validation_patients_indices, train_patients_indices=(
+    _split_train_val(_find_patient_folders(_TRAIN_DATA_FOLDER)))
+# Find test patients
+test_patient_folders = _find_patient_folders(_TEST_DATA_FOLDER)
+# Aggregate in a dict
+patient_folders = {
+    "train": train_patient_folders,
+    "validation": validation_patient_folders,
+    "test": test_patient_folders,
+}
+num_patients = {set:len(patient_folders[set]) for set in patient_folders}
+NUM_TRAIN_PATIENTS = num_patients['train']
+NUM_VALID_PATIENTS = num_patients['validation']
+NUM_TEST_PATIENTS = num_patients['test']
 NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
+
+# Load the labels
+regular_labels = _load_file(_TRAIN_LABELS_PATH)
+
 
 ##############
 # Sunny data #
 ##############
+# This small dataset is loaded into memory
+_SUNNY_DATA_PATH = os.path.join(_DATA_FOLDER, "pkl_annotated", "data.pkl")
 
-sunny_data = pickle.load(open("/data/dsb15_pkl/pkl_annotated/data.pkl","rb"))
-num_sunny_images = len(sunny_data["images"])
+_sunny_data = _load_file(_SUNNY_DATA_PATH)
+num_sunny_images = len(_sunny_data["images"])
 
-validation_sunny_indices = get_cross_validation_indices(indices=range(num_sunny_images))
-train_sunny_indices = [i for i in range(num_sunny_images) if i not in validation_sunny_indices]
+_validation_sunny_indices = validation_set.get_cross_validation_indices(
+    indices=range(num_sunny_images))
+_train_sunny_indices = [
+    i for i in range(num_sunny_images) if i not in _validation_sunny_indices]
 
-sunny_train_images = np.array(sunny_data['images'])[train_sunny_indices]
-sunny_train_labels = np.array(sunny_data['labels'])[train_sunny_indices]
+sunny_train_images = np.array(_sunny_data["images"])[_train_sunny_indices]
+sunny_train_labels = np.array(_sunny_data["labels"])[_train_sunny_indices]
+sunny_validation_images = np.array(_sunny_data["images"])[_validation_sunny_indices]
+sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indices]
 
-sunny_validation_images = np.array(sunny_data['images'])[validation_sunny_indices]
-sunny_validation_labels = np.array(sunny_data['labels'])[validation_sunny_indices]
+
+##################################
+# Methods for accessing the data #
+##################################
 
 
-def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train",
-                     preprocess_function=None):
+def get_patient_data(indices, wanted_input_tags, wanted_output_tags, 
+                     set="train", preprocess_function=None):
     """
     return a dict with the desired data matched to the required tags
     :param wanted_data_tags:
     :return:
     """
-    result = {
-        "input": {
-        },
-        "output": {
-        },
-    }
 
-    for tag in wanted_output_tags:
-        if tag in ["systole", "diastole", "systole:onehot", "diastole:onehot", "systole:class_weight", "diastole:class_weight"]:
-            result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, 600), dtype='float32')
-        if tag in ["systole:value", "diastole:value"]:
-            result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, ), dtype='float32')
-        # and for the predictions, keep track of which patient is sitting where in the batch
-        if tag=="patients":
-            result["output"][tag] = np.zeros((config().batch_size * config().batches_per_chunk, ), dtype='int32')
+    def initialise_empty():
+        """Initialise empty chunk
+        """
+        result = {
+            "input": {},
+            "output": {},
+        }
 
-    for tag in wanted_input_tags:
-        if tag in config().data_sizes:
-            chunk_shape = list(config().data_sizes[tag])
-            chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
-            chunk_shape = tuple(chunk_shape)
-            result["input"][tag] = np.zeros(chunk_shape, dtype='float32')
+        no_samples = _config().batch_size * _config().batches_per_chunk
+        vector_size = (no_samples, )
+        matrix_size = (no_samples, 600)
 
-    if set=="train":
-        folders = [train_patient_folders[i] for i in indices if 0<=i<len(train_patient_folders)]
-    elif set=="validation":
-        folders = [validation_patient_folders[i] for i in indices if 0<=i<len(validation_patient_folders)]
-    elif set=="test":
-        folders = [test_patient_folders[i] for i in indices if 0<=i<len(test_patient_folders)]
-    else:
-        raise "Don't know the dataset %s" % set
+        OUTPUT_DATA_SIZE_TYPE = {
+            "systole": (matrix_size, "float32"),
+            "diastole": (matrix_size, "float32"),
+            "systole:onehot": (matrix_size, "float32"),
+            "diastole:onehot": (matrix_size, "float32"),
+            "systole:class_weight": (matrix_size, "float32"),
+            "diastole:class_weight": (matrix_size, "float32"),
+            "systole:value": (vector_size, "float32"),
+            "diastole:value": (vector_size, "float32"),
+            "patients": (vector_size, "int32"),
+        }
 
+        for tag in wanted_output_tags:
+            if tag in OUTPUT_DATA_SIZE_TYPE:
+                size, dtype = OUTPUT_DATA_SIZE_TYPE[tag]
+                result["output"][tag] = np.zeros(size, dtype=dtype)
 
+        for tag in wanted_input_tags:
+            if tag in _config().data_sizes:
+                chunk_shape = list(_config().data_sizes[tag])
+                chunk_shape[0] = chunk_shape[0] * _config().batches_per_chunk
+                chunk_shape = tuple(chunk_shape)
+                result["input"][tag] = np.zeros(chunk_shape, dtype="float32")
+        return result
+
+    result = initialise_empty()
+
+    if set not in patient_folders: 
+        raise ValueError("Don't know the dataset %s" % set)
+    folders = [
+        patient_folders[set][i] for i in indices if 0<=i<num_patients[set]]
+
+    # Iterate over folders
     for i, folder in enumerate(folders):
-        files = sorted(glob.glob(folder+"*"))  # glob is non-deterministic!
+        wildcard_file_path = os.path.join(folder, "*")
+        files = sorted(glob.glob(wildcard_file_path))  # glob is non-deterministic!
         patient_result = dict()
+        # Iterate over input tags
         for tag in wanted_input_tags:
             if tag.startswith("sliced:data:singleslice"):
                 l = [sax for sax in files if "sax" in sax]
@@ -117,14 +199,15 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
             elif tag.startswith("sliced:meta"):
                 # get the key used in the pickle
                 key = tag[len("slided:meta"):]
-                patient_result[tag] = [pickle.load(open(f, "r"))['metadata'][key] for f in files]
+                patient_result[tag] = [disk_access.load_metadata_from_file(f)[key] for f in files]
             # add others when needed
 
+        # Preprocess input
         preprocess_function(patient_result, result=result["input"], index=i)
 
         # load the labels
         # find the id of the current patient in the folder name (=safer)
-        id = int(re.search(r'/(\d+)/', folder).group(1))
+        id = _extract_id_from_path(folder)
         if "patients" in wanted_output_tags:
             result["output"]["patients"][i] = id
 
@@ -149,17 +232,18 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
             if "diastole:value" in wanted_output_tags:
                 result["output"]["diastole:value"][i] = V_diastole
 
-            if "diastole:class_weight" in wanted_output_tags:
-                result["output"]["diastole:class_weight"][i] = utils.linear_weighted(V_diastole)
             if "systole:class_weight" in wanted_output_tags:
                 result["output"]["systole:class_weight"][i] = utils.linear_weighted(V_systole)
+            if "diastole:class_weight" in wanted_output_tags:
+                result["output"]["diastole:class_weight"][i] = utils.linear_weighted(V_diastole)
+
         else:
             if set!="test":
                 raise Exception("unknown patient in train or validation set")
 
 
     # Check if any of the inputs or outputs are still empty!
-    for key, value in chain(result["input"].iteritems(), result["output"].iteritems()):
+    for key, value in itertools.chain(result["input"].iteritems(), result["output"].iteritems()):
         if not np.any(value): #there are only zeros in value
             raise Exception("there is an empty value at key %s" % key)
         if not np.isfinite(value).all(): #there are NaN's or infinites somewhere
@@ -182,14 +266,14 @@ def get_sunny_patient_data(indices, set="train"):
     images = sunny_train_images
     labels = sunny_train_labels
 
-    chunk_shape = list(config().data_sizes["sunny"])
-    chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
+    chunk_shape = list(_config().data_sizes["sunny"])
+    chunk_shape[0] = chunk_shape[0] * _config().batches_per_chunk
     chunk_shape = tuple(chunk_shape)
 
     sunny_chunk = np.zeros(chunk_shape, dtype='float32')
 
-    chunk_shape = list(config().data_sizes["sunny"])
-    chunk_shape[0] = chunk_shape[0] * config().batches_per_chunk
+    chunk_shape = list(_config().data_sizes["sunny"])
+    chunk_shape[0] = chunk_shape[0] * _config().batches_per_chunk
     chunk_shape.remove(1)
     chunk_shape = tuple(chunk_shape)
 
@@ -199,7 +283,7 @@ def get_sunny_patient_data(indices, set="train"):
         if indices[k]<len(images):
             img = images[indices[k]]
             lbl = labels[indices[k]]
-            config().sunny_preprocess(sunny_chunk[k], img, sunny_label_chunk[k], lbl)
+            _config().sunny_preprocess(sunny_chunk[k], img, sunny_label_chunk[k], lbl)
         else:
             print "requesting out of bound sunny?"
             pass #zeros
@@ -215,29 +299,30 @@ def get_sunny_patient_data(indices, set="train"):
 
 
 def generate_train_batch(required_input_keys, required_output_keys):
-    # generate sunny data
+    """Creates an iterator that returns train batches."""
 
-    sunny_chunk_size = config().sunny_batch_size * config().batches_per_chunk
-    chunk_size = config().batch_size * config().batches_per_chunk
+    sunny_chunk_size = _config().sunny_batch_size * _config().batches_per_chunk
+    chunk_size = _config().batch_size * _config().batches_per_chunk
 
     while True:
         result = {}
         input_keys_to_do = list(required_input_keys) #clone
         output_keys_to_do = list(required_output_keys) #clone
         if "sunny" in input_keys_to_do or "segmentation" in output_keys_to_do:
-            indices = config().rng.randint(0, len(sunny_train_images), sunny_chunk_size)
+            indices = _config().rng.randint(0, len(sunny_train_images), sunny_chunk_size)
             sunny_patient_data = get_sunny_patient_data(indices, set="train")
             result = utils.merge(result, sunny_patient_data)
             input_keys_to_do.remove("sunny")
             output_keys_to_do.remove("segmentation")
 
-        indices = config().rng.randint(0, len(train_patient_folders), chunk_size)  #
+        indices = _config().rng.randint(0, len(train_patient_folders), chunk_size)  #
         kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do, set="train",
-                                       preprocess_function=config().preprocess_train)
+                                       preprocess_function=_config().preprocess_train)
 
         result = utils.merge(result, kaggle_data)
 
         yield result
+
 
 
 def generate_validation_batch(required_input_keys, required_output_keys, set="validation"):
@@ -245,18 +330,18 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
     sunny_length = get_lenght_of_set(name="sunny", set=set)
     regular_length = get_lenght_of_set(name="regular", set=set)
 
-    sunny_batches = int(np.ceil(sunny_length / float(config().sunny_batch_size)))
-    regular_batches = int(np.ceil(regular_length / float(config().batch_size)))
+    sunny_batches = int(np.ceil(sunny_length / float(_config().sunny_batch_size)))
+    regular_batches = int(np.ceil(regular_length / float(_config().batch_size)))
 
     if "sunny" in required_input_keys or "segmentation" in required_output_keys:
         num_batches = max(sunny_batches, regular_batches)
     else:
         num_batches = regular_batches
 
-    num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
+    num_chunks = int(np.ceil(num_batches / float(_config().batches_per_chunk)))
 
-    sunny_chunk_size = config().batches_per_chunk * config().sunny_batch_size
-    regular_chunk_size = config().batches_per_chunk * config().batch_size
+    sunny_chunk_size = _config().batches_per_chunk * _config().sunny_batch_size
+    regular_chunk_size = _config().batches_per_chunk * _config().batch_size
 
     for n in xrange(num_chunks):
 
@@ -275,7 +360,7 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
 
         indices = range(n*regular_chunk_size, (n+1)*regular_chunk_size)
         kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do, set=set,
-                                       preprocess_function=config().preprocess_validation)
+                                       preprocess_function=_config().preprocess_validation)
 
         result = utils.merge(result, kaggle_data)
 
@@ -292,14 +377,14 @@ def generate_test_batch(required_input_keys, required_output_keys, augmentation=
     output_keys_to_do = list(required_output_keys) # clone
 
     for set in sets:
-        regular_length = get_lenght_of_set(name="regular", set=set) * config().test_time_augmentations
-        num_batches = int(np.ceil(regular_length / float(config().batch_size)))
-        regular_chunk_size = config().batches_per_chunk * config().batch_size
-        num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
+        regular_length = get_lenght_of_set(name="regular", set=set) * _config().test_time_augmentations
+        num_batches = int(np.ceil(regular_length / float(_config().batch_size)))
+        regular_chunk_size = _config().batches_per_chunk * _config().batch_size
+        num_chunks = int(np.ceil(num_batches / float(_config().batches_per_chunk)))
 
         indices_for_this_set = xrange(regular_length)
         indices_for_this_set = list(itertools.chain.from_iterable(
-            itertools.repeat(x, config().test_time_augmentations) for x in indices_for_this_set))
+            itertools.repeat(x, _config().test_time_augmentations) for x in indices_for_this_set))
 
         for n in xrange(num_chunks):
 
@@ -307,7 +392,7 @@ def generate_test_batch(required_input_keys, required_output_keys, augmentation=
             indices = [indices_for_this_set[i] for i in test_sample_numbers if i<len(indices_for_this_set)]
             kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do,
                                            set=set,
-                                           preprocess_function=config().preprocess_test)
+                                           preprocess_function=_config().preprocess_test)
 
             yield kaggle_data
 
@@ -322,8 +407,8 @@ def get_number_of_validation_samples(set="validation"):
 def get_number_of_test_batches(sets=["train", "validation", "test"]):
     num_batches = 0
     for set in sets:
-        regular_length = get_lenght_of_set(name="regular", set=set) * config().test_time_augmentations
-        num_batches += int(np.ceil(regular_length / float(config().batch_size)))
+        regular_length = get_lenght_of_set(name="regular", set=set) * _config().test_time_augmentations
+        num_batches += int(np.ceil(regular_length / float(_config().batch_size)))
 
     return num_batches
 

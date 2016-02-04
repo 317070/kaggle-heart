@@ -172,7 +172,8 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
     # Iterate over folders
     for i, folder in enumerate(folders):
-        files = sorted(glob.glob(folder+"*"))  # glob is non-deterministic!
+        wildcard_file_path = os.path.join(folder, "*")
+        files = sorted(glob.glob(wildcard_file_path))  # glob is non-deterministic!
         patient_result = dict()
         # Iterate over input tags
         for tag in wanted_input_tags:
@@ -296,12 +297,12 @@ def get_sunny_patient_data(indices, set="train"):
 
 
 def generate_train_batch(required_input_keys, required_output_keys):
-    # generate sunny data
+    """Creates an iterator that returns train batches."""
 
     sunny_chunk_size = _config().sunny_batch_size * _config().batches_per_chunk
     chunk_size = _config().batch_size * _config().batches_per_chunk
 
-    for n in xrange(_config().num_chunks_train):
+    while True:
         result = {}
         input_keys_to_do = list(required_input_keys) #clone
         output_keys_to_do = list(required_output_keys) #clone
@@ -319,6 +320,7 @@ def generate_train_batch(required_input_keys, required_output_keys):
         result = utils.merge(result, kaggle_data)
 
         yield result
+
 
 
 def generate_validation_batch(required_input_keys, required_output_keys, set="validation"):

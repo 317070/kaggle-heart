@@ -31,7 +31,7 @@ _TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 ALL_PATIENT_IDS = range(1, 501)
 
 
-_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', folder).group(1)) 
+_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1)) 
 
 
 def _find_patient_folders(root_folder):

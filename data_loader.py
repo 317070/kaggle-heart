@@ -82,14 +82,14 @@ test_patient_folders = _find_patient_folders(_TEST_DATA_FOLDER)
 # Aggregate in a dict
 patient_folders = {
     "train": train_patient_folders,
-    "validate": validation_patient_folders,
+    "validation": validation_patient_folders,
     "test": test_patient_folders,
 }
 num_patients = {set:len(patient_folders[set]) for set in patient_folders}
 NUM_TRAIN_PATIENTS = num_patients['train']
-NUM_VALIDATE_PATIENTS = num_patients['validate']
+NUM_VALID_PATIENTS = num_patients['validation']
 NUM_TEST_PATIENTS = num_patients['test']
-NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALIDATE_PATIENTS + NUM_TEST_PATIENTS
+NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
 
 # Load the labels
 regular_labels = _load_file(_TRAIN_LABELS_PATH)
@@ -149,7 +149,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             "diastole:class_weight": (matrix_size, "float32"),
             "systole:value": (vector_size, "float32"),
             "diastole:value": (vector_size, "float32"),
-            "patients": (vector_size, "float32"),
+            "patients": (vector_size, "int32"),
         }
 
         for tag in wanted_output_tags:
@@ -377,7 +377,7 @@ def generate_test_batch(required_input_keys, required_output_keys, augmentation=
     output_keys_to_do = list(required_output_keys) # clone
 
     for set in sets:
-        regular_length = get_lenght_of_set(name="regular", set=set)
+        regular_length = get_lenght_of_set(name="regular", set=set) * _config().test_time_augmentations
         num_batches = int(np.ceil(regular_length / float(_config().batch_size)))
         regular_chunk_size = _config().batches_per_chunk * _config().batch_size
         num_chunks = int(np.ceil(num_batches / float(_config().batches_per_chunk)))

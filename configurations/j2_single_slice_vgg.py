@@ -1,5 +1,6 @@
 from default import *
 
+import theano
 import theano.tensor as T
 import lasagne as nn
 
@@ -39,7 +40,8 @@ build_updates = updates.build_adam_updates
 preprocess_train = preprocess.preprocess_with_augmentation
 preprocess_validation = preprocess.preprocess  # no augmentation
 preprocess_test = preprocess.preprocess_with_augmentation
-test_time_augmentations = 100
+test_time_augmentations = 100*20*30  # More augmentations since a we only use single slices
+create_test_gen = partial(generate_test_batch, set='validation')  # validate as well by default
 
 augmentation_params = {
     "rotation": (-16, 16),
@@ -47,7 +49,7 @@ augmentation_params = {
     "translation": (-8, 8),
 }
 
-postprocess = postprocess.postprocess
+postprocess = postprocess.postprocess_value
 
 # Input sizes
 image_size = 128
@@ -135,6 +137,8 @@ def build_model():
         "outputs": {
             "systole:value": l_systole,
             "diastole:value": l_diastole,
+            "systole:sigma": deep_learning_layers.FixedConstantLayer(np.ones((batch_size, 1), dtype='float32')*20./np.sqrt(test_time_augmentations)),
+            "diastole:sigma": deep_learning_layers.FixedConstantLayer(np.ones((batch_size, 1), dtype='float32')*30./np.sqrt(test_time_augmentations)), 
         },
         "regularizable": {
             ldsys1: l2_weight,

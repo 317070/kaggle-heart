@@ -56,10 +56,14 @@ def postprocess_onehot(network_outputs_dict):
 
 
 def postprocess_value(network_outputs_dict):
-    """
-    convert the network outputs, to the desired kaggle outputs
-    """
+    """Convert the network outputs to a Gaussian distribution.
 
+    The network should have the outputs:
+    - systole:value
+    - diastole:value
+    - systole:sigma (optional, default=0)
+    - diastole:sigma (optional, default=0)
+    """
     kaggle_systoles, kaggle_diastoles = None, None
     if "systole:value" in network_outputs_dict:
         mu = network_outputs_dict["systole:value"][:,0]
@@ -70,8 +74,6 @@ def postprocess_value(network_outputs_dict):
         kaggle_systoles = utils.numpy_mu_sigma_erf(mu, sigma)
     if "diastole:value" in network_outputs_dict:
         mu = network_outputs_dict["diastole:value"][:,0]
-        print mu
-
         if "diastole:sigma" in network_outputs_dict:
             sigma = network_outputs_dict["diastole:sigma"][:,0]
         else:

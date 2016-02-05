@@ -31,7 +31,6 @@ print "Experiment ID: %s" % expid
 print
 
 username = pwd.getpwuid(os.getuid())[0]
-print username
 # metadata
 if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/train/%s' % username):
     os.mkdir('/mnt/storage/metadata/kaggle-heart/train/%s' % username)

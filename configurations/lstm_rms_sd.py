@@ -30,22 +30,22 @@ batch_size = 4
 nbatches_chunk = 1
 chunk_size = batch_size * nbatches_chunk
 
-train_data_iterator = data_iterators.PreloadingPatientsGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
-                                                                 batch_size=chunk_size,
-                                                                 transform_params=train_transformation_params,
-                                                                 labels_path='/data/dsb15_pkl/train.csv',
-                                                                 full_batch=True, random=True, infinite=True)
+train_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
+                                                           batch_size=chunk_size,
+                                                           transform_params=train_transformation_params,
+                                                           labels_path='/data/dsb15_pkl/train.csv',
+                                                           full_batch=True, random=True, infinite=True)
 
-valid_data_iterator = data_iterators.PreloadingPatientsGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
-                                                                 batch_size=chunk_size,
-                                                                 transform_params=valid_transformation_params,
-                                                                 labels_path='/data/dsb15_pkl/train.csv',
-                                                                 full_batch=False, random=False, infinite=False)
+valid_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
+                                                           batch_size=chunk_size,
+                                                           transform_params=valid_transformation_params,
+                                                           labels_path='/data/dsb15_pkl/train.csv',
+                                                           full_batch=False, random=False, infinite=False)
 
-test_data_iterator = data_iterators.PreloadingPatientsGenerator(data_path='/data/dsb15_pkl/pkl_validate',
-                                                                batch_size=batch_size,
-                                                                transform_params=train_transformation_params,
-                                                                full_batch=False, random=False, infinite=False)
+test_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
+                                                          batch_size=batch_size,
+                                                          transform_params=train_transformation_params,
+                                                          full_batch=False, random=False, infinite=False)
 
 nslices = train_data_iterator.nslices
 valid_data_iterator.nslices = nslices

@@ -16,12 +16,13 @@ metadata_path = sys.argv[1]
 set = sys.argv[2] if len(sys.argv) >= 2 else 'test'
 n_tta_iterations = int(sys.argv[3]) if len(sys.argv) >= 3 else 100
 
-metadata = utils.load_pkl('/mnt/storage/metadata/kaggle-heart/train/ira/' + metadata_path)
+username = os.getenv('USERNAME')
+metadata = utils.load_pkl('/mnt/storage/metadata/kaggle-heart/train/%s/%s' % (username, metadata_path))
 config_name = metadata['configuration']
 set_configuration(config_name)
 
 # predictions paths
-prediction_dir = '/mnt/storage/metadata/kaggle-heart/predictions/ira'
+prediction_dir = '/mnt/storage/metadata/kaggle-heart/predictions/%s' % username
 if not os.path.isdir(prediction_dir):
     os.mkdir(prediction_dir)
 prediction_path = prediction_dir + "/%s--%s.pkl" % (metadata['experiment_id'], set)

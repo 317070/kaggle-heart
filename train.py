@@ -1,5 +1,6 @@
 import cPickle as pickle
 import os
+import pwd
 import string
 import sys
 import time
@@ -29,15 +30,17 @@ print
 print "Experiment ID: %s" % expid
 print
 
+username = pwd.getpwuid(os.getuid())[0]
+print username
 # metadata
-if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/train/ira'):
-    os.mkdir('/mnt/storage/metadata/kaggle-heart/train/ira/')
-metadata_path = '/mnt/storage/metadata/kaggle-heart/train/ira/%s.pkl' % expid
+if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/train/%s' % username):
+    os.mkdir('/mnt/storage/metadata/kaggle-heart/train/%s' % username)
+metadata_path = '/mnt/storage/metadata/kaggle-heart/train/%s/%s.pkl' % (username, expid)
 
 # logs
-if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/logs/ira'):
-    os.mkdir('/mnt/storage/metadata/kaggle-heart/logs/ira')
-sys.stdout = logger.Logger('/mnt/storage/metadata/kaggle-heart/logs/ira/%s.log' % expid)
+if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/logs/%s' % username):
+    os.mkdir('/mnt/storage/metadata/kaggle-heart/logs/%s' % username)
+sys.stdout = logger.Logger('/mnt/storage/metadata/kaggle-heart/logs/%s/%s.log' % (username, expid))
 
 print 'Build model'
 model = config().build_model()

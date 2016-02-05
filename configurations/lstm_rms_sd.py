@@ -26,7 +26,7 @@ valid_transformation_params = {
     'shear_range': None
 }
 
-batch_size = 2
+batch_size = 4
 nbatches_chunk = 1
 chunk_size = batch_size * nbatches_chunk
 
@@ -55,7 +55,7 @@ print 'n_slices', nslices
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
 max_nchunks = nchunks_per_epoch * 150
 learning_rate_schedule = {
-    0: 0.0005,
+    0: 0.001,
     int(max_nchunks * 0.25): 0.00007,
     int(max_nchunks * 0.5): 0.00003,
     int(max_nchunks * 0.75): 0.00001,
@@ -83,13 +83,19 @@ def build_model():
 
     l_rshp_inp = nn.layers.ReshapeLayer(l_in, (-1, 1) + patch_size)  # (batch_size*nslices*30,1,)+patch_size
 
-    l = conv3(l_rshp_inp, num_filters=16)
+    l = conv3(l_rshp_inp, num_filters=8)
+    l = conv3(l, num_filters=8)
+
+    l = max_pool(l)
+
+    l = conv3(l, num_filters=16)
     l = conv3(l, num_filters=16)
 
     l = max_pool(l)
 
     l = conv3(l, num_filters=32)
     l = conv3(l, num_filters=32)
+    l = conv3(l, num_filters=32)
 
     l = max_pool(l)
 
@@ -99,15 +105,9 @@ def build_model():
 
     l = max_pool(l)
 
-    l = conv3(l, num_filters=128)
-    l = conv3(l, num_filters=128)
-    l = conv3(l, num_filters=128)
-
-    l = max_pool(l)
-
-    l = conv3(l, num_filters=128)
-    l = conv3(l, num_filters=128)
-    l = conv3(l, num_filters=128)
+    l = conv3(l, num_filters=64)
+    l = conv3(l, num_filters=64)
+    l = conv3(l, num_filters=64)
 
     l = max_pool(l)
 

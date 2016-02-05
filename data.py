@@ -44,6 +44,14 @@ def read_slice(path):
     return d
 
 
+def read_slice_with_metadata(path):
+    d = pickle.load(open(path))
+    img_data = d['data']
+    m_data = d['metadata']
+    # TODO select relevant fields from metadata
+    return img_data, m_data
+
+
 def sample_augmentation_parameters(transformation):
     random_params = None
     if all([transformation['rotation_range'],
@@ -79,7 +87,6 @@ def transform(data, transformation, random_augmentation_params=None):
         total_tform = tform
 
         if random_augmentation_params:
-            print 'using augmantation', random_augmentation_params
             tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
 
             augment_tform = build_augmentation_transform(rotation=random_augmentation_params['rotation'],

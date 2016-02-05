@@ -155,7 +155,7 @@ class PreloadingPatientsGenerator(object):
         nslices = []
         for p in patient_paths:
             pid = int(re.search(r'/(\d+)/', p).group(1))
-            spaths = sorted(glob.glob(p + '/sax_*.pkl'))
+            spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
             self.pid2slice_paths[pid] = spaths
             self.slice_paths += spaths
             nslices.append(len(spaths))
@@ -213,11 +213,9 @@ class PreloadingPatientsGenerator(object):
                 for i, idx in enumerate(idxs_batch):
                     pid = self.patient_ids[idx]
                     patients_ids.append(pid)
-                    print 'Patient', pid
                     # sample random transformation per patient
                     patient_augmentation_params = data.sample_augmentation_parameters(self.transformation_params)
-                    slice_paths = self.pid2slice_paths[pid]
-                    slice_paths = self.rng.choice(slice_paths, size=min(self.nslices, len(slice_paths)), replace=False)
+                    slice_paths = self.pid2slice_paths[pid][:self.nslices]  # take first nslices TODO find order
                     for j, sp in enumerate(slice_paths):
                         self.x_batch[i, j] = data.transform(self.slice_path2npy[sp], self.transformation_params,
                                                             patient_augmentation_params)

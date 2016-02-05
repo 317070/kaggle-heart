@@ -7,6 +7,7 @@ import theano.tensor as T
 import utils
 from collections import defaultdict
 from functools import partial
+import nn_heart
 
 restart_from_save = None
 rng = np.random.RandomState(42)
@@ -26,7 +27,7 @@ valid_transformation_params = {
 }
 
 batch_size = 2
-nbatches_chunk = 4
+nbatches_chunk = 1
 chunk_size = batch_size * nbatches_chunk
 
 train_data_iterator = data_iterators.PreloadingPatientsGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
@@ -46,16 +47,15 @@ test_data_iterator = data_iterators.PreloadingPatientsGenerator(data_path='/data
                                                                 transform_params=train_transformation_params,
                                                                 full_batch=False, random=False, infinite=False)
 
-max_slices = max(train_data_iterator.max_slices, valid_data_iterator.max_slices, test_data_iterator.max_slices)
-# fix max_slices for each iterator, so the resulting arrays have equal 2nd dimension
-train_data_iterator.max_slices = max_slices
-valid_data_iterator.max_slices = max_slices
-test_data_iterator.max_slices = max_slices
+nslices = train_data_iterator.nslices
+valid_data_iterator.nslices = nslices
+test_data_iterator.nslices = nslices
+print 'n_slices', nslices
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
 max_nchunks = nchunks_per_epoch * 150
 learning_rate_schedule = {
-    0: 0.0001,
+    0: 0.0005,
     int(max_nchunks * 0.25): 0.00007,
     int(max_nchunks * 0.5): 0.00003,
     int(max_nchunks * 0.75): 0.00001,
@@ -63,8 +63,6 @@ learning_rate_schedule = {
 validate_every = nchunks_per_epoch
 save_every = nchunks_per_epoch
 l2_weight = 0.0005
-
-max_slices = 0  # TODO
 
 conv3 = partial(Conv2DDNNLayer,
                 stride=(1, 1),
@@ -81,39 +79,40 @@ max_pool = partial(MaxPool2DDNNLayer,
 
 
 def build_model():
-    l_in = nn.layers.InputLayer((None, max_slices, 30) + patch_size)
+    l_in = nn.layers.InputLayer((None, nslices, 30) + patch_size)
 
-    l_rshp_inp = nn.layers.ReshapeLayer(l_in, (-1,) + patch_size)
+    l_rshp_inp = nn.layers.ReshapeLayer(l_in, (-1, 1) + patch_size)  # (batch_size*nslices*30,1,)+patch_size
 
-    l = conv3(l_rshp_inp, num_filters=64)
+    l = conv3(l_rshp_inp, num_filters=16)
+    l = conv3(l, num_filters=16)
+
+    l = max_pool(l)
+
+    l = conv3(l, num_filters=32)
+    l = conv3(l, num_filters=32)
+
+    l = max_pool(l)
+
+    l = conv3(l, num_filters=64)
+    l = conv3(l, num_filters=64)
     l = conv3(l, num_filters=64)
 
     l = max_pool(l)
 
     l = conv3(l, num_filters=128)
     l = conv3(l, num_filters=128)
+    l = conv3(l, num_filters=128)
 
     l = max_pool(l)
 
-    l = conv3(l, num_filters=256)
-    l = conv3(l, num_filters=256)
-    l = conv3(l, num_filters=256)
+    l = conv3(l, num_filters=128)
+    l = conv3(l, num_filters=128)
+    l = conv3(l, num_filters=128)
 
     l = max_pool(l)
 
-    l = conv3(l, num_filters=512)
-    l = conv3(l, num_filters=512)
-    l = conv3(l, num_filters=512)
-
-    l = max_pool(l)
-
-    l = conv3(l, num_filters=512)
-    l = conv3(l, num_filters=512)
-    l = conv3(l, num_filters=512)
-
-    l = max_pool(l)
-
-    l_rshp_conv = nn.layers.ReshapeLayer(l, (-1, 30) + patch_size)
+    l_rshp_conv = nn.layers.ReshapeLayer(l, (-1, 30,) + l.output_shape[-3:])
+    l_rshp_conv = nn.layers.ReshapeLayer(l_rshp_conv, ([0], 30, -1))
 
     input_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
     forget_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), b=nn.init.Constant(5.0))
@@ -121,27 +120,30 @@ def build_model():
     cell = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None,
                           nonlinearity=nn.nonlinearities.tanh)
 
-    l_lstm = nn.layers.LSTMLayer(l_rshp_conv, num_units=1024,
+    l_lstm = nn.layers.LSTMLayer(l_rshp_conv, num_units=256,
                                  ingate=input_gate, forgetgate=forget_gate,
                                  cell=cell, outgate=output_gate,
                                  peepholes=False, precompute_input=False,
-                                 learn_init=True, grad_clipping=5, only_return_final=True)
+                                 grad_clipping=5, only_return_final=True, unroll_scan=True)
+
+    # lstm gives (batch_size*nslices, num_units)
+    # TODO check reshapes
+    l_rshp_lstm = nn.layers.ReshapeLayer(l_lstm,
+                                         (-1, nslices, l_lstm.output_shape[-1]))  # (batch_size, nslices, num_units)
 
     # systole
-    l_d01 = nn.layers.DenseLayer(l_lstm, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
+    l_att0 = nn_heart.AttentionLayer(l_rshp_lstm)
+    l_d01 = nn.layers.DenseLayer(l_att0, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
 
-    l_rshp_d01 = nn.layers.ReshapeLayer(l_d01, (-1, max_slices))
-
-    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_rshp_d01, p=0.25), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 
     # diastole
-    l_d11 = nn.layers.DenseLayer(l_lstm, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
+    l_att1 = nn_heart.AttentionLayer(l_rshp_lstm)
+    l_d11 = nn.layers.DenseLayer(l_att1, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
 
-    l_rshp_d11 = nn.layers.ReshapeLayer(l_d11, (-1, max_slices))
-
-    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_rshp_d11, p=0.25), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 

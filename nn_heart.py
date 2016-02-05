@@ -1,5 +1,7 @@
 import lasagne as nn
 import theano.tensor as T
+import theano
+import numpy as np
 
 
 def cdf(sample, mu=0, sigma=1, eps=1e-6):
@@ -29,3 +31,17 @@ class NormalCDFLayer(nn.layers.MergeLayer):
 class NormalizationLayer(nn.layers.Layer):
     def get_output_for(self, input, **kwargs):
         return (input - T.mean(input, axis=[-2, -1], keepdims=True)) / T.std(input, axis=[-2, -1], keepdims=True)
+
+
+class AttentionLayer(nn.layers.Layer):
+    def __init__(self, incoming, u=nn.init.GlorotUniform(), **kwargs):
+        super(AttentionLayer, self).__init__(incoming, **kwargs)
+        num_inputs = self.input_shape[-1]
+        self.u = self.add_param(u, (num_inputs, 1), name='u')
+
+    def get_output_shape_for(self, input_shape):
+        return input_shape[0], input_shape[-1]
+
+    def get_output_for(self, input, **kwargs):
+        a = T.nnet.softmax(T.dot(input, self.u)[:, :, 0])
+        return T.sum(a[:, :, np.newaxis] * input, axis=1)

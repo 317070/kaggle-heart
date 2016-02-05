@@ -14,6 +14,12 @@ import theano.tensor as T
 import buffering
 from configuration import config, set_configuration
 
+# theano.config.warn_float64 = 'warn'
+# theano.config.scan.allow_output_prealloc = False
+# theano.config.profile = True
+# theano.config.profile_memory = True
+# theano.config.scan.allow_gc = True
+
 if len(sys.argv) < 2:
     sys.exit("Usage: train.py <configuration_name>")
 config_name = sys.argv[1]

@@ -152,14 +152,16 @@ class PreloadingPatientsGenerator(object):
 
         self.pid2slice_paths = defaultdict(list)
         self.slice_paths = []
-        self.max_slices = 0
+        nslices = []
         for p in patient_paths:
             pid = int(re.search(r'/(\d+)/', p).group(1))
             spaths = sorted(glob.glob(p + '/sax_*.pkl'))
             self.pid2slice_paths[pid] = spaths
             self.slice_paths += spaths
-            if len(spaths) > self.max_slices:
-                self.max_slices = len(spaths)
+            nslices.append(len(spaths))
+
+        # take most common number of slices
+        self.nslices = int(np.median(nslices))
 
         self.patient_ids = self.pid2slice_paths.keys()
 
@@ -191,7 +193,7 @@ class PreloadingPatientsGenerator(object):
             self.slice_path2npy = utils.load_pkl(self.data_path + '.pkl')
 
         # make empty batch
-        self.x_batch = np.zeros((self.batch_size, self.max_slices, 30) + self.transformation_params['patch_size'],
+        self.x_batch = np.zeros((self.batch_size, self.nslices, 30) + self.transformation_params['patch_size'],
                                 dtype='float32')
         self.y0_batch = np.zeros((self.batch_size, 1), dtype='float32')
         self.y1_batch = np.zeros((self.batch_size, 1), dtype='float32')
@@ -213,9 +215,9 @@ class PreloadingPatientsGenerator(object):
                     pid = self.patient_ids[idx]
                     patients_ids.append(pid)
                     slice_paths = self.pid2slice_paths[pid]
+                    slice_paths = self.rng.choice(slice_paths, size=min(self.nslices, len(slice_paths)), replace=False)
                     for j, sp in enumerate(slice_paths):
                         self.x_batch[i, j] = transform(self.slice_path2npy[sp], self.transformation_params)
-
                     if self.id2labels:
                         self.y0_batch[i] = self.id2labels[pid][0]
                         self.y1_batch[i] = self.id2labels[pid][1]

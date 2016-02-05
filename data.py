@@ -50,15 +50,20 @@ read_slice = lambda path: disk_access.load_data_from_file(path)
 
 
 def sample_augmentation_parameters(transformation):
-    shift_x = config().rng.uniform(*transformation['translation_range'])
-    shift_y = config().rng.uniform(*transformation['translation_range'])
-    translation = (shift_x, shift_y)
-    rotation = config().rng.uniform(*transformation['rotation_range'])
-    shear = config().rng.uniform(*transformation['shear_range'])
-    return {'translation': translation, 'rotation': rotation, 'shear': shear}
+    random_params = None
+    if all([transformation['rotation_range'],
+            transformation['translation_range'],
+            transformation['shear_range']]):
+        shift_x = config().rng.uniform(*transformation['translation_range'])
+        shift_y = config().rng.uniform(*transformation['translation_range'])
+        translation = (shift_x, shift_y)
+        rotation = config().rng.uniform(*transformation['rotation_range'])
+        shear = config().rng.uniform(*transformation['shear_range'])
+        random_params = {'translation': translation, 'rotation': rotation, 'shear': shear}
+    return random_params
 
 
-def transform(data, transformation):
+def transform(data, transformation, random_augmentation_params=None):
     """
     :param data: (30, height, width) matrix from one slice of MRI
     :param transformation:
@@ -66,11 +71,10 @@ def transform(data, transformation):
     """
     out_shape = (30,) + transformation['patch_size']
     out_data = np.zeros(out_shape, dtype='float32')
-    # need same random transform for the whole sequence
-    augment = any([transformation['rotation_range'],
-                   transformation['translation_range'],
-                   transformation['shear_range']])
-    if augment:
+
+    # if no random params are given -> sample new params
+    # if there is no augmentations random_augmentation_params = None
+    if not random_augmentation_params:
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
     for i in xrange(data.shape[0]):
@@ -79,7 +83,8 @@ def transform(data, transformation):
         tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
         total_tform = tform
 
-        if augment:
+        if random_augmentation_params:
+            print 'using augmantation', random_augmentation_params
             tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
 
             augment_tform = build_augmentation_transform(rotation=random_augmentation_params['rotation'],

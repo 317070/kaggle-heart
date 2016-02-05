@@ -92,9 +92,7 @@ class PreloadingSlicesVolumeDataGenerator(object):
         self.slicepath2pid = {}
         for s in self.slice_paths:
             self.slicepath2pid[s] = int(re.search(r'/(\d+)/', s).group(1))
-        print self.slice_paths
         self.nsamples = len(self.slice_paths)
-        print self.nsamples
         self.batch_size = batch_size
         self.rng = np.random.RandomState(42)
         self.full_batch = full_batch

@@ -43,7 +43,7 @@ def read_patient(path):
 
 
 # Use disk_access, which supports compressed caching
-read_slice = lambda path: disk_access.load_data_from_file(folder)
+read_slice = lambda path: disk_access.load_data_from_file(path)
 # def read_slice(path):
 #     d = pickle.load(open(path))['data']
 #     return d

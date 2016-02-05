@@ -1,4 +1,4 @@
-from data import *
+import data
 import glob
 import re
 import numpy as np
@@ -17,7 +17,7 @@ class PatientsDataGenerator(object):
     def __init__(self, data_path, batch_size, labels_path=None, full_batch=False, random=True, **kwargs):
         self.patient_paths = sorted(glob.glob(data_path + '/*/study/'),
                                     key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))
-        self.id2labels = read_labels(labels_path) if labels_path else None
+        self.id2labels = data.read_labels(labels_path) if labels_path else None
         self.batch_size = batch_size
         self.rng = np.random.RandomState(42)
         self.full_batch = full_batch
@@ -44,7 +44,7 @@ class PatientsDataGenerator(object):
             for pos in xrange(0, len(rand_idxs), self.batch_size):
                 idxs_batch = rand_idxs[pos:pos + self.batch_size]
                 patient_paths_batch = [self.patient_paths[i] for i in idxs_batch]
-                data_dict = read_patients_data(patient_paths_batch)
+                data_dict = data.read_patients_data(patient_paths_batch)
                 labels_dict = {id: self.id2labels[id] for id in data_dict.iterkeys()} if self.id2labels else None
                 if self.full_batch:
                     if len(idxs_batch) == self.batch_size:
@@ -68,7 +68,7 @@ class TransformSliceDataGenerator(PatientsDataGenerator):
                 for patient_id, slice_dict in data_dict.iteritems():
                     print patient_id, slice_dict.keys()
                     for slice_id, x in slice_dict.iteritems():
-                        batch_x[i] = transform(x, self.transform_params)
+                        batch_x[i] = data.transform(x, self.transform_params)
                         batch_y[i, 0] = labels_dict[patient_id][0]
                         batch_y[i, 1] = labels_dict[patient_id][1]
                         i += 1
@@ -94,7 +94,7 @@ class PreloadingSlicesVolumeDataGenerator(object):
         self.full_batch = full_batch
         self.random = random
         self.infinite = infinite
-        self.id2labels = read_labels(labels_path) if labels_path else None
+        self.id2labels = data.read_labels(labels_path) if labels_path else None
         self.transformation_params = transform_params
         # data
         self.slice2npy = None
@@ -105,7 +105,7 @@ class PreloadingSlicesVolumeDataGenerator(object):
             print 'loading data from %s' % self.data_path
             self.slice2npy = {}
             for s in self.slice_paths:
-                self.slice2npy[s] = read_slice(s)
+                self.slice2npy[s] = data.read_slice(s)
             utils.save_pkl(self.slice2npy, self.data_path + '.pkl')
             print 'saved to %s.pkl' % self.data_path
         else:
@@ -130,7 +130,7 @@ class PreloadingSlicesVolumeDataGenerator(object):
                 patients_ids = []
                 nb = len(idxs_batch)
                 for i, j in enumerate(idxs_batch):
-                    self.x_batch[i] = transform(self.slice2npy[self.slice_paths[j]], self.transformation_params)
+                    self.x_batch[i] = data.transform(self.slice2npy[self.slice_paths[j]], self.transformation_params)
                     patient_id = self.slicepath2pid[self.slice_paths[j]]
                     patients_ids.append(patient_id)
                     if self.id2labels:
@@ -166,7 +166,7 @@ class PreloadingPatientsGenerator(object):
         self.patient_ids = self.pid2slice_paths.keys()
 
         self.data_path = data_path
-        self.id2labels = read_labels(labels_path) if labels_path else None
+        self.id2labels = data.read_labels(labels_path) if labels_path else None
         self.batch_size = batch_size
         self.rng = np.random.RandomState(42)
         self.full_batch = full_batch
@@ -174,7 +174,6 @@ class PreloadingPatientsGenerator(object):
         self.nsamples = len(self.patient_ids)
         self.batch_size = batch_size
         self.infinite = infinite
-        self.id2labels = read_labels(labels_path) if labels_path else None
         self.transformation_params = transform_params
         # data
         self.slice_path2npy = None
@@ -185,7 +184,7 @@ class PreloadingPatientsGenerator(object):
             print 'loading data from %s' % self.data_path
             self.slice_path2npy = {}
             for s in self.slice_paths:
-                self.slice_path2npy[s] = read_slice(s)
+                self.slice_path2npy[s] = data.read_slice(s)
             utils.save_pkl(self.slice_path2npy, self.data_path + '.pkl')
             print 'saved to %s.pkl' % self.data_path
         else:
@@ -214,10 +213,14 @@ class PreloadingPatientsGenerator(object):
                 for i, idx in enumerate(idxs_batch):
                     pid = self.patient_ids[idx]
                     patients_ids.append(pid)
+                    print 'Patient', pid
+                    # sample random transformation per patient
+                    patient_augmentation_params = data.sample_augmentation_parameters(self.transformation_params)
                     slice_paths = self.pid2slice_paths[pid]
                     slice_paths = self.rng.choice(slice_paths, size=min(self.nslices, len(slice_paths)), replace=False)
                     for j, sp in enumerate(slice_paths):
-                        self.x_batch[i, j] = transform(self.slice_path2npy[sp], self.transformation_params)
+                        self.x_batch[i, j] = data.transform(self.slice_path2npy[sp], self.transformation_params,
+                                                            patient_augmentation_params)
                     if self.id2labels:
                         self.y0_batch[i] = self.id2labels[pid][0]
                         self.y1_batch[i] = self.id2labels[pid][1]

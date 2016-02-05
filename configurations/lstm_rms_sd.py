@@ -111,8 +111,14 @@ def build_model():
 
     l = max_pool(l)
 
-    l_rshp_conv = nn.layers.ReshapeLayer(l, (-1, 30,) + l.output_shape[-3:])
-    l_rshp_conv = nn.layers.ReshapeLayer(l_rshp_conv, ([0], 30, -1))
+    # (batch_size * nslices * 30, nfeature_maps, h, w) ->  (batch_size * nslices * 30, nfeature_maps * h * w)
+    l_rshp_conv = nn.layers.ReshapeLayer(l, ([0], -1))
+
+    # (batch_size * nslices * 30, nfeature_maps*h*w) ->  (batch_size, nslices, 30, nfeature_maps * h * w)
+    l_rshp_conv = nn.layers.ReshapeLayer(l_rshp_conv, (-1, nslices, 30, [1]))
+
+    # (batch_size, nslices, 30, nfeature_maps*h*w) ->  (batch_size * nslices, 30, nfeature_maps * h * w)
+    l_rshp_conv = nn.layers.ReshapeLayer(l_rshp_conv, (-1, 30, [3]))
 
     input_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
     forget_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), b=nn.init.Constant(5.0))
@@ -126,10 +132,8 @@ def build_model():
                                  peepholes=False, precompute_input=False,
                                  grad_clipping=5, only_return_final=True, unroll_scan=True)
 
-    # lstm gives (batch_size*nslices, num_units)
-    # TODO check reshapes
-    l_rshp_lstm = nn.layers.ReshapeLayer(l_lstm,
-                                         (-1, nslices, l_lstm.output_shape[-1]))  # (batch_size, nslices, num_units)
+    # (batch_size * nslices, num_rnn_units) ->  (batch_size, nslices, num_rnn_units)
+    l_rshp_lstm = nn.layers.ReshapeLayer(l_lstm, (-1, nslices, [1]))
 
     # systole
     l_att0 = nn_heart.AttentionLayer(l_rshp_lstm)

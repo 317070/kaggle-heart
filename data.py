@@ -1,11 +1,14 @@
-import cPickle as pickle
 import glob
 import re
+import timeit
+
 import numpy as np
 import skimage.io
 import skimage.transform
+
+import disk_access
+
 from configuration import config
-import timeit
 
 
 def read_labels(file_path):
@@ -39,9 +42,11 @@ def read_patient(path):
     return slices_dict
 
 
-def read_slice(path):
-    d = pickle.load(open(path))['data']
-    return d
+# Use disk_access, which supports compressed caching
+read_slice = lambda path: disk_access.load_data_from_file(folder)
+# def read_slice(path):
+#     d = pickle.load(open(path))['data']
+#     return d
 
 
 def sample_augmentation_parameters(transformation):

@@ -8,6 +8,8 @@ import utils
 from collections import defaultdict
 from functools import partial
 
+caching = 'memory'
+
 restart_from_save = None
 rng = np.random.RandomState(42)
 patch_size = (128, 128)
@@ -34,7 +36,7 @@ train_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_pa
                                                                          transform_params=train_transformation_params,
                                                                          labels_path='/data/dsb15_pkl/train.csv',
                                                                          full_batch=True, random=True, infinite=True)
-print '1234', train_data_iterator.nsamples
+
 valid_data_iterator = data_iterators.PreloadingSlicesVolumeDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
                                                                          batch_size=chunk_size,
                                                                          transform_params=valid_transformation_params,

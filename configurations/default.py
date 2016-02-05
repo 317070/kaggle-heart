@@ -15,7 +15,7 @@ all old config files automatically. Make sure this parameter does not change
 the algorithm of the old files.
 """
 
-caching = "memory"  # by default, cache accessed files in memory
+caching = None  # "memory"  # by default, cache accessed files in memory
 momentum = 0.9
 rng = np.random
 

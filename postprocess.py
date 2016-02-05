@@ -13,7 +13,6 @@ def make_monotone_distribution(distribution):
     return distribution
 
 def test_if_valid_distribution(distribution):
-    print distribution.shape
     if not np.isfinite(distribution).all():
         raise Exception("There is a non-finite numer in there")
 

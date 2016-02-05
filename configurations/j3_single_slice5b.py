@@ -17,6 +17,8 @@ from volume_estimation_layers import GaussianApproximationVolumeLayer
 import theano_printer
 from updates import build_adam_updates
 
+caching = None
+
 validate_every = 10
 validate_train_set = False
 save_every = 10
@@ -28,12 +30,14 @@ batches_per_chunk = 8
 
 batch_size = 64
 sunny_batch_size = 4
-num_epochs_train = 2000
+num_epochs_train = 200
 
 image_size = 96
 
 learning_rate_schedule = {
     0:     0.0001,
+    175:   0.00001,
+    195:   0.000001,
 }
 
 from preprocess import preprocess, preprocess_with_augmentation

@@ -3,7 +3,6 @@ import numpy as np
 import theano
 from itertools import izip
 import lasagne as nn
-import os
 import string
 import utils
 import buffering
@@ -16,21 +15,17 @@ metadata_path = sys.argv[1]
 set = sys.argv[2] if len(sys.argv) >= 2 else 'test'
 n_tta_iterations = int(sys.argv[3]) if len(sys.argv) >= 3 else 100
 
-username = os.getenv('USERNAME')
-metadata = utils.load_pkl('/mnt/storage/metadata/kaggle-heart/train/%s/%s' % (username, metadata_path))
+metadata_dir = utils.get_dir_path('train')
+metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 set_configuration(config_name)
 
 # predictions paths
-prediction_dir = '/mnt/storage/metadata/kaggle-heart/predictions/%s' % username
-if not os.path.isdir(prediction_dir):
-    os.mkdir(prediction_dir)
+prediction_dir = utils.get_dir_path('predictions')
 prediction_path = prediction_dir + "/%s--%s.pkl" % (metadata['experiment_id'], set)
 
 # submissions paths
-submission_dir = '/mnt/storage/metadata/kaggle-heart/submissions/%s' % username
-if not os.path.isdir(submission_dir):
-    os.mkdir(submission_dir)
+submission_dir = utils.get_dir_path('submissions')
 submission_path = submission_dir + "/%s--%s.csv" % (metadata['experiment_id'], set)
 
 print "Build model"

@@ -1,6 +1,5 @@
 import cPickle as pickle
 import os
-import pwd
 import string
 import sys
 import time
@@ -30,16 +29,13 @@ print
 print "Experiment ID: %s" % expid
 print
 
-username = pwd.getpwuid(os.getuid())[0]
 # metadata
-if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/train/%s' % username):
-    os.mkdir('/mnt/storage/metadata/kaggle-heart/train/%s' % username)
-metadata_path = '/mnt/storage/metadata/kaggle-heart/train/%s/%s.pkl' % (username, expid)
+metadata_dir = utils.get_dir_path('train')
+metadata_path = metadata_dir + '/%s.pkl' % expid
 
 # logs
-if not os.path.isdir('/mnt/storage/metadata/kaggle-heart/logs/%s' % username):
-    os.mkdir('/mnt/storage/metadata/kaggle-heart/logs/%s' % username)
-sys.stdout = logger.Logger('/mnt/storage/metadata/kaggle-heart/logs/%s/%s.log' % (username, expid))
+logs_dir = utils.get_dir_path('logs')
+sys.stdout = logger.Logger(logs_dir + '/%s.log' % expid)
 
 print 'Build model'
 model = config().build_model()
@@ -134,7 +130,7 @@ for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
     # make nbatches_chunk iterations
     for b in xrange(config().nbatches_chunk):
         loss = iter_train(b)
-        # print loss
+        print loss
         tmp_losses_train.append(loss)
 
     if ((chunk_idx + 1) % config().validate_every) == 0:

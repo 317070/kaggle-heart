@@ -9,6 +9,8 @@ from collections import defaultdict
 from functools import partial
 import nn_heart
 
+# caching = 'memory'
+
 restart_from_save = None
 rng = np.random.RandomState(42)
 patch_size = (128, 128)
@@ -26,8 +28,8 @@ valid_transformation_params = {
     'shear_range': None
 }
 
-batch_size = 4
-nbatches_chunk = 1
+batch_size = 16
+nbatches_chunk = 4
 chunk_size = batch_size * nbatches_chunk
 
 train_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
@@ -36,11 +38,11 @@ train_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb1
                                                            labels_path='/data/dsb15_pkl/train.csv',
                                                            full_batch=True, random=True, infinite=True)
 
-valid_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
-                                                           batch_size=chunk_size,
-                                                           transform_params=valid_transformation_params,
-                                                           labels_path='/data/dsb15_pkl/train.csv',
-                                                           full_batch=False, random=False, infinite=False)
+valid_data_iterator = data_iterators.PatientsDataGeneratorFixedSlices(data_path='/data/dsb15_pkl/pkl_splitted/valid',
+                                                                      batch_size=chunk_size,
+                                                                      transform_params=valid_transformation_params,
+                                                                      labels_path='/data/dsb15_pkl/train.csv',
+                                                                      full_batch=False, random=False, infinite=False)
 
 test_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
                                                           batch_size=batch_size,
@@ -55,7 +57,7 @@ print 'n_slices', nslices
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
 max_nchunks = nchunks_per_epoch * 150
 learning_rate_schedule = {
-    0: 0.001,
+    0: 0.0001,
     int(max_nchunks * 0.25): 0.00007,
     int(max_nchunks * 0.5): 0.00003,
     int(max_nchunks * 0.75): 0.00001,
@@ -80,79 +82,61 @@ max_pool = partial(MaxPool2DDNNLayer,
 
 def build_model():
     l_in = nn.layers.InputLayer((None, nslices, 30) + patch_size)
+    l_in_slice_mask = nn.layers.InputLayer((None, nslices))
+    l_ins = [l_in, l_in_slice_mask]
 
-    l_rshp_inp = nn.layers.ReshapeLayer(l_in, (-1, 1) + patch_size)  # (batch_size*nslices*30,1,)+patch_size
+    # reshape to (batch_size * nslices, 30,) + patch_size
+    l_rshp_inp = nn.layers.ReshapeLayer(l_in, (-1, 30) + patch_size)
 
-    l = conv3(l_rshp_inp, num_filters=8)
-    l = conv3(l, num_filters=8)
-
-    l = max_pool(l)
-
-    l = conv3(l, num_filters=16)
-    l = conv3(l, num_filters=16)
-
-    l = max_pool(l)
-
-    l = conv3(l, num_filters=32)
-    l = conv3(l, num_filters=32)
+    l = conv3(l_rshp_inp, num_filters=32)
     l = conv3(l, num_filters=32)
 
     l = max_pool(l)
 
     l = conv3(l, num_filters=64)
     l = conv3(l, num_filters=64)
-    l = conv3(l, num_filters=64)
 
     l = max_pool(l)
 
-    l = conv3(l, num_filters=64)
-    l = conv3(l, num_filters=64)
-    l = conv3(l, num_filters=64)
+    l = conv3(l, num_filters=128)
+    l = conv3(l, num_filters=128)
+    l = conv3(l, num_filters=128)
 
     l = max_pool(l)
 
-    # (batch_size * nslices * 30, nfeature_maps, h, w) ->  (batch_size * nslices * 30, nfeature_maps * h * w)
-    l_rshp_conv = nn.layers.ReshapeLayer(l, ([0], -1))
+    l = conv3(l, num_filters=256)
+    l = conv3(l, num_filters=256)
+    l = conv3(l, num_filters=256)
 
-    # (batch_size * nslices * 30, nfeature_maps*h*w) ->  (batch_size, nslices, 30, nfeature_maps * h * w)
-    l_rshp_conv = nn.layers.ReshapeLayer(l_rshp_conv, (-1, nslices, 30, [1]))
+    l = max_pool(l)
 
-    # (batch_size, nslices, 30, nfeature_maps*h*w) ->  (batch_size * nslices, 30, nfeature_maps * h * w)
-    l_rshp_conv = nn.layers.ReshapeLayer(l_rshp_conv, (-1, 30, [3]))
+    l = conv3(l, num_filters=256)
+    l = conv3(l, num_filters=256)
+    l = conv3(l, num_filters=256)
 
-    input_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
-    forget_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), b=nn.init.Constant(5.0))
-    output_gate = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
-    cell = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None,
-                          nonlinearity=nn.nonlinearities.tanh)
-
-    l_lstm = nn.layers.LSTMLayer(l_rshp_conv, num_units=256,
-                                 ingate=input_gate, forgetgate=forget_gate,
-                                 cell=cell, outgate=output_gate,
-                                 peepholes=False, precompute_input=False,
-                                 grad_clipping=5, only_return_final=True, unroll_scan=True)
+    l = max_pool(l)
 
     # systole
-    l_d01 = nn.layers.DenseLayer(l_lstm, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
+    l_d01 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
 
-    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=256, W=nn.init.Orthogonal("relu"),
+    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu0s = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 
     # (batch_size * nslices, 1) -> (batch_size, nslices, 1)
     l_rshp_mu0 = nn.layers.ReshapeLayer(l_mu0s, (-1, nslices, [1]))
-    l_mu0 = nn_heart.MaskedGlobalMeanPoolLayer(l_rshp_mu0, axis=1)  # pool over slices
+    l_mu0 = nn_heart.MaskedGlobalMeanPoolLayer(l_rshp_mu0, mask=l_in_slice_mask, axis=1)  # pool over nonzero slices
 
     # diastole
-    l_d11 = nn.layers.DenseLayer(l_lstm, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
+    l_d11 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
 
-    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=256, W=nn.init.Orthogonal("relu"),
+    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu1s = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 
     # (batch_size * nslices, 1) -> (batch_size, nslices, 1)
     l_rshp_mu1 = nn.layers.ReshapeLayer(l_mu1s, (-1, nslices, [1]))
-    l_mu1 = nn_heart.MaskedGlobalMeanPoolLayer(l_rshp_mu1, axis=1)  # pool over slices
+    l_mu1 = nn_heart.MaskedGlobalMeanPoolLayer(l_rshp_mu1, mask=l_in_slice_mask, axis=1)  # pool over nonzero slices
 
     l_outs = [l_mu0, l_mu1]
     l_top = nn.layers.MergeLayer(l_outs)
@@ -161,9 +145,10 @@ def build_model():
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'regularizable_layers'])([l_in], l_outs,
-                                                                                                  l_targets, l_top,
-                                                                                                  [l_d02, l_d12])
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'regularizable_layers', 'l_test'])(
+        l_ins, l_outs,
+        l_targets, l_top,
+        [l_d02, l_d12])
 
 
 def build_objective(model, deterministic=False):

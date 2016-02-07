@@ -47,15 +47,14 @@ class AttentionLayer(nn.layers.Layer):
         return T.sum(a[:, :, np.newaxis] * input, axis=1)
 
 
-class MaskedGlobalPoolLayer(nn.layers.MergeLayer):
+class MaskedGlobalMeanPoolLayer(nn.layers.MergeLayer):
     """
     pools globally across all trailing dimensions beyond the given axis.
     give it a mask
     """
 
-    def __init__(self, incoming, mask, axis, pool_function=T.mean, **kwargs):
-        super(MaskedGlobalPoolLayer, self).__init__([incoming, mask], **kwargs)
-        self.pool_function = pool_function
+    def __init__(self, incoming, mask, axis, **kwargs):
+        super(MaskedGlobalMeanPoolLayer, self).__init__([incoming, mask], **kwargs)
         self.axis = axis
 
     def get_output_shape_for(self, input_shapes):

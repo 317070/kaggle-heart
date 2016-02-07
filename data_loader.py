@@ -120,7 +120,10 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags, set="train"
                 patient_result[tag] = [pickle.load(open(f, "r"))['metadata'][key] for f in files]
             # add others when needed
 
-        preprocess_function(patient_result, result=result["input"], index=i)
+        for f in files:
+            if "sax" in f:
+                metadata = pickle.load(open(f, "r"))['metadata'][0]
+        preprocess_function(patient_result, result=result["input"], index=i, metadata=metadata)
 
         # load the labels
         # find the id of the current patient in the folder name (=safer)

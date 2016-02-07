@@ -33,6 +33,8 @@ preprocess_train = preprocess_with_augmentation
 preprocess_validation = preprocess
 preprocess_test = preprocess
 
+cleaning_processes = []
+
 test_time_augmentations = 100
 
 postprocess = postprocess

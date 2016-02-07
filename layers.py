@@ -50,6 +50,19 @@ class CumSumLayer(lasagne.layers.Layer):
         return result
 
 
+class ScaleLayer(lasagne.layers.MergeLayer):
+    def __init__(self, input, scale, **kwargs):
+        incomings = [input, scale]
+        super(ScaleLayer, self).__init__(incomings, **kwargs)
+
+    def get_output_shape_for(self, input_shapes):
+        return input_shapes
+
+    def get_output_for(self, inputs, **kwargs):
+        # take the minimal working slice size, and use that one.
+        return inputs[0] * inputs[1].shape_padright(input[0].ndim-input[1].ndim)
+
+
 class WideConv2DDNNLayer(Conv2DDNNLayer):
 
     def __init__(self, incoming, num_filters, filter_size, skip=0, **kwargs):

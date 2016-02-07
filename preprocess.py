@@ -78,7 +78,7 @@ def sunny_preprocess_validation(chunk_x, img, chunk_y, lbl):
     chunk_y[:] = resize_to_make_sunny_fit(segmentation, output_shape=chunk_y.shape[-2:])
 
 
-def preprocess_with_augmentation(patient_data, result, index, augment=True):
+def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):
     """
     Load the resulting data, augment it if needed, and put it in result at the correct index
     :param patient_data:
@@ -95,12 +95,13 @@ def preprocess_with_augmentation(patient_data, result, index, augment=True):
         desired_shape = result[tag][index].shape
         # try to fit data into the desired shape
         if tag.startswith("sliced:data:singleslice"):
-            patient_4d_tensor = resize_and_augment([patient_data[tag]], output_shape=desired_shape[-2:], augment=augmentation_parameters)[0]
+            data = clean_images([patient_data[tag]], metadata=metadata)
+            patient_4d_tensor = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)[0]
             put_in_the_middle(result[tag][index], patient_4d_tensor)
         elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
-
-            patient_4d_tensor = resize_and_augment(patient_data[tag], output_shape=desired_shape[-2:], augment=augmentation_parameters)
+            data = clean_images(patient_data[tag], metadata=metadata)
+            patient_4d_tensor = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)
             if "noswitch" not in tag:
                 patient_4d_tensor = np.swapaxes(patient_4d_tensor,1,0)
 
@@ -113,3 +114,57 @@ def preprocess_with_augmentation(patient_data, result, index, augment=True):
     return
 
 preprocess = partial(preprocess_with_augmentation, augment=False)
+
+
+def clean_images(data, metadata):
+    """
+    clean up 4d-tensor of imdata consistently (fix contrast, move upside up, etc...)
+    :param data:
+    :return:
+    """
+    for process in config().cleaning_processes:
+        data = process(data, metadata)
+    return data
+
+
+def normalize_contrast(imdata, metadata=None):
+    # normalize contrast
+    flat_data = np.concatenate([i.flatten() for i in imdata]).flatten()
+    high = np.percentile(flat_data, 95.0)
+    low  = np.percentile(flat_data, 5.0)
+    for i in xrange(len(imdata)):
+        image = imdata[i]
+        image = 1.0 * (image - low) / (high - low)
+        image = np.clip(image, 0.0, 1.0)
+        imdata[i] = image
+
+    return imdata
+
+
+def set_upside_up(imdata, metadata=None):
+    # turn upside up
+    F = np.array(metadata["ImageOrientationPatient"]).reshape( (2,3) )
+
+    f_1 = F[1,:]/np.linalg.norm(F[1,:])
+    f_2 = F[0,:]/np.linalg.norm(F[0,:])
+
+    x_e = np.array([1,0,0])
+    y_e = np.array([0,1,0])
+    z_e = np.array([0,0,1])
+
+    if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
+        for i in xrange(len(imdata)):
+            image = imdata[i]
+            image = np.swapaxes(image, 1, 2)
+            imdata[i] = image
+            f_1,f_2 = f_2,f_1
+
+    if np.dot(y_e, f_1) < 0:
+        for i in xrange(len(imdata)):
+            imdata[i] = imdata[i][::-1,:]
+
+    if np.dot(x_e, f_2) < 0:
+        for i in xrange(len(imdata)):
+            imdata[i] = imdata[i][:,::-1]
+
+    return imdata

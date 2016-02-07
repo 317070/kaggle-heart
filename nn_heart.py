@@ -45,3 +45,25 @@ class AttentionLayer(nn.layers.Layer):
     def get_output_for(self, input, **kwargs):
         a = T.nnet.softmax(T.dot(input, self.u)[:, :, 0])
         return T.sum(a[:, :, np.newaxis] * input, axis=1)
+
+
+class MaskedGlobalPoolLayer(nn.layers.MergeLayer):
+    """
+    pools globally across all trailing dimensions beyond the given axis.
+    give it a mask
+    """
+
+    def __init__(self, incoming, mask, axis, pool_function=T.mean, **kwargs):
+        super(MaskedGlobalPoolLayer, self).__init__([incoming, mask], **kwargs)
+        self.pool_function = pool_function
+        self.axis = axis
+
+    def get_output_shape_for(self, input_shapes):
+        return input_shapes[0][:self.axis] + (1,)
+
+    def get_output_for(self, inputs, **kwargs):
+        input = inputs[0]
+        mask = inputs[1]
+        masked_input = input * mask.dimshuffle(0, 1, 'x')
+        return T.sum(masked_input.flatten(self.axis + 1), axis=self.axis, keepdims=True) / T.sum(mask, axis=-1,
+                                                                                                 keepdims=True)

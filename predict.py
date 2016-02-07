@@ -28,7 +28,7 @@ if not os.path.isdir(prediction_dir):
 prediction_path = prediction_dir + "/%s--%s.pkl" % (metadata['experiment_id'], set)
 
 # submissions paths
-submission_dir = '/mnt/storage/metadata/kaggle-heart/submissions/ira'
+submission_dir = '/mnt/storage/metadata/kaggle-heart/submissions/%s' % username
 if not os.path.isdir(submission_dir):
     os.mkdir(submission_dir)
 submission_path = submission_dir + "/%s--%s.csv" % (metadata['experiment_id'], set)
@@ -73,7 +73,7 @@ if set == 'valid':
                 valid_data_iterator.generate()):
             for x_shared, x in zip(xs_shared, xs_batch_valid):
                 x_shared.set_value(x)
-            batch_targets.append([e.copy() for e in ys_batch_valid])
+            batch_targets.append(ys_batch_valid)
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)
 

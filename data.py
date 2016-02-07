@@ -77,6 +77,10 @@ def transform(data, transformation, random_augmentation_params=None):
     if not random_augmentation_params:
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
+    # if images are oriented horizontally -> rotate 90 deg
+    if data.shape[-1] > data.shape[-2]:
+        data = np.transpose(data, (0, 2, 1))
+
     for i in xrange(data.shape[0]):
         scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
 
@@ -97,9 +101,11 @@ def transform(data, transformation, random_augmentation_params=None):
     if data.shape[0] < out_shape[0]:
         for i, j in enumerate(xrange(data.shape[0], out_shape[0])):
             out_data[j] = out_data[i]
+
     # if > 30, remove images
     if data.shape[0] > out_shape[0]:
         out_data = out_data[:30]
+
     return out_data
 
 

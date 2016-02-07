@@ -24,10 +24,6 @@ class SlicesDataGenerator(object):
         self.infinite = infinite
         self.id2labels = data.read_labels(labels_path) if labels_path else None
         self.transformation_params = transform_params
-        # data
-        self.x_batch = np.zeros((self.batch_size, 30) + self.transformation_params['patch_size'], dtype='float32')
-        self.y0_batch = np.zeros((self.batch_size, 1), dtype='float32')
-        self.y1_batch = np.zeros((self.batch_size, 1), dtype='float32')
 
     def generate(self):
         while True:
@@ -36,20 +32,26 @@ class SlicesDataGenerator(object):
                 self.rng.shuffle(rand_idxs)
             for pos in xrange(0, len(rand_idxs), self.batch_size):
                 idxs_batch = rand_idxs[pos:pos + self.batch_size]
-                patients_ids = []
                 nb = len(idxs_batch)
+                # allocate batch
+                x_batch = np.zeros((nb, 30) + self.transformation_params['patch_size'], dtype='float32')
+                y0_batch = np.zeros((nb, 1), dtype='float32')
+                y1_batch = np.zeros((nb, 1), dtype='float32')
+                patients_ids = []
+
                 for i, j in enumerate(idxs_batch):
-                    self.x_batch[i] = data.transform(data.read_slice(self.slice_paths[j]), self.transformation_params)
+                    x_batch[i] = data.transform(data.read_slice(self.slice_paths[j]), self.transformation_params)
                     patient_id = self.slicepath2pid[self.slice_paths[j]]
                     patients_ids.append(patient_id)
                     if self.id2labels:
-                        self.y0_batch[i] = self.id2labels[patient_id][0]
-                        self.y1_batch[i] = self.id2labels[patient_id][1]
+                        y0_batch[i] = self.id2labels[patient_id][0]
+                        y1_batch[i] = self.id2labels[patient_id][1]
+
                 if self.full_batch:
                     if nb == self.batch_size:
-                        yield [self.x_batch], [self.y0_batch, self.y1_batch], patients_ids
+                        yield [x_batch], [y0_batch, y1_batch], patients_ids
                 else:
-                    yield [self.x_batch[:nb]], [self.y0_batch[:nb], self.y1_batch[:nb]], patients_ids
+                    yield [x_batch], [y0_batch, y1_batch], patients_ids
             if not self.infinite:
                 break
 
@@ -84,11 +86,6 @@ class PatientsDataGenerator(object):
         self.batch_size = batch_size
         self.infinite = infinite
         self.transformation_params = transform_params
-        # data
-        self.x_batch = np.zeros((self.batch_size, self.nslices, 30) + self.transformation_params['patch_size'],
-                                dtype='float32')
-        self.y0_batch = np.zeros((self.batch_size, 1), dtype='float32')
-        self.y1_batch = np.zeros((self.batch_size, 1), dtype='float32')
 
     def generate(self):
         while True:
@@ -97,26 +94,35 @@ class PatientsDataGenerator(object):
                 self.rng.shuffle(rand_idxs)
             for pos in xrange(0, len(rand_idxs), self.batch_size):
                 idxs_batch = rand_idxs[pos:pos + self.batch_size]
-                self.x_batch.fill(0.0)  # fill batch with zeros
-                patients_ids = []
                 nb = len(idxs_batch)
+                # allocate batches
+                x_batch = np.zeros((nb, self.nslices, 30) + self.transformation_params['patch_size'],
+                                   dtype='float32')
+                slice_mask_batch = np.zeros((nb, self.nslices), dtype='float32')
+                y0_batch = np.zeros((nb, 1), dtype='float32')
+                y1_batch = np.zeros((nb, 1), dtype='float32')
+                patients_ids = []
+
                 for i, idx in enumerate(idxs_batch):
                     pid = self.patient_ids[idx]
                     patients_ids.append(pid)
                     # sample random transformation per patient
                     patient_augmentation_params = data.sample_augmentation_parameters(self.transformation_params)
-                    slice_paths = self.pid2slice_paths[pid][:self.nslices]  # take first nslices TODO find order
+                    slice_paths = self.pid2slice_paths[pid]
+                    slice_paths = self.rng.choice(slice_paths, size=min(self.nslices, len(slice_paths)), replace=False)
                     for j, sp in enumerate(slice_paths):
-                        self.x_batch[i, j] = data.transform(data.read_slice(sp), self.transformation_params,
-                                                            patient_augmentation_params)
+                        x_batch[i, j] = data.transform(data.read_slice(sp), self.transformation_params,
+                                                       patient_augmentation_params)
+                        slice_mask_batch[i, j] = 1.0
                     if self.id2labels:
-                        self.y0_batch[i] = self.id2labels[pid][0]
-                        self.y1_batch[i] = self.id2labels[pid][1]
+                        y0_batch[i] = self.id2labels[pid][0]
+                        y1_batch[i] = self.id2labels[pid][1]
 
                 if self.full_batch:
                     if nb == self.batch_size:
-                        yield [self.x_batch], [self.y0_batch, self.y1_batch], patients_ids
+                        yield [x_batch, slice_mask_batch], [y0_batch, y1_batch], patients_ids
                 else:
-                    yield [self.x_batch[:nb]], [self.y0_batch[:nb], self.y1_batch[:nb]], patients_ids
+                    yield [x_batch, slice_mask_batch], [y0_batch, y1_batch], patients_ids
+
             if not self.infinite:
                 break

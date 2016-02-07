@@ -132,24 +132,27 @@ def build_model():
                                  peepholes=False, precompute_input=False,
                                  grad_clipping=5, only_return_final=True, unroll_scan=True)
 
-    # (batch_size * nslices, num_rnn_units) ->  (batch_size, nslices, num_rnn_units)
-    l_rshp_lstm = nn.layers.ReshapeLayer(l_lstm, (-1, nslices, [1]))
-
     # systole
-    l_att0 = nn_heart.AttentionLayer(l_rshp_lstm)
-    l_d01 = nn.layers.DenseLayer(l_att0, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
+    l_d01 = nn.layers.DenseLayer(l_lstm, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
 
-    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
+    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=256, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
-    l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
+    l_mu0s = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
+
+    # (batch_size * nslices, 1) -> (batch_size, nslices, 1)
+    l_rshp_mu0 = nn.layers.ReshapeLayer(l_mu0s, (-1, nslices, [1]))
+    l_mu0 = nn_heart.MaskedGlobalPoolLayer(l_rshp_mu0, axis=1)  # pool over slices
 
     # diastole
-    l_att1 = nn_heart.AttentionLayer(l_rshp_lstm)
-    l_d11 = nn.layers.DenseLayer(l_att1, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
+    l_d11 = nn.layers.DenseLayer(l_lstm, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
 
-    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
+    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=256, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
-    l_mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
+    l_mu1s = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
+
+    # (batch_size * nslices, 1) -> (batch_size, nslices, 1)
+    l_rshp_mu1 = nn.layers.ReshapeLayer(l_mu1s, (-1, nslices, [1]))
+    l_mu1 = nn_heart.MaskedGlobalPoolLayer(l_rshp_mu1, axis=1)  # pool over slices
 
     l_outs = [l_mu0, l_mu1]
     l_top = nn.layers.MergeLayer(l_outs)

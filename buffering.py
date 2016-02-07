@@ -1,7 +1,8 @@
 import multiprocessing as mp
-import Queue
 import threading
 import traceback
+import Queue
+
 
 def buffered_gen_mp(source_gen, buffer_size=2):
     """

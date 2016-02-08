@@ -4,6 +4,7 @@ from default import *
 
 import theano.tensor as T
 from layers import MuLogSigmaErfLayer, CumSumLayer
+import layers
 import objectives
 from lasagne.layers import InputLayer, reshape, DenseLayer, DenseLayer, batch_norm
 from postprocess import upsample_segmentation
@@ -13,10 +14,10 @@ from updates import build_adam_updates
 
 caching = None
 
-validate_every = 10
+validate_every = 20
 validate_train_set = False
-save_every = 10
-restart_from_save = True
+save_every = 20
+restart_from_save = False
 
 batches_per_chunk = 2
 
@@ -27,8 +28,11 @@ num_epochs_train = 60
 image_size = 64
 
 learning_rate_schedule = {
-    0:     0.0001,
-    50:    0.00001,
+    0:     0.1,
+    2:     0.01,
+    10:    0.001,
+    50:    0.0001,
+    60:    0.00001,
 }
 
 from postprocess import postprocess_onehot, postprocess
@@ -38,6 +42,11 @@ preprocess_train = preprocess_with_augmentation  # with augmentation
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess_with_augmentation  # no augmentation
 test_time_augmentations = 10
+augmentation_params = {
+    "rotation": (-16, 16),
+    "shear": (0, 0),
+    "translation": (-8, 8),
+}
 
 cleaning_processes = [normalize_contrast, set_upside_up]
 
@@ -47,15 +56,10 @@ postprocess = postprocess
 data_sizes = {
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
     "sliced:data:ax:noswitch": (batch_size, 15, 30, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
+    "area_per_pixel:sax": (batch_size, ),
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
-}
-
-augmentation_params = {
-    "rotation": (-10, 10),
-    "shear": (-4, 4),
-    "translation": (-4, 4),
 }
 
 def build_model():
@@ -135,29 +139,70 @@ def build_model():
                                    b=lasagne.init.Constant(0.1),
                                    )
 
-    l8 = lasagne.layers.DropoutLayer(l7, p=0.5)
+    key_scale = "area_per_pixel:sax"
+    l_scale = InputLayer(data_sizes[key_scale])
 
-    l_systole = CumSumLayer(lasagne.layers.DenseLayer(l8,
-                              num_units=600,
-                              nonlinearity=lasagne.nonlinearities.softmax))
+    # Systole Dense layers
+    ldsys1 = lasagne.layers.DenseLayer(l7, num_units=512,
+                                  W=lasagne.init.Orthogonal("relu"),
+                                  b=lasagne.init.Constant(0.1),
+                                  nonlinearity=lasagne.nonlinearities.rectify)
 
-    l_diastole = CumSumLayer(lasagne.layers.DenseLayer(l8,
-                              num_units=600,
-                              nonlinearity=lasagne.nonlinearities.softmax))
+    ldsys1drop = lasagne.layers.dropout(ldsys1, p=0.5)
+    ldsys2 = lasagne.layers.DenseLayer(ldsys1drop, num_units=128,
+                                       W=lasagne.init.Orthogonal("relu"),
+                                       b=lasagne.init.Constant(0.1),
+                                       nonlinearity=lasagne.nonlinearities.rectify)
+
+    ldsys2drop = lasagne.layers.dropout(ldsys2, p=0.5)
+    ldsys3 = lasagne.layers.DenseLayer(ldsys2drop, num_units=1,
+                                       b=lasagne.init.Constant(0.1),
+                                       nonlinearity=lasagne.nonlinearities.identity)
+
+    l_systole = layers.MuConstantSigmaErfLayer(layers.ScaleLayer(ldsys3, scale=l_scale), sigma=0.0)
+
+    # Diastole Dense layers
+    lddia1 = lasagne.layers.DenseLayer(l7, num_units=512,
+                                       W=lasagne.init.Orthogonal("relu"),
+                                       b=lasagne.init.Constant(0.1),
+                                       nonlinearity=lasagne.nonlinearities.rectify)
+
+    lddia1drop = lasagne.layers.dropout(lddia1, p=0.5)
+    lddia2 = lasagne.layers.DenseLayer(lddia1drop, num_units=128,
+                                       W=lasagne.init.Orthogonal("relu"),
+                                       b=lasagne.init.Constant(0.1),
+                                       nonlinearity=lasagne.nonlinearities.rectify)
+
+    lddia2drop = lasagne.layers.dropout(lddia2, p=0.5)
+    lddia3 = lasagne.layers.DenseLayer(lddia2drop, num_units=1,
+                                       b=lasagne.init.Constant(0.1),
+                                       nonlinearity=lasagne.nonlinearities.identity)
+
+    l_diastole = layers.MuConstantSigmaErfLayer(layers.ScaleLayer(lddia3, scale=l_scale), sigma=0.0)
 
     return {
         "inputs":{
-            input_key: l0
+            input_key: l0,
+            key_scale: l_scale,
         },
         "outputs": {
             "systole": l_systole,
             "diastole": l_diastole,
         },
         "regularizable": {
-        }
+            ldsys1: l2_weight,
+            ldsys2: l2_weight,
+            ldsys3: l2_weight,
+            lddia1: l2_weight,
+            lddia2: l2_weight,
+            lddia3: l2_weight,
+        },
     }
 
+l2_weight = 0.0005
 
 def build_objective(interface_layers):
-    l2_penalty = 0#lasagne.regularization.regularize_layer_params_weighted(interface_layers["regularizable"], lasagne.regularization.l2)
+    # l2 regu on certain layers
+    l2_penalty = lasagne.regularization.regularize_layer_params_weighted(interface_layers["regularizable"], lasagne.regularization.l2)
+    # build objective
     return objectives.KaggleObjective(interface_layers["outputs"], penalty=l2_penalty)

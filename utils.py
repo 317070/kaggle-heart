@@ -1,5 +1,6 @@
 import time
 import platform
+from dicom.sequence import Sequence
 import numpy as np
 import gzip
 from scipy.special import erf
@@ -149,3 +150,33 @@ def CRSP(distribution, value):
     target = np.zeros( (600,) , dtype='float32')
     target[int(np.ceil(value)):] = 1  # don't forget to ceil!
     return np.mean( (distribution - target)**2 )
+
+
+
+def convert_to_number(value):
+    value = str(value)
+    try:
+        if "." in value:
+            return float(value)
+        else:
+            return int(value)
+    except:
+        pass
+    return value
+
+
+def clean_metadata(metadatadict):
+    keys = sorted(list(metadatadict.keys()))
+    for key in keys:
+        value = metadatadict[key]
+        if key == 'PatientAge':
+            metadatadict[key] = int(value[:-1])
+        else:
+            if isinstance(value, Sequence):
+                #convert to list
+                value = [i for i in value]
+            if isinstance(value, (list,)):
+                metadatadict[key] = [convert_to_number(i) for i in value]
+            else:
+                metadatadict[key] = convert_to_number(value)
+    return metadatadict

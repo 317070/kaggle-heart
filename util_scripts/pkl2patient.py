@@ -8,35 +8,7 @@ import numpy as np
 import dicom
 import cPickle as pickle
 import sys
-
-
-def convert_to_number(value):
-    value = str(value)
-    try:
-        if "." in value:
-            return float(value)
-        else:
-            return int(value)
-    except:
-        pass
-    return value
-
-
-def clean_metadata(metadatadict):
-    keys = sorted(list(metadatadict.keys()))
-    for key in keys:
-        value = metadatadict[key]
-        if key == 'PatientAge':
-            metadatadict[key] = int(value[:-1])
-        else:
-            if isinstance(value, Sequence):
-                #convert to list
-                value = [i for i in value]
-            if isinstance(value, (list,)):
-                metadatadict[key] = [convert_to_number(i) for i in value]
-            else:
-                metadatadict[key] = convert_to_number(value)
-    return metadatadict
+from utils import clean_metadata
 
 
 def read_dicom(filename):

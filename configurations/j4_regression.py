@@ -22,14 +22,17 @@ restart_from_save = False
 batches_per_chunk = 2
 
 batch_size = 8
-sulasagney_batch_size = 4
+sunny_batch_size = 4
 num_epochs_train = 60
 
 image_size = 64
 
 learning_rate_schedule = {
-    0:     0.0001,
-    50:    0.00001,
+    0:     0.1,
+    2:     0.01,
+    10:    0.001,
+    50:    0.0001,
+    60:    0.00001,
 }
 
 from postprocess import postprocess_onehot, postprocess
@@ -39,6 +42,11 @@ preprocess_train = preprocess_with_augmentation  # with augmentation
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess_with_augmentation  # no augmentation
 test_time_augmentations = 10
+augmentation_params = {
+    "rotation": (-16, 16),
+    "shear": (0, 0),
+    "translation": (-8, 8),
+}
 
 cleaning_processes = [normalize_contrast, set_upside_up]
 
@@ -48,15 +56,10 @@ postprocess = postprocess
 data_sizes = {
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
     "sliced:data:ax:noswitch": (batch_size, 15, 30, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
+    "area_per_pixel:sax": (batch_size, ),
     "sliced:data:shape": (batch_size, 2,),
-    "sulasagney": (sulasagney_batch_size, 1, image_size, image_size)
+    "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
-}
-
-augmentation_params = {
-    "rotation": (-10, 10),
-    "shear": (-4, 4),
-    "translation": (-4, 4),
 }
 
 def build_model():
@@ -70,10 +73,10 @@ def build_model():
     l0 = InputLayer(data_size)
     l0r = batch_norm(reshape(l0, (-1, 1, ) + data_size[1:]))
 
-    # (batch, chalasagneel, axis, time, x, y)
+    # (batch, channel, axis, time, x, y)
 
     # convolve over time
-    l1 = batch_norm(ConvolutionOverAxisLayer(l0r, num_filters=8, filter_size=(3,), axis=(3,), chalasagneel=1,
+    l1 = batch_norm(ConvolutionOverAxisLayer(l0r, num_filters=8, filter_size=(3,), axis=(3,), channel=1,
                                    W=lasagne.init.Orthogonal(),
                                    b=lasagne.init.Constant(0.0),
                                    ))
@@ -81,12 +84,12 @@ def build_model():
 
     # convolve over x and y
     l2a = batch_norm(ConvolutionOver2DAxisLayer(l1m, num_filters=8, filter_size=(3, 3),
-                                     axis=(4,5), chalasagneel=1,
+                                     axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.0),
                                      ))
     l2b = batch_norm(ConvolutionOver2DAxisLayer(l2a, num_filters=8, filter_size=(3, 3),
-                                     axis=(4,5), chalasagneel=1,
+                                     axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.0),
                                      ))
@@ -95,20 +98,20 @@ def build_model():
 
     # convolve over x, y, time
     l3a = batch_norm(ConvolutionOver3DAxisLayer(l2m, num_filters=32, filter_size=(3, 3, 3),
-                                     axis=(3,4,5), chalasagneel=1,
+                                     axis=(3,4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
                                      ))
 
     l3b = batch_norm(ConvolutionOver2DAxisLayer(l3a, num_filters=32, filter_size=(3, 3),
-                                     axis=(4,5), chalasagneel=1,
+                                     axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
                                      ))
     l3m = batch_norm(MaxPoolOver2DAxisLayer(l3b, pool_size=(2, 2), axis=(4,5)))
 
     # convolve over time
-    l4 = batch_norm(ConvolutionOverAxisLayer(l3m, num_filters=32, filter_size=(3,), axis=(3,), chalasagneel=1,
+    l4 = batch_norm(ConvolutionOverAxisLayer(l3m, num_filters=32, filter_size=(3,), axis=(3,), channel=1,
                                    W=lasagne.init.Orthogonal(),
                                    b=lasagne.init.Constant(0.1),
                                    ))
@@ -119,35 +122,34 @@ def build_model():
 
     # convolve over x and y
     l6a = batch_norm(ConvolutionOver2DAxisLayer(l5, num_filters=128, filter_size=(3, 3),
-                                     axis=(4,5), chalasagneel=1,
+                                     axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
                                      ))
     l6b = batch_norm(ConvolutionOver2DAxisLayer(l6a, num_filters=128, filter_size=(3, 3),
-                                     axis=(4,5), chalasagneel=1,
+                                     axis=(4,5), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
                                      ))
     l6m = batch_norm(MaxPoolOver2DAxisLayer(l6b, pool_size=(2, 2), axis=(4,5)))
 
     # convolve over time and x,y, is sparse reduction layer
-    l7 = ConvolutionOver3DAxisLayer(l6m, num_filters=32, filter_size=(3,3,3), axis=(3,4,5), chalasagneel=1,
+    l7 = ConvolutionOver3DAxisLayer(l6m, num_filters=32, filter_size=(3,3,3), axis=(3,4,5), channel=1,
                                    W=lasagne.init.Orthogonal(),
                                    b=lasagne.init.Constant(0.1),
                                    )
 
-    key_scale = "volume_per_pixel"
+    key_scale = "area_per_pixel:sax"
     l_scale = InputLayer(data_sizes[key_scale])
 
-
     # Systole Dense layers
-    ldsys1 = lasagne.layers.DenseLayer(l7, num_units=1024,
+    ldsys1 = lasagne.layers.DenseLayer(l7, num_units=512,
                                   W=lasagne.init.Orthogonal("relu"),
                                   b=lasagne.init.Constant(0.1),
                                   nonlinearity=lasagne.nonlinearities.rectify)
 
     ldsys1drop = lasagne.layers.dropout(ldsys1, p=0.5)
-    ldsys2 = lasagne.layers.DenseLayer(ldsys1drop, num_units=1024,
+    ldsys2 = lasagne.layers.DenseLayer(ldsys1drop, num_units=128,
                                        W=lasagne.init.Orthogonal("relu"),
                                        b=lasagne.init.Constant(0.1),
                                        nonlinearity=lasagne.nonlinearities.rectify)
@@ -157,16 +159,16 @@ def build_model():
                                        b=lasagne.init.Constant(0.1),
                                        nonlinearity=lasagne.nonlinearities.identity)
 
-    l_systole = layers.ScaleLayer(ldsys3, scale=1)
+    l_systole = layers.MuConstantSigmaErfLayer(layers.ScaleLayer(ldsys3, scale=l_scale), sigma=0.0)
 
     # Diastole Dense layers
-    lddia1 = lasagne.layers.DenseLayer(l5, num_units=1024,
+    lddia1 = lasagne.layers.DenseLayer(l7, num_units=512,
                                        W=lasagne.init.Orthogonal("relu"),
                                        b=lasagne.init.Constant(0.1),
                                        nonlinearity=lasagne.nonlinearities.rectify)
 
     lddia1drop = lasagne.layers.dropout(lddia1, p=0.5)
-    lddia2 = lasagne.layers.DenseLayer(lddia1drop, num_units=1024,
+    lddia2 = lasagne.layers.DenseLayer(lddia1drop, num_units=128,
                                        W=lasagne.init.Orthogonal("relu"),
                                        b=lasagne.init.Constant(0.1),
                                        nonlinearity=lasagne.nonlinearities.rectify)
@@ -176,7 +178,7 @@ def build_model():
                                        b=lasagne.init.Constant(0.1),
                                        nonlinearity=lasagne.nonlinearities.identity)
 
-    l_diastole = layers.ScaleLayer(lddia3, scale=1)
+    l_diastole = layers.MuConstantSigmaErfLayer(layers.ScaleLayer(lddia3, scale=l_scale), sigma=0.0)
 
     return {
         "inputs":{
@@ -201,7 +203,6 @@ l2_weight = 0.0005
 
 def build_objective(interface_layers):
     # l2 regu on certain layers
-    l2_penalty = lasagne.regularization.regularize_layer_params_weighted(
-        interface_layers["regularizable"], lasagne.regularization.l2)
+    l2_penalty = lasagne.regularization.regularize_layer_params_weighted(interface_layers["regularizable"], lasagne.regularization.l2)
     # build objective
-    return objectives.RMSEObjective(interface_layers["outputs"], penalty=l2_penalty)
+    return objectives.KaggleObjective(interface_layers["outputs"], penalty=l2_penalty)

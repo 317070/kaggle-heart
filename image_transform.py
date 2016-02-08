@@ -18,6 +18,7 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
     final_shape = (len(images),max_time) + output_shape
     result = np.zeros(final_shape, dtype="float32")
 
+    volume_change = []
     #result.reshape((final_shape[0],-1) + output_shape)
     for i, mri_slice in enumerate(images):
         mri_slice = mri_slice.reshape((-1,)+mri_slice.shape[-2:])
@@ -28,8 +29,12 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
             # TODO: can't this be done better?
             result[i,j] = fast_warp(frame, tform, output_shape=output_shape)
 
+        A = tform.params[:2, :2]
+        volume_change.append(np.linalg.norm(A[:,0]) * np.linalg.norm(A[:,1]))
+        assert tform.params[2,2] == 1, (tform.params[2,2],)
+
     #result.reshape(final_shape)
-    return result
+    return result, volume_change
 
 
 def resize_and_augment(images, output_shape=(50, 50), augment=None):
@@ -40,6 +45,7 @@ def resize_and_augment(images, output_shape=(50, 50), augment=None):
     final_shape = (len(images),max_time) + output_shape
     result = np.zeros(final_shape, dtype="float32")
 
+    volume_change = []
     #result.reshape((final_shape[0],-1) + output_shape)
     for i, mri_slice in enumerate(images):
         mri_slice = mri_slice.reshape((-1,)+mri_slice.shape[-2:])
@@ -54,8 +60,12 @@ def resize_and_augment(images, output_shape=(50, 50), augment=None):
         for j, frame in enumerate(mri_slice):
             result[i,j] = fast_warp(frame, total_tform, output_shape=output_shape)
 
+        A = total_tform.params[:2, :2]
+        volume_change.append(np.linalg.norm(A[:,0]) * np.linalg.norm(A[:,1]))
+        assert total_tform.params[2,2] == 1, (total_tform.params[2,2],)
+
     #result.reshape(final_shape)
-    return result
+    return result, volume_change
 
 
 def resize_to_make_sunny_fit(image, output_shape=(50, 50)):

@@ -36,6 +36,25 @@ class MuSigmaErfLayer(lasagne.layers.Layer):
         return (T.erf(x) + 1)/2
 
 
+class MuConstantSigmaErfLayer(lasagne.layers.Layer):
+    def __init__(self, incoming, sigma=0.0, **kwargs):
+        super(MuConstantSigmaErfLayer, self).__init__(incoming, **kwargs)
+        eps = 1e-7
+        if sigma>=eps:
+            self.sigma = theano.shared(np.float32(sigma)).dimshuffle('x', 'x')
+        else:
+            self.sigma = theano.shared(np.float32(eps)).dimshuffle('x', 'x')
+
+
+    def get_output_shape_for(self, input_shape):
+        return (input_shape[0], 600)
+
+    def get_output_for(self, input, **kwargs):
+        x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x', 0)
+        x = (x_axis - input[:,0].dimshuffle(0, 'x')) / (self.sigma * np.sqrt(2).astype('float32'))
+        return (T.erf(x) + 1)/2
+
+
 class CumSumLayer(lasagne.layers.Layer):
     def __init__(self, incoming, axis=1, **kwargs):
         super(CumSumLayer, self).__init__(incoming, **kwargs)
@@ -56,11 +75,11 @@ class ScaleLayer(lasagne.layers.MergeLayer):
         super(ScaleLayer, self).__init__(incomings, **kwargs)
 
     def get_output_shape_for(self, input_shapes):
-        return input_shapes
+        return input_shapes[0]
 
     def get_output_for(self, inputs, **kwargs):
         # take the minimal working slice size, and use that one.
-        return inputs[0] * inputs[1].shape_padright(input[0].ndim-input[1].ndim)
+        return inputs[0] * T.shape_padright(inputs[1], n_ones=inputs[0].ndim-inputs[1].ndim)
 
 
 class WideConv2DDNNLayer(Conv2DDNNLayer):

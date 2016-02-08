@@ -150,6 +150,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             "systole:value": (vector_size, "float32"),
             "diastole:value": (vector_size, "float32"),
             "patients": (vector_size, "int32"),
+            "area_per_pixel": (no_samples, ),
         }
 
         for tag in wanted_output_tags:
@@ -196,13 +197,16 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 patient_result[tag] = [disk_access.load_data_from_file(f).shape for f in files]
             elif tag.startswith("sliced:data"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files]
+            elif tag.startswith("area_per_pixel"):
+                patient_result[tag] = None  # they are filled in in preprocessing
             elif tag.startswith("sliced:meta"):
                 # get the key used in the pickle
                 key = tag[len("slided:meta"):]
                 patient_result[tag] = [disk_access.load_metadata_from_file(f)[key] for f in files]
             # add others when needed
 
-        preprocess_function(patient_result, result=result["input"], index=i)
+        metadata = utils.clean_metadata(disk_access.load_metadata_from_file(files[0])[0])
+        preprocess_function(patient_result, result=result["input"], index=i, metadata=metadata)
 
         # load the labels
         # find the id of the current patient in the folder name (=safer)

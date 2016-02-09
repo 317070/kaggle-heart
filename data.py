@@ -45,8 +45,10 @@ def read_slice(path):
 
 
 @compressed_cache.memoize()
-def read_slice_metadata(path):
-    return pickle.load(open(path))['metadata']
+def read_metadata(path):
+    d = pickle.load(open(path))['metadata']
+    metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient']}
+    return metadata
 
 
 def sample_augmentation_parameters(transformation):
@@ -63,6 +65,61 @@ def sample_augmentation_parameters(transformation):
     return random_params
 
 
+def transform_with_metadata(data, metadata, transformation, random_augmentation_params=None):
+    """
+    :param data: (30, height, width) matrix from one slice of MRI
+    :param transformation:
+    :return:
+    """
+
+    out_shape = (30,) + transformation['patch_size']
+    out_data = np.zeros(out_shape, dtype='float32')
+
+    # if random_augmentation_params=None -> sample new params
+    # if the transformation implies no augmentations then random_augmentation_params remains None
+    if not random_augmentation_params:
+        random_augmentation_params = sample_augmentation_parameters(transformation)
+
+    # rotate images, so
+    data = fix_image_orientation(data, metadata)
+
+    # build scaling transformation
+    scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
+    tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
+    total_tform = tform
+
+    # calculate area per pixel in the rescaled image
+    zoom_ratio = []
+    A = tform.params[:2, :2]
+    zoom_ratio.append(np.linalg.norm(A[:, 0]) * np.linalg.norm(A[:, 1]))
+    assert tform.params[2, 2] == 1, (tform.params[2, 2],)
+    area_per_pixel = zoom_ratio * np.prod(metadata["PixelSpacing"])
+
+    # build random augmentation
+    if random_augmentation_params:
+        tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
+
+        augment_tform = build_augmentation_transform(rotation=random_augmentation_params['rotation'],
+                                                     shear=random_augmentation_params['shear'],
+                                                     translation=random_augmentation_params['translation'])
+        total_tform = tform + tform_uncenter + augment_tform + tform_center
+
+    # apply transformation per image
+    for i in xrange(data.shape[0]):
+        out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
+
+    # if the sequence is < 30 timesteps, copy last image
+    if data.shape[0] < out_shape[0]:
+        for j in xrange(data.shape[0], out_shape[0]):
+            out_data[j] = out_data[-1]
+
+    # if > 30, remove images
+    if data.shape[0] > out_shape[0]:
+        out_data = out_data[:30]
+
+    return out_data, area_per_pixel
+
+
 def transform(data, transformation, random_augmentation_params=None):
     """
     :param data: (30, height, width) matrix from one slice of MRI
@@ -72,8 +129,8 @@ def transform(data, transformation, random_augmentation_params=None):
     out_shape = (30,) + transformation['patch_size']
     out_data = np.zeros(out_shape, dtype='float32')
 
-    # if no random params are given -> sample new params
-    # if there is no augmentations random_augmentation_params = None
+    # if random_augmentation_params=None -> sample new params
+    # if the transformation implies no augmentations then random_augmentation_params remains None
     if not random_augmentation_params:
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
@@ -81,26 +138,28 @@ def transform(data, transformation, random_augmentation_params=None):
     if data.shape[-1] > data.shape[-2]:
         data = np.transpose(data, (0, 2, 1))
 
+    # build scaling transform
+    scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
+    tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
+    total_tform = tform
+
+    # build random augmentation
+    if random_augmentation_params:
+        tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
+
+        augment_tform = build_augmentation_transform(rotation=random_augmentation_params['rotation'],
+                                                     shear=random_augmentation_params['shear'],
+                                                     translation=random_augmentation_params['translation'])
+        total_tform = tform + tform_uncenter + augment_tform + tform_center
+
+    # apply transformation per image
     for i in xrange(data.shape[0]):
-        scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
-
-        tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
-        total_tform = tform
-
-        if random_augmentation_params:
-            tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
-
-            augment_tform = build_augmentation_transform(rotation=random_augmentation_params['rotation'],
-                                                         shear=random_augmentation_params['shear'],
-                                                         translation=random_augmentation_params['translation'])
-            total_tform = tform + tform_uncenter + augment_tform + tform_center
-
         out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
 
-    # if the sequence is < 30 timesteps, copy images from the beginning of the sequence
+    # if the sequence is < 30 timesteps, copy last image
     if data.shape[0] < out_shape[0]:
-        for i, j in enumerate(xrange(data.shape[0], out_shape[0])):
-            out_data[j] = out_data[i]
+        for j in xrange(data.shape[0], out_shape[0]):
+            out_data[j] = out_data[-1]
 
     # if > 30, remove images
     if data.shape[0] > out_shape[0]:
@@ -167,3 +226,33 @@ def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip=F
     tform_augment = skimage.transform.AffineTransform(scale=(1 / zoom[0], 1 / zoom[1]), rotation=np.deg2rad(rotation),
                                                       shear=np.deg2rad(shear), translation=translation)
     return tform_augment
+
+
+def fix_image_orientation(data, metadata):
+    """
+    rotates the images, so the the belly is to the left
+    :param data:  data from one slice (30, h, w)
+    :param metadata:
+    :return:
+    """
+    F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
+
+    f_1 = F[1, :] / np.linalg.norm(F[1, :])
+    f_2 = F[0, :] / np.linalg.norm(F[0, :])
+
+    x_e = np.array([1, 0, 0])
+    y_e = np.array([0, 1, 0])
+
+    if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
+        out_data = np.transpose(data, (0, 2, 1))
+        f_1, f_2 = f_2, f_1
+    else:
+        out_data = data
+
+    if np.dot(y_e, f_1) < 0:
+        out_data = out_data[:, ::-1, :]
+
+    if np.dot(x_e, f_2) < 0:
+        out_data = out_data[:, :, ::-1]
+
+    return out_data

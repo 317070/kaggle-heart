@@ -32,19 +32,19 @@ batch_size = 16
 nbatches_chunk = 4
 chunk_size = batch_size * nbatches_chunk
 
-train_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_train',
+train_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
                                                            batch_size=chunk_size,
                                                            transform_params=train_transformation_params,
                                                            labels_path='/data/dsb15_pkl/train.csv',
                                                            full_batch=True, random=True, infinite=True)
 
-valid_data_iterator = data_iterators.PatientsDataGeneratorFixedSlices(data_path='/data/dsb15_pkl/pkl_train',
+valid_data_iterator = data_iterators.PatientsDataGeneratorFixedSlices(data_path='/data/dsb15_pkl/pkl_splitted/valid',
                                                                       batch_size=chunk_size,
                                                                       transform_params=valid_transformation_params,
                                                                       labels_path='/data/dsb15_pkl/train.csv',
                                                                       full_batch=False, random=False, infinite=False)
 
-test_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_train',
+test_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
                                                           batch_size=batch_size,
                                                           transform_params=train_transformation_params,
                                                           full_batch=False, random=False, infinite=False)
@@ -52,7 +52,6 @@ test_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15
 nslices = train_data_iterator.nslices
 valid_data_iterator.nslices = nslices
 test_data_iterator.nslices = nslices
-print 'n_slices', nslices
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
 max_nchunks = nchunks_per_epoch * 150
@@ -121,25 +120,25 @@ def build_model():
 
     l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
-    l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
+    l_v0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
     # (batch_size * nslices, 1) -> (batch_size, nslices, 1)
-    l_mu0 = nn.layers.ReshapeLayer(l_mu0, (-1, nslices, [1]))
+    l_v0 = nn.layers.ReshapeLayer(l_v0, (-1, nslices, [1]))
 
-    l_mu0_mean = nn_heart.MaskedGlobalMeanPoolLayer(l_mu0, mask=l_in_slice_mask, axis=1)  # pool over nonzero slices
+    l_mu_v0 = nn_heart.MaskedMeanPoolLayer(l_v0, mask=l_in_slice_mask, axis=1)  # pool over nonzero slices
 
     # diastole
     l_d11 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1))
 
     l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
-    l_mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
+    l_v1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 
     # (batch_size * nslices, 1) -> (batch_size, nslices, 1)
-    l_mu1 = nn.layers.ReshapeLayer(l_mu1, (-1, nslices, [1]))
-    l_mu1_mean = nn_heart.MaskedGlobalMeanPoolLayer(l_mu1, mask=l_in_slice_mask, axis=1)  # pool over nonzero slices
+    l_v1 = nn.layers.ReshapeLayer(l_v1, (-1, nslices, [1]))
+    l_mu_v1 = nn_heart.MaskedMeanPoolLayer(l_v1, mask=l_in_slice_mask, axis=1)  # pool over nonzero slices
 
-    l_outs = [l_mu0, l_mu1, l_mu0_mean, l_mu1_mean]
-    l_top = nn.layers.MergeLayer(l_outs)
+    l_outs = [l_v0, l_v1, l_mu_v0, l_mu_v1]
+    l_top = nn.layers.MergeLayer([l_mu_v0, l_mu_v1])
 
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
@@ -171,13 +170,13 @@ def build_objective(model, deterministic=False):
 
     mse0 = (p0 - t0.dimshuffle(0, 'x', 1)) ** 2
     mse0 = mse0 * slice_mask.dimshuffle(0, 1, 'x')
-    mse0 = T.sum(mse0.flatten(2), axis=1)
-    mse0 = T.sqrt(T.mean(mse0, axis=0))
+    mse0 = T.sum(mse0) / T.sum(slice_mask)
+    mse0 = T.sqrt(mse0)
 
     mse1 = (p1 - t1.dimshuffle(0, 'x', 1)) ** 2
     mse1 = mse1 * slice_mask.dimshuffle(0, 1, 'x')
-    mse1 = T.sum(mse1.flatten(2), axis=1)
-    mse1 = T.sqrt(T.mean(mse1, axis=0))
+    mse1 = T.sum(mse1) / T.sum(slice_mask)
+    mse1 = T.sqrt(mse1)
 
     return mse0 + mse1 + l2_penalty
 
@@ -189,13 +188,12 @@ def build_updates(train_loss, model, learning_rate):
 
 def get_mean_validation_loss(batch_predictions, batch_targets):
     nbatches = len(batch_predictions)
-    npredictions = len(batch_predictions[0])
     losses = []
     for i in [2, 3]:  # means over slices
         x, y = [], []
         for j in xrange(nbatches):
             x.append(batch_predictions[j][i])
-            y.append(batch_targets[j][i])
+            y.append(batch_targets[j][i - 2])
         x, y = np.vstack(x), np.vstack(y)
         losses.append(np.sqrt(np.mean((x - y) ** 2)))
     return losses
@@ -203,7 +201,6 @@ def get_mean_validation_loss(batch_predictions, batch_targets):
 
 def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
     nbatches = len(batch_predictions)
-    npredictions = len(batch_predictions[0])
 
     patient_ids = []
     for i in xrange(nbatches):
@@ -214,12 +211,12 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
         patient2idxs[pid].append(i)
 
     crpss = []
-    for i in xrange(npredictions):
+    for i in [2, 3]:
         # collect predictions over batches
         p, t = [], []
         for j in xrange(nbatches):
             p.append(batch_predictions[j][i])
-            t.append(batch_targets[j][i])
+            t.append(batch_targets[j][i - 2])
         p, t = np.vstack(p), np.vstack(t)
 
         # collect crps over patients

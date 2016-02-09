@@ -11,11 +11,12 @@ import pwd
 
 
 def get_dir_path(dir_name, root_dir='/mnt/storage/metadata/kaggle-heart'):
+    root_dir = '/home/ikorshun/metadata'  # TODO hack
     username = pwd.getpwuid(os.getuid())[0]
     platform_name = hostname()
     dir_path = root_dir + '/' + dir_name + '/%s-%s' % (username, platform_name)
     if not os.path.isdir(dir_path):
-        os.mkdir(dir_path)
+        os.makedirs(dir_path)
     return dir_path
 
 

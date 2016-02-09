@@ -1,5 +1,4 @@
 import cPickle as pickle
-import os
 import string
 import sys
 import time
@@ -77,9 +76,9 @@ iter_train = theano.function([idx], train_loss, givens=givens_train, updates=upd
 iter_validate = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
                                 givens=givens_valid)
 
-if config().restart_from_save and os.path.isfile(metadata_path):
+if config().restart_from_save:
     print 'Load model parameters for resuming'
-    resume_metadata = np.load(metadata_path)
+    resume_metadata = utils.load_pkl(config().restart_from_save)
     nn.layers.set_all_param_values(model.l_top, resume_metadata['param_values'])
     start_chunk_idx = resume_metadata['chunks_since_start'] + 1
     chunk_idxs = range(start_chunk_idx, config().max_nchunks)
@@ -130,7 +129,7 @@ for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
     # make nbatches_chunk iterations
     for b in xrange(config().nbatches_chunk):
         loss = iter_train(b)
-        print loss
+        # print loss
         tmp_losses_train.append(loss)
 
     if ((chunk_idx + 1) % config().validate_every) == 0:

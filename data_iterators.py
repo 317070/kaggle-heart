@@ -56,6 +56,60 @@ class SlicesDataGenerator(object):
                 break
 
 
+class SliceMetadataDataGenerator(object):
+    def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False,
+                 random=True, infinite=False, **kwargs):
+        self.data_path = data_path
+        self.patient_paths = glob.glob(data_path + '/*/study/')
+        self.slice_paths = [sorted(glob.glob(p + '/sax_*.pkl')) for p in self.patient_paths]
+        self.slice_paths = list(itertools.chain(*self.slice_paths))
+        self.slicepath2pid = {}
+        for s in self.slice_paths:
+            self.slicepath2pid[s] = int(re.search(r'/(\d+)/', s).group(1))
+        self.nsamples = len(self.slice_paths)
+        self.batch_size = batch_size
+        self.rng = np.random.RandomState(42)
+        self.full_batch = full_batch
+        self.random = random
+        self.infinite = infinite
+        self.id2labels = data.read_labels(labels_path) if labels_path else None
+        self.transformation_params = transform_params
+
+    def generate(self):
+        while True:
+            rand_idxs = np.arange(self.nsamples)
+            if self.random:
+                self.rng.shuffle(rand_idxs)
+            for pos in xrange(0, len(rand_idxs), self.batch_size):
+                idxs_batch = rand_idxs[pos:pos + self.batch_size]
+                nb = len(idxs_batch)
+                # allocate batch
+                x_batch = np.zeros((nb, 30) + self.transformation_params['patch_size'], dtype='float32')
+                mtd_batch = np.zeros((nb, 1), dtype='float32')
+                y0_batch = np.zeros((nb, 1), dtype='float32')
+                y1_batch = np.zeros((nb, 1), dtype='float32')
+                patients_ids = []
+
+                for i, j in enumerate(idxs_batch):
+                    slice_data = data.read_slice(self.slice_paths[j])
+                    metadata = data.read_metadata(self.slice_paths[j])
+                    x_batch[i], mtd_batch[i] = data.transform_with_metadata(slice_data, metadata,
+                                                                            self.transformation_params)
+                    patient_id = self.slicepath2pid[self.slice_paths[j]]
+                    patients_ids.append(patient_id)
+                    if self.id2labels:
+                        y0_batch[i] = self.id2labels[patient_id][0]
+                        y1_batch[i] = self.id2labels[patient_id][1]
+
+                if self.full_batch:
+                    if nb == self.batch_size:
+                        yield [x_batch, mtd_batch], [y0_batch, y1_batch], patients_ids
+                else:
+                    yield [x_batch, mtd_batch], [y0_batch, y1_batch], patients_ids
+            if not self.infinite:
+                break
+
+
 class PatientsDataGenerator(object):
     def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False, random=True,
                  infinite=True, **kwargs):

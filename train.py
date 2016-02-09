@@ -180,7 +180,7 @@ def train_model(expid):
 
             loss, kaggle_loss, segmentation_loss = tuple(iter_result[:3])
             utils.detect_nans(loss, xs_shared, ys_shared, all_params)
-
+ 
             losses.append(loss)
             kaggle_losses.append(kaggle_loss)
             segmentation_losses.append(segmentation_loss)
@@ -245,7 +245,7 @@ def train_model(expid):
                 #print losses[:num_valid_samples]
                 #print kaggle_losses[:regular_len]
                 #print segmentation_losses[:sunny_len]
-                print "  mean training loss:\t\t%.6f" % np.mean(vld_losses[:num_valid_samples])
+                print "  mean training loss:\t\t%.6f" % obj.compute_average(vld_losses[:num_valid_samples])
                 print "  mean kaggle loss:\t\t%.6f"   % np.mean(vld_kaggle_losses[:regular_len])
                 print "  mean segment loss:\t\t%.6f"  % np.mean(vld_segmentation_losses[:sunny_len])
                 # print "    acc:\t%.2f%%" % (acc * 100)

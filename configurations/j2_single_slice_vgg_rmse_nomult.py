@@ -71,7 +71,7 @@ def build_objective(interface_layers):
     l2_penalty = nn.regularization.regularize_layer_params_weighted(
         interface_layers["regularizable"], nn.regularization.l2)
     # build objective
-    return objectives.MSEObjective(interface_layers["outputs"], penalty=l2_penalty)
+    return objectives.RMSEObjective(interface_layers["outputs"], penalty=l2_penalty)
 
 
 # Architecture
@@ -116,7 +116,7 @@ def build_model():
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=1, b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
 
-    l_systole = deep_learning_layers.FixedScaleLayer(ldsys3, scale=600)
+    l_systole = deep_learning_layers.FixedScaleLayer(ldsys3, scale=1)
 
     # Diastole Dense layers
     lddia1 = nn.layers.DenseLayer(l5, num_units=1024, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
@@ -127,7 +127,7 @@ def build_model():
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
     lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=1, b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
 
-    l_diastole = deep_learning_layers.FixedScaleLayer(lddia3, scale=600)
+    l_diastole = deep_learning_layers.FixedScaleLayer(lddia3, scale=1)
 
 
     return {

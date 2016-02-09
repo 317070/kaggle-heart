@@ -167,10 +167,10 @@ def set_upside_up(imdata, metadata=None):
 
     if np.dot(y_e, f_1) < 0:
         for i in xrange(len(imdata)):
-            imdata[i] = imdata[i][::-1,:]
+            imdata[i] = imdata[i][:,::-1,:]
 
     if np.dot(x_e, f_2) < 0:
         for i in xrange(len(imdata)):
-            imdata[i] = imdata[i][:,::-1]
+            imdata[i] = imdata[i][:,:,::-1]
 
     return imdata

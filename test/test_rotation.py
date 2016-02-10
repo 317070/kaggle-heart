@@ -3,8 +3,8 @@ import re
 import data_test
 
 data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
-# data_path = '/data/dsb15_pkl/pkl_splitted/train'
-patient_path = glob.glob(data_path + '/*/study')
+# patient_path = glob.glob(data_path + '/*/study')
+patient_path = [data_path + '/555/study', data_path + '/693/study']
 for p in patient_path:
     print p
     spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))

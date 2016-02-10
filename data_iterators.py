@@ -56,24 +56,11 @@ class SlicesDataGenerator(object):
                 break
 
 
-class SliceMetadataDataGenerator(object):
+class SliceMetadataDataGenerator(SlicesDataGenerator):
     def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False,
                  random=True, infinite=False, **kwargs):
-        self.data_path = data_path
-        self.patient_paths = glob.glob(data_path + '/*/study/')
-        self.slice_paths = [sorted(glob.glob(p + '/sax_*.pkl')) for p in self.patient_paths]
-        self.slice_paths = list(itertools.chain(*self.slice_paths))
-        self.slicepath2pid = {}
-        for s in self.slice_paths:
-            self.slicepath2pid[s] = int(re.search(r'/(\d+)/', s).group(1))
-        self.nsamples = len(self.slice_paths)
-        self.batch_size = batch_size
-        self.rng = np.random.RandomState(42)
-        self.full_batch = full_batch
-        self.random = random
-        self.infinite = infinite
-        self.id2labels = data.read_labels(labels_path) if labels_path else None
-        self.transformation_params = transform_params
+        super(SliceMetadataDataGenerator, self).__init__(data_path, batch_size, transform_params, labels_path,
+                                                         full_batch, random, infinite, **kwargs)
 
     def generate(self):
         while True:

@@ -18,14 +18,18 @@ train_transformation_params = {
     'patch_size': patch_size,
     'rotation_range': (-16, 16),
     'translation_range': (-8, 8),
-    'shear_range': (0, 0)
+    'shear_range': (0, 0),
+    'do_flip': True,
+    'sequence_shift': True,
 }
 
 valid_transformation_params = {
     'patch_size': patch_size,
     'rotation_range': None,
     'translation_range': None,
-    'shear_range': None
+    'shear_range': None,
+    'do_flip': None,
+    'sequence_shift': None
 }
 
 batch_size = 32
@@ -77,8 +81,8 @@ max_pool = partial(MaxPool2DDNNLayer,
 
 def build_model():
     l_in = nn.layers.InputLayer((None, 30) + patch_size)
-    l_in_mtd = nn.layers.InputLayer((None, 1))
-    l_ins = [l_in, l_in_mtd]
+    l_in_spxl = nn.layers.InputLayer((None, 1))
+    l_ins = [l_in, l_in_spxl]
 
     l = conv3(l_in, num_filters=64)
     l = conv3(l, num_filters=64)
@@ -113,7 +117,7 @@ def build_model():
     l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
-    l_mu0 = nn_heart.MultLayer(l_mu0, l_in_mtd)
+    l_mu0 = nn_heart.MultLayer(l_mu0, l_in_spxl)
 
     # ---------------------------------------------------------------
 
@@ -122,7 +126,7 @@ def build_model():
     l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
-    l_mu1 = nn_heart.MultLayer(l_mu1, l_in_mtd)
+    l_mu1 = nn_heart.MultLayer(l_mu1, l_in_spxl)
 
     l_outs = [l_mu0, l_mu1]
     l_top = nn.layers.MergeLayer(l_outs)

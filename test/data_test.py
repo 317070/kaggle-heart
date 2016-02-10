@@ -5,8 +5,10 @@ import skimage.io
 import skimage.transform
 from configuration import config
 import cPickle as pickle
-import compressed_cache
 from collections import namedtuple
+import numpy as np
+
+rng = np.random.RandomState()
 
 
 def read_labels(file_path):
@@ -40,12 +42,10 @@ def read_patient(path):
     return slices_dict
 
 
-@compressed_cache.memoize()
 def read_slice(path):
     return pickle.load(open(path))['data']
 
 
-@compressed_cache.memoize()
 def read_metadata(path):
     d = pickle.load(open(path))['metadata'][0]
     metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient']}
@@ -59,19 +59,20 @@ def sample_augmentation_parameters(transformation):
             transformation['shear_range'],
             transformation['do_flip'],
             transformation['sequence_shift']]):
-        shift_x = config().rng.uniform(*transformation['translation_range'])
-        shift_y = config().rng.uniform(*transformation['translation_range'])
+        shift_x = rng.uniform(*transformation['translation_range'])
+        shift_y = rng.uniform(*transformation['translation_range'])
         translation = (shift_x, shift_y)
-        rotation = config().rng.uniform(*transformation['rotation_range'])
-        shear = config().rng.uniform(*transformation['shear_range'])
-        flip = (config().rng.randint(2) > 0) if transformation['do_flip'] else False  # flip half of the time
-        sequence_shift = config().rng.randint(30) if transformation['sequence_shift'] else 0
+        rotation = rng.uniform(*transformation['rotation_range'])
+        shear = rng.uniform(*transformation['shear_range'])
+        flip = rng.randint(2) > 0 if transformation['do_flip'] else False  # flip half of the time
+        sequence_shift = rng.randint(30) if transformation['sequence_shift']  else 0
+        print sequence_shift
         random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'flip', 'sequence_shift'])(
             translation,
             rotation,
             shear, flip,
             sequence_shift)
-    return random_params
+        return random_params
 
 
 def transform_with_metadata(data, metadata, transformation, random_augmentation_params=None):

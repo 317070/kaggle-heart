@@ -143,7 +143,8 @@ for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
 
         # load validation data to GPU
         batch_valid_predictions, batch_valid_targets, batch_valid_ids = [], [], []
-        for xs_batch_valid, ys_batch_valid, ids_batch in valid_data_iterator.generate():
+        for xs_batch_valid, ys_batch_valid, ids_batch in buffering.buffered_gen_threaded(
+                valid_data_iterator.generate()):
             for x_shared, x in zip(xs_shared, xs_batch_valid):
                 x_shared.set_value(x)
 

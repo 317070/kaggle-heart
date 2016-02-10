@@ -1,35 +1,40 @@
 import matplotlib
+# matplotlib.use('Qt4Agg')
+
 import glob
 import re
-import cPickle as pickle
 from matplotlib import animation
 import matplotlib.pyplot as plt
-import numpy as np
 import data_test
 
-pid = 519
-slice_id = 0
 patch_size = (128, 128)
 train_transformation_params = {
     'patch_size': patch_size,
     'rotation_range': (-16, 16),
     'translation_range': (-8, 8),
-    'shear_range': (0, 0)
+    'shear_range': (0, 0),
+    'do_flip': True,
+    'sequence_shift': True
 }
 
 valid_transformation_params = {
     'patch_size': patch_size,
     'rotation_range': None,
     'translation_range': None,
-    'shear_range': None
+    'shear_range': None,
+    'do_flip': None,
+    'sequence_shift': None
 }
 
-data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
-patient_path = glob.glob(data_path + '/*/study')
+data_path = '/mnt/sda3/data/kaggle-heart/pkl_train'
+# data_path = '/data/dsb15_pkl/pkl_train'
+patient_path = sorted(glob.glob(data_path + '/*/study'))
+# patient_path = [data_path + '/555/study', data_path+ '/693/study']
 for p in patient_path:
     print p
     spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
-    for s in spaths:
+    for s in [spaths[0]]:
+        print s
         data = data_test.read_slice(s)
         metadata = data_test.read_metadata(s)
 
@@ -51,8 +56,7 @@ for p in patient_path:
 
         # ---------------------------------
 
-        out_data = data_test.fix_image_orientation(data, metadata)
-        out_data = data_test.normalize_contrast(out_data)
+        out_data = data_test.transform_with_metadata(data, metadata, train_transformation_params)[0]
 
 
         def init_out():
@@ -62,6 +66,7 @@ for p in patient_path:
         def animate_out(i):
             im2.set_data(out_data[i])
             return im2
+
 
         plt.subplot(122)
         im2 = fig.gca().imshow(out_data[0], cmap='gist_gray_r', vmin=0., vmax=1.)

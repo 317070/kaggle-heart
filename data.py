@@ -48,7 +48,13 @@ def read_slice(path):
 @compressed_cache.memoize()
 def read_metadata(path):
     d = pickle.load(open(path))['metadata'][0]
-    metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient']}
+    metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient', 'SliceLocation',
+                                  'PatientSex', 'PatientAge']}
+    metadata['PixelSpacing'] = np.float32(metadata['PixelSpacing'])
+    metadata['ImageOrientationPatient'] = np.float32(metadata['ImageOrientationPatient'])
+    metadata['SliceLocation'] = np.float32(metadata['SliceLocation'])
+    metadata['PatientSex'] = 1 if metadata['PatientSex'] == 'F' else 0
+    metadata['PatientAge'] = int(metadata['PatientAge'][1:3])
     return metadata
 
 
@@ -90,13 +96,14 @@ def transform_with_metadata(data, metadata, transformation, random_augmentation_
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
     # rotate images and fix the contrast
-    data = fix_image_orientation(data, metadata)
     data = fix_contrasts(data)
 
     # build scaling transformation
     scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
     tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
-    total_tform = tform
+    orient_tform = build_orientation_correction_transform(metadata)
+    tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
+    total_tform = tform + tform_uncenter + orient_tform + tform_center
 
     # calculate area per pixel in the rescaled image
     zoom_ratio = []
@@ -107,13 +114,11 @@ def transform_with_metadata(data, metadata, transformation, random_augmentation_
 
     # build random augmentation
     if random_augmentation_params:
-        tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
-
         augment_tform = build_augmentation_transform(rotation=random_augmentation_params.rotation,
                                                      shear=random_augmentation_params.shear,
                                                      translation=random_augmentation_params.translation,
                                                      flip=random_augmentation_params.flip)
-        total_tform = tform + tform_uncenter + augment_tform + tform_center
+        total_tform = tform + tform_uncenter + augment_tform + orient_tform + tform_center
 
     # apply transformation per image
     for i in xrange(data.shape[0]):
@@ -242,38 +247,6 @@ def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip=F
     return tform_augment
 
 
-def fix_image_orientation(data, metadata):
-    """
-    rotates the images, so that the belly is to the left
-    read http://dicomiseasy.blogspot.be/2013/06/getting-oriented-using-image-plane.html
-    :param data:  data from one slice (30, h, w)
-    :param metadata:
-    :return:
-    """
-    F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
-
-    fy = F[1, :]
-    fx = F[0, :]
-
-    # unit vectors of patient coordinates
-    x_e = np.array([1, 0, 0])
-    y_e = np.array([0, 1, 0])
-
-    if abs(np.dot(y_e, fy)) >= abs(np.dot(y_e, fx)):
-        out_data = np.transpose(data, (0, 2, 1))
-        fy, fx = fx, fy
-    else:
-        out_data = data
-
-    if np.dot(y_e, fy) < 0:
-        out_data = out_data[:, ::-1, :]
-
-    if np.dot(x_e, fx) < 0:
-        out_data = out_data[:, :, ::-1]
-
-    return out_data
-
-
 def fix_contrasts(data):
     """
     normalizes the contrast over slice
@@ -284,3 +257,34 @@ def fix_contrasts(data):
     low, high = perc[0], perc[1]
     out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
     return out_data
+
+
+def build_orientation_correction_transform(metadata):
+    tform_list = [tform_identity]
+
+    F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
+    fy = F[1, :]
+    fx = F[0, :]
+
+    # unit vectors of patient coordinates
+    x_e = np.array([1, 0, 0])
+    y_e = np.array([0, 1, 0])
+
+    if abs(np.dot(y_e, fy)) >= abs(np.dot(y_e, fx)):
+        tform_list.append(skimage.transform.AffineTransform(rotation=np.deg2rad(90)))
+        tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
+        fy, fx = fx, fy
+
+    if np.dot(y_e, fy) < 0:
+        tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
+
+    if np.dot(x_e, fx) < 0:
+        tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
+        tform_list.append(skimage.transform.AffineTransform(rotation=np.deg2rad(180)))
+
+    tform_total = tform_identity
+
+    for t in tform_list[::-1]:
+        tform_total += t
+
+    return tform_total

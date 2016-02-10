@@ -97,6 +97,51 @@ class SliceMetadataDataGenerator(SlicesDataGenerator):
                 break
 
 
+class SliceMetadata2DataGenerator(SlicesDataGenerator):
+    def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False,
+                 random=True, infinite=False, **kwargs):
+        super(SliceMetadata2DataGenerator, self).__init__(data_path, batch_size, transform_params, labels_path,
+                                                          full_batch, random, infinite, **kwargs)
+
+    def generate(self):
+        while True:
+            rand_idxs = np.arange(self.nsamples)
+            if self.random:
+                self.rng.shuffle(rand_idxs)
+            for pos in xrange(0, len(rand_idxs), self.batch_size):
+                idxs_batch = rand_idxs[pos:pos + self.batch_size]
+                nb = len(idxs_batch)
+                # allocate batch
+                x_batch = np.zeros((nb, 30) + self.transformation_params['patch_size'], dtype='float32')
+                pxl_area_batch = np.zeros((nb, 1), dtype='float32')
+                mtd_batch = np.zeros((nb, 3), dtype='float32')
+                y0_batch = np.zeros((nb, 1), dtype='float32')
+                y1_batch = np.zeros((nb, 1), dtype='float32')
+                patients_ids = []
+
+                for i, j in enumerate(idxs_batch):
+                    slice_data = data.read_slice(self.slice_paths[j])
+                    metadata = data.read_metadata(self.slice_paths[j])
+                    mtd_batch[i, 0] = metadata['SliceLocation']
+                    mtd_batch[i, 1] = metadata['PatientAge']
+                    mtd_batch[i, 2] = metadata['PatientSex']
+                    x_batch[i], pxl_area_batch[i] = data.transform_with_metadata(slice_data, metadata,
+                                                                                 self.transformation_params)
+                    patient_id = self.slicepath2pid[self.slice_paths[j]]
+                    patients_ids.append(patient_id)
+                    if self.id2labels:
+                        y0_batch[i] = self.id2labels[patient_id][0]
+                        y1_batch[i] = self.id2labels[patient_id][1]
+
+                if self.full_batch:
+                    if nb == self.batch_size:
+                        yield [x_batch, pxl_area_batch, mtd_batch], [y0_batch, y1_batch], patients_ids
+                else:
+                    yield [x_batch, pxl_area_batch, mtd_batch], [y0_batch, y1_batch], patients_ids
+            if not self.infinite:
+                break
+
+
 class PatientsDataGenerator(object):
     def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False, random=True,
                  infinite=True, **kwargs):

@@ -99,12 +99,11 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
 
-#            put_in_the_middle(result[tag][index], patient_4d_tensor)
+            put_in_the_middle(result[tag][index], patient_4d_tensor)
             # For now, simply copy the data
-            print data[0].shape
-            print patient_4d_tensor.shape
-            result[tag+':raw_%d' % index] = data[0]
-            result[tag+':patch_%d' % index] = patient_4d_tensor
+
+#            result[tag+':raw_%d' % index] = data[0]
+#            result[tag+':patch_%d' % index] = patient_4d_tensor
 
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()

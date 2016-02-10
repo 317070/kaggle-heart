@@ -69,7 +69,8 @@ def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
             rotation=augment["rotation"],
             shear=augment["shear"],
             translation=augment["translation"],
-            flip=augment["flip"] if "flip" in augment else False)
+            flip_vert=augment["flip_vert"]>.5,
+        )
 
         patch_scale = max(
             normalised_patch_size[0]/output_shape[0],
@@ -205,7 +206,6 @@ def build_shift_center_transform(image_shape, center_location, patch_size):
         center_absolute_location[0], image_shape[1] - patch_size[1]/2.0)
     center_absolute_location[1] = min(
         center_absolute_location[1], image_shape[0] - patch_size[0]/2.0)
-    print center_absolute_location
 
     # Check for overlap at both edges
     if patch_size[0] > image_shape[0]:
@@ -222,12 +222,15 @@ def build_shift_center_transform(image_shape, center_location, patch_size):
         skimage.transform.SimilarityTransform(translation=translation_uncenter))
 
 
-def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translation=(0, 0), flip=False):
+def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translation=(0, 0), flip=False, flip_vert=False):
     if flip:
         shear += 180
         rotation += 180
         # shear by 180 degrees is equivalent to rotation by 180 degrees + flip.
         # So after that we rotate it another 180 degrees to get just the flip.
+
+    if flip_vert:
+        shear += 180
 
     tform_augment = skimage.transform.AffineTransform(scale=(1/zoom[0], 1/zoom[1]), rotation=np.deg2rad(rotation), shear=np.deg2rad(shear), translation=translation)
     return tform_augment

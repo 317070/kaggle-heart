@@ -144,13 +144,7 @@ crop_size = (30, 200, 200)
 
 wanted_input_tags = ['sliced:data:singleslice:middle']
 wanted_output_tags = ['systole', 'diastole', 'patients']
-indices = [114]
-print 'processing %d' % indices[0]
-result_67 = data_loader.get_patient_data(
-    indices, wanted_input_tags, wanted_output_tags, set="train",
-    preprocess_function=_config().preprocess_train)
-raw_slice_67 = result_67['input']['sliced:data:singleslice:middle:raw_0']
-patient_id_67 = result_67['output']['patients'][0]
+
 
 for i in range(0, 417):
 #    print 'Loading and processing patient %d' % i
@@ -158,9 +152,11 @@ for i in range(0, 417):
     result = data_loader.get_patient_data(
         indices, wanted_input_tags, wanted_output_tags, set="train",
         preprocess_function=_config().preprocess_train)
-    raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
+#    raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
     patient_id = result['output']['patients'][0]
-    crop_slice = result['input']['sliced:data:singleslice:middle:patch_0']
+#    crop_slice = result['input']['sliced:data:singleslice:middle:patch_0']
+    raw_slice = result['input']['sliced:data:singleslice:middle'][0]
+    crop_slice = raw_slice
 
     animate_slice_crop(raw_slice, crop_slice, patient_id)
 

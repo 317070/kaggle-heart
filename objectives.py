@@ -81,6 +81,32 @@ class MSEObjective(TargetVarDictObjective):
         return loss + self.penalty
 
 
+class RMSEObjective(TargetVarDictObjective):
+    def __init__(self, input_layers, *args, **kwargs):
+        super(RMSEObjective, self).__init__(input_layers, *args, **kwargs)
+        self.input_systole = input_layers["systole:value"]
+        self.input_diastole = input_layers["diastole:value"]
+
+        self.target_vars["systole:value"] = T.fvector("systole_target_value")
+        self.target_vars["diastole:value"] = T.fvector("diastole_target_value")
+
+    def get_loss(self, average=True, *args, **kwargs):
+        network_systole = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)[:,0]
+        network_diastole = lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)[:,0]
+
+        systole_target = self.target_vars["systole:value"]
+        diastole_target = self.target_vars["diastole:value"]
+
+        loss = 0.5 * (network_systole - systole_target) ** 2 + 0.5 * (network_diastole - diastole_target)**2
+
+        if average:
+            loss = T.sqrt(T.mean(loss, axis=(0,)))
+        return loss
+
+    def compute_average(self, aggregate):
+        return np.sqrt(np.mean(aggregate, axis=0))
+
+
 class KaggleValidationMSEObjective(MSEObjective):
     """
     This is the objective as defined by Kaggle: https://www.kaggle.com/c/second-annual-data-science-bowl/details/evaluation

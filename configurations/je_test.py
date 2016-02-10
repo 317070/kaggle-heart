@@ -46,6 +46,7 @@ augmentation_params = {
     "rotation": (0, 0),
     "shear": (0, 0),
     "translation": (0, 0),
+    "flip_vert": (0, 1),
 }
 
 cleaning_processes = [normalize_contrast, set_upside_up]

@@ -37,6 +37,32 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
     return result, volume_change
 
 
+def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None, pixel_spacing=(1,1)):
+    if not pixel_spacing[0] == pixel_spacing[1]:
+        raise NotImplementedError("Only supports square pixels")
+
+    current_shape = slices[0].shape[-2:]
+    normalised_shape = tuple(int(float(d)*ps) for d,ps in zip(current_shape, pixel_spacing))
+
+    print 'normalising %dx%d image with pixel spacing %.2f -> %dx%d' % (
+        current_shape[0], current_shape[1], pixel_spacing[0], normalised_shape[0], normalised_shape[1])
+
+    max_time = max(slices[i].shape[0] for i in xrange(len(slices)))
+    final_shape = (len(slices),max_time) + normalised_shape
+    result = np.zeros(final_shape, dtype="float32")    
+
+    for i, mri_slice in enumerate(slices):
+        norm_rescaling = 1./pixel_spacing[0]
+        tform_normscale = build_rescale_transform(
+            norm_rescaling, mri_slice[0].shape[-2:], target_shape=normalised_shape)
+
+        total_tform = tform_normscale
+        for j, frame in enumerate(mri_slice):
+            result[i,j] = fast_warp(frame, total_tform, output_shape=normalised_shape)
+
+    return result
+
+
 def resize_and_augment(images, output_shape=(50, 50), augment=None):
     if augment is None:
         return resize_to_make_it_fit(images, output_shape=output_shape)

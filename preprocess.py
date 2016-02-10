@@ -2,7 +2,7 @@ import numpy as np
 import re
 from configuration import config
 from image_transform import resize_to_make_it_fit, resize_to_make_sunny_fit, resize_and_augment_sunny, \
-    resize_and_augment
+    resize_and_augment, normscale_resize_and_augment
 import quasi_random
 from itertools import izip
 from functools import partial
@@ -78,6 +78,44 @@ def sunny_preprocess_validation(chunk_x, img, chunk_y, lbl):
     chunk_y[:] = resize_to_make_sunny_fit(segmentation, output_shape=chunk_y.shape[-2:])
 
 
+def preprocess_normscale(patient_data, result, index, augment=True,
+                         metadata=None):
+    """Normalizes scale and augments the data.
+    """
+    augmentation_params = sample_augmentation_parameters() if augment else None
+
+    # Iterate over different sorts of data
+    for tag, data in patient_data.iteritems():
+        desired_shape = result[tag][index].shape
+        
+
+        if tag.startswith("sliced:data:singleslice"):
+            print 'not rotated yet'
+            data = clean_images([patient_data[tag]], metadata=metadata)
+            print 'now its rotated'
+            patient_4d_tensor = normscale_resize_and_augment(
+                data, output_shape=desired_shape[-2:],
+                augment=augmentation_params,
+                pixel_spacing=metadata["PixelSpacing"])[0]
+
+            if "area_per_pixel:sax" in result:
+                raise NotImplementedError()
+
+#            put_in_the_middle(result[tag][index], patient_4d_tensor)
+            # For now, simply copy the data
+            result[tag+':raw_%d' % index] = patient_4d_tensor
+
+        elif tag.startswith("sliced:data:shape"):
+            raise NotImplementedError()
+        
+        elif tag.startswith("sliced:data"):
+            raise NotImplementedError()
+
+        elif tag.startswith("sliced:meta:"):
+            # TODO: this probably doesn't work very well yet
+            result[tag][index] = patient_data[tag]
+
+
 def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):
     """
     Load the resulting data, augment it if needed, and put it in result at the correct index
@@ -147,30 +185,35 @@ def normalize_contrast(imdata, metadata=None):
     return imdata
 
 
-def set_upside_up(imdata, metadata=None):
+def set_upside_up(data, metadata=None):
+    print 'rotating'
+    out_data = []
+    for idx, dslice in enumerate(data):
+        out_data.append(set_upside_up_slice(dslice, metadata))
+    return out_data
+
+
+def set_upside_up_slice(dslice, metadata=None):
     # turn upside up
-    F = np.array(metadata["ImageOrientationPatient"]).reshape( (2,3) )
+    print metadata
+    F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
 
-    f_1 = F[1,:]/np.linalg.norm(F[1,:])
-    f_2 = F[0,:]/np.linalg.norm(F[0,:])
+    f_1 = F[1, :] / np.linalg.norm(F[1, :])
+    f_2 = F[0, :] / np.linalg.norm(F[0, :])
 
-    x_e = np.array([1,0,0])
-    y_e = np.array([0,1,0])
-    z_e = np.array([0,0,1])
+    x_e = np.array([1, 0, 0])
+    y_e = np.array([0, 1, 0])
 
     if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
-        for i in xrange(len(imdata)):
-            image = imdata[i]
-            image = np.swapaxes(image, 1, 2)
-            imdata[i] = image
-            f_1,f_2 = f_2,f_1
+        out_data = np.transpose(dslice, (0, 2, 1))
+        f_1, f_2 = f_2, f_1
+    else:
+        out_data = dslice
 
     if np.dot(y_e, f_1) < 0:
-        for i in xrange(len(imdata)):
-            imdata[i] = imdata[i][::-1,:]
+        out_data = out_data[:, ::-1, :]
 
     if np.dot(x_e, f_2) < 0:
-        for i in xrange(len(imdata)):
-            imdata[i] = imdata[i][:,::-1]
+        out_data = out_data[:, :, ::-1]
 
-    return imdata
+    return out_data

@@ -246,22 +246,14 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
 
     # Check if any of the inputs or outputs are still empty!
-    for key, value in itertools.chain(result["input"].iteritems(), result["output"].iteritems()):
-        if not np.any(value): #there are only zeros in value
-            raise Exception("there is an empty value at key %s" % key)
-        if not np.isfinite(value).all(): #there are NaN's or infinites somewhere
-            print value
-            raise Exception("there is a NaN at key %s" % key)
-
-        """
-        if set=="train" and sum([0 if 0<=i<len(train_patient_folders) else 1 for i in indices]) > 0:
-            raise Exception("not filled train batch at key %s" % key)
-
-        for idx, sample in enumerate(value[:len(folders)]):
+    if not hasattr(_config(), 'check_inputs') or _config().check_inputs:
+        for key, value in itertools.chain(result["input"].iteritems(), result["output"].iteritems()):
             if not np.any(value): #there are only zeros in value
+                raise Exception("there is an empty value at key %s" % key)
+            if not np.isfinite(value).all(): #there are NaN's or infinites somewhere
                 print value
-                raise Exception("there is an empty sample at key %s" % key)
-        """
+                raise Exception("there is a NaN at key %s" % key)
+
     return result
 
 

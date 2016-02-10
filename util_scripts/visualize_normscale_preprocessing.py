@@ -67,7 +67,7 @@ def extract_image_patch_left(chunk_dst, img):
     im_x, im_y = img.shape
 
     offset_x = (im_x - p_x) // 2
-    offset_y = 0
+    offset_y = (im_y - p_y) // 4
 
     if offset_x < 0:
         cx = slice(-offset_x, -offset_x + im_x)
@@ -83,8 +83,6 @@ def extract_image_patch_left(chunk_dst, img):
         cy = slice(0, p_y)
         iy = slice(offset_y, offset_y + p_y)
 
-    print ix
-    print iy
     chunk_dst[cx, cy] = img[ix, iy]
 
 
@@ -155,7 +153,7 @@ raw_slice_67 = result_67['input']['sliced:data:singleslice:middle:raw_0']
 patient_id_67 = result_67['output']['patients'][0]
 
 sizes = []
-for i in range(0, 500):
+for i in range(0, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
     result = data_loader.get_patient_data(
@@ -172,7 +170,7 @@ for i in range(0, 500):
     print i, patient_id, shape
     sizes.append(raw_slice.shape[-2:])
 
-    #animate_slice_crop(raw_slice, raw_slice_patch, patient_id)
+    animate_slice_crop(raw_slice, raw_slice_patch, patient_id)
 
 
 # make scatterplot

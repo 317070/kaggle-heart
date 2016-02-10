@@ -131,18 +131,18 @@ def preprocess_with_augmentation(patient_data, result, index, augment=True, meta
         desired_shape = result[tag][index].shape
         # try to fit data into the desired shape
         if tag.startswith("sliced:data:singleslice"):
-            data = clean_images([patient_data[tag]], metadata=metadata)
+            data = clean_images([patient_data[tag]], metadata=metadata_tag)
             patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)[0]
             if "area_per_pixel:sax" in result:
-                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata["PixelSpacing"])
+                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata_tag["PixelSpacing"])
 
             put_in_the_middle(result[tag][index], patient_4d_tensor)
         elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
-            data = clean_images(patient_data[tag], metadata=metadata)
+            data = clean_images(patient_data[tag], metadata=metadata_tag)
             patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)
             if "area_per_pixel:sax" in result:
-                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata["PixelSpacing"])
+                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata_tag[0]["PixelSpacing"])
 
             if "noswitch" not in tag:
                 patient_4d_tensor = np.swapaxes(patient_4d_tensor,1,0)

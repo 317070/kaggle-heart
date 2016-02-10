@@ -40,6 +40,7 @@ learning_rate_schedule = {
 
 build_updates = updates.build_adam_updates
 
+cleaning_processes = [normalize_contrast, set_upside_up]
 
 preprocess_train = preprocess.preprocess_normscale
 preprocess_validation = partial(preprocess_train, augment=False)

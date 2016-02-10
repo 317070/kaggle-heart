@@ -86,17 +86,15 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
     # Iterate over different sorts of data
     for tag, data in patient_data.iteritems():
+        metadata_tag = metadata[tag]
         desired_shape = result[tag][index].shape
         
-
         if tag.startswith("sliced:data:singleslice"):
-            print 'not rotated yet'
-            data = clean_images([patient_data[tag]], metadata=metadata)
-            print 'now its rotated'
+            data = clean_images([patient_data[tag]], metadata=metadata_tag)
             patient_4d_tensor = normscale_resize_and_augment(
                 data, output_shape=desired_shape[-2:],
                 augment=augmentation_params,
-                pixel_spacing=metadata["PixelSpacing"])[0]
+                pixel_spacing=metadata_tag["PixelSpacing"])[0]
 
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
@@ -186,7 +184,6 @@ def normalize_contrast(imdata, metadata=None):
 
 
 def set_upside_up(data, metadata=None):
-    print 'rotating'
     out_data = []
     for idx, dslice in enumerate(data):
         out_data.append(set_upside_up_slice(dslice, metadata))
@@ -195,7 +192,6 @@ def set_upside_up(data, metadata=None):
 
 def set_upside_up_slice(dslice, metadata=None):
     # turn upside up
-    print metadata
     F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
 
     f_1 = F[1, :] / np.linalg.norm(F[1, :])

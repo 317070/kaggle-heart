@@ -52,6 +52,42 @@ def extract_image_patch(chunk_dst, img):
     chunk_dst[cx, cy] = img[ix, iy]
 
 
+def extract_image_patch_left(chunk_dst, img):
+    """
+    extract a correctly sized patch from img and place it into chunk_dst,
+    which assumed to be preinitialized to zeros.
+    """
+    # # DEBUG: draw a border to see where the image ends up
+    # img[0, :] = 127
+    # img[-1, :] = 127
+    # img[:, 0] = 127
+    # img[:, -1] = 127
+
+    p_x, p_y = chunk_dst.shape
+    im_x, im_y = img.shape
+
+    offset_x = (im_x - p_x) // 2
+    offset_y = 0
+
+    if offset_x < 0:
+        cx = slice(-offset_x, -offset_x + im_x)
+        ix = slice(0, im_x)
+    else:
+        cx = slice(0, p_x)
+        ix = slice(offset_x, offset_x + p_x)
+
+    if offset_y < 0:
+        cy = slice(-offset_y, -offset_y + im_y)
+        iy = slice(0, im_y)
+    else:
+        cy = slice(0, p_y)
+        iy = slice(offset_y, offset_y + p_y)
+
+    print ix
+    print iy
+    chunk_dst[cx, cy] = img[ix, iy]
+
+
 def animate_slice(slicedata1, slicedata2, index1, index2):
     fig, (ax1, ax2) = plt.subplots(1, 2)
     mngr = plt.get_current_fig_manager()
@@ -130,13 +166,13 @@ for i in range(0, 500):
 
     raw_slice_patch = np.zeros(crop_size)
     for im_dst, im in zip(raw_slice_patch, raw_slice):
-        extract_image_patch(im_dst, im)
+        extract_image_patch_left(im_dst, im)
     shape = raw_slice.shape[-2:]
     if shape[0] > shape[1]: shape = (shape[1], shape[0])
     print i, patient_id, shape
     sizes.append(raw_slice.shape[-2:])
 
-    animate_slice_crop(raw_slice, raw_slice_patch, patient_id)
+    #animate_slice_crop(raw_slice, raw_slice_patch, patient_id)
 
 
 # make scatterplot

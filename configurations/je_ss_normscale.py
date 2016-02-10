@@ -44,9 +44,9 @@ build_updates = updates.build_adam_updates
 
 cleaning_processes = [normalize_contrast, set_upside_up]
 
-preprocess_train = preprocess.preprocess_normscale
+preprocess_train = preprocess_normscale
 preprocess_validation = partial(preprocess_train, augment=False)
-preprocess_test = preprocess.preprocess_normscale
+preprocess_test = preprocess_normscale
 test_time_augmentations = 100 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
 create_test_gen = partial(generate_test_batch, set='validation')  # validate as well by default
 

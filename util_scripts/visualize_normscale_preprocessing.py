@@ -152,7 +152,6 @@ result_67 = data_loader.get_patient_data(
 raw_slice_67 = result_67['input']['sliced:data:singleslice:middle:raw_0']
 patient_id_67 = result_67['output']['patients'][0]
 
-sizes = []
 for i in range(0, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
@@ -161,19 +160,8 @@ for i in range(0, 417):
         preprocess_function=_config().preprocess_train)
     raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
     patient_id = result['output']['patients'][0]
+    crop_slice = result['input']['sliced:data:singleslice:middle:patch_0']
 
-    raw_slice_patch = np.zeros(crop_size)
-    for im_dst, im in zip(raw_slice_patch, raw_slice):
-        extract_image_patch_left(im_dst, im)
-    shape = raw_slice.shape[-2:]
-    if shape[0] > shape[1]: shape = (shape[1], shape[0])
-    print i, patient_id, shape
-    sizes.append(raw_slice.shape[-2:])
-
-    animate_slice_crop(raw_slice, raw_slice_patch, patient_id)
+    animate_slice_crop(raw_slice, crop_slice, patient_id)
 
 
-# make scatterplot
-x, y = zip(*sizes)
-plt.scatter(x, y)
-plt.show()

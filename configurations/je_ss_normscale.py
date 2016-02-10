@@ -14,6 +14,8 @@ import objectives
 import theano_printer
 import updates
 
+from preprocess import preprocess, preprocess_with_augmentation, set_upside_up, normalize_contrast, preprocess_normscale
+
 cached = "memory"
 
 # Save and validation frequency

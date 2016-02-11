@@ -12,6 +12,13 @@ import utils
 
 
 tform_identity = skimage.transform.AffineTransform()
+NO_AUGMENT_PARAMS = {
+    "zoom": (1.0, 1.0),
+    "rotation": 0.0,
+    "shear": 0.0,
+    "translation": (0.0, 0.0),
+    "flip_vert": 0,
+}
 
 def resize_to_make_it_fit(images, output_shape=(50, 50)):
     max_time = max(images[i].shape[0] for i in xrange(len(images)))
@@ -44,6 +51,10 @@ def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
     """
     if not pixel_spacing[0] == pixel_spacing[1]:
         raise NotImplementedError("Only supports square pixels")
+
+    # No augmentation:
+    if augment is None:
+        augment = NO_AUGMENT_PARAMS
 
     current_shape = slices[0].shape[-2:]
     normalised_shape = tuple(int(float(d)*ps) for d,ps in zip(current_shape, pixel_spacing))

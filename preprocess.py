@@ -81,6 +81,14 @@ def sunny_preprocess_validation(chunk_x, img, chunk_y, lbl):
 def preprocess_normscale(patient_data, result, index, augment=True,
                          metadata=None):
     """Normalizes scale and augments the data.
+
+    Args:
+        patient_data: the data to be preprocessed.
+        result: dict to store the result in.
+        index: index indicating which in which slot in the result dict the data
+            should go.
+        augment: flag indicating wheter augmentation is needed.
+        metadata: metadata belonging to the patient data.
     """
     augmentation_params = sample_augmentation_parameters() if augment else None
 
@@ -90,16 +98,24 @@ def preprocess_normscale(patient_data, result, index, augment=True,
         desired_shape = result[tag][index].shape
         
         if tag.startswith("sliced:data:singleslice"):
-            data = clean_images([patient_data[tag]], metadata=metadata_tag)
-            patient_4d_tensor = normscale_resize_and_augment(
+            # Cleaning data before extracting a patch
+            data = clean_images(
+                [patient_data[tag]], metadata=metadata_tag,
+                cleaning_processes=config().cleaning_processes)
+            # Augment and extract patch
+            patient_3d_tensor = normscale_resize_and_augment(
                 data, output_shape=desired_shape[-2:],
                 augment=augmentation_params,
                 pixel_spacing=metadata_tag["PixelSpacing"])[0]
+            # Clean data further
+            #patient_4d_tensor = clean_images(
+            #    patient_4d_tensor, metadata=metadata_tag,
+            #    cleaning_processes=config().cleaning_processes)
 
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
 
-            put_in_the_middle(result[tag][index], patient_4d_tensor)
+            put_in_the_middle(result[tag][index], patient_3d_tensor)
             # For now, simply copy the data
 
 #            result[tag+':raw_%d' % index] = data[0]
@@ -160,26 +176,39 @@ def preprocess_with_augmentation(patient_data, result, index, augment=True, meta
 preprocess = partial(preprocess_with_augmentation, augment=False)
 
 
-def clean_images(data, metadata):
+def clean_images(data, metadata, cleaning_processes):
     """
     clean up 4d-tensor of imdata consistently (fix contrast, move upside up, etc...)
     :param data:
     :return:
     """
-    for process in config().cleaning_processes:
+    for process in cleaning_processes:
         data = process(data, metadata)
     return data
 
 
-def normalize_contrast(imdata, metadata=None):
-    # normalize contrast
+def normalize_contrast(imdata, metadata=None, percentiles=(5.0,95.0)):
+    lp, hp = percentiles
     flat_data = np.concatenate([i.flatten() for i in imdata]).flatten()
-    high = np.percentile(flat_data, 95.0)
-    low  = np.percentile(flat_data, 5.0)
+    high = np.percentile(flat_data, hp)
+    low  = np.percentile(flat_data, lp)
     for i in xrange(len(imdata)):
         image = imdata[i]
         image = 1.0 * (image - low) / (high - low)
         image = np.clip(image, 0.0, 1.0)
+        imdata[i] = image
+
+    return imdata
+
+
+def normalize_contrast_zmuv(imdata, metadata=None, z=2):
+    flat_data = np.concatenate([i.flatten() for i in imdata]).flatten()
+    mean = np.mean(flat_data)
+    std = np.std(flat_data)
+    for i in xrange(len(imdata)):
+        image = imdata[i]
+        image = ((image - mean) / (2 * std * z) + 0.5)
+        image = np.clip(image, -0.0, 1.0)
         imdata[i] = image
 
     return imdata

@@ -28,7 +28,7 @@ valid_transformation_params = {
 
 data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
 # data_path = '/data/dsb15_pkl/pkl_train'
-patient_path = sorted(glob.glob(data_path + '/545/study'))
+patient_path = sorted(glob.glob(data_path + '/*/study'))
 # patient_path = [data_path + '/555/study', data_path+ '/693/study']
 for p in patient_path:
     print p
@@ -56,7 +56,7 @@ for p in patient_path:
 
         # ---------------------------------
 
-        out_data = data_test.transform_with_metadata(data, metadata, valid_transformation_params)[0]
+        out_data = data_test.transform_with_jeroen(data, metadata, valid_transformation_params)
 
 
         def init_out():

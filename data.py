@@ -95,7 +95,7 @@ def transform_with_metadata(data, metadata, transformation, random_augmentation_
     if not random_augmentation_params:
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
-    # rotate images and fix the contrast
+    # fix the contrast
     data = fix_contrasts(data)
 
     # build scaling transformation

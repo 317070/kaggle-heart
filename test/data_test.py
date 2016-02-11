@@ -99,7 +99,6 @@ def transform_with_metadata(data, metadata, transformation, random_augmentation_
     # fix the contrast
     # data = fix_image_orientation(data, metadata)
     data = fix_contrasts(data)
-    data = fix_image_orientation(data, metadata)
 
     # build scaling transformation
     scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
@@ -107,7 +106,6 @@ def transform_with_metadata(data, metadata, transformation, random_augmentation_
     orient_tform = build_orientation_correction_transform(metadata)
     tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
 
-    total_tform = tform
     total_tform = tform + tform_uncenter + orient_tform + tform_center
 
     # calculate area per pixel in the rescaled image
@@ -143,6 +141,75 @@ def transform_with_metadata(data, metadata, transformation, random_augmentation_
         out_data = np.roll(out_data, random_augmentation_params.sequence_shift, axis=0)
 
     return out_data, area_per_pixel
+
+
+def transform_with_jeroen(data, metadata, transformation, random_augmentation_params=None, shift_center=(.4, .5),
+                          normalised_patch_size=(200, 200)):
+    """
+    :param data: (30, height, width) matrix from one slice of MRI
+    :param transformation:
+    :return:
+    """
+    patch_size = transformation['patch_size']
+    out_shape = (30,) + patch_size
+    out_data = np.zeros(out_shape, dtype='float32')
+
+    # if random_augmentation_params=None -> sample new params
+    # if the transformation implies no augmentations then random_augmentation_params remains None
+    if not random_augmentation_params:
+        random_augmentation_params = sample_augmentation_parameters(transformation)
+
+    # fix the contrast
+    data = fix_contrasts(data)
+
+    # build transform for orientation correction
+    orient_tform = build_orientation_correction_transform(metadata)
+    tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
+
+    # build scaling transformation
+    pixel_spacing = metadata['PixelSpacing']
+    assert pixel_spacing[0] == pixel_spacing[1]
+    normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(data.shape[-2:], pixel_spacing))
+    # scale the images such that they all have the same scale
+    norm_rescaling = 1. / pixel_spacing[0]
+    tform_normscale = build_rescale_transform(norm_rescaling, data.shape[-2:], target_shape=normalised_shape)
+    tform_shift_center, tform_shift_uncenter = build_shift_center_transform(normalised_shape, shift_center,
+                                                                            normalised_patch_size)
+
+    print patch_size
+    print normalised_patch_size
+    patch_scale = max(1. * normalised_patch_size[0] / patch_size[0], 1. * normalised_patch_size[1] / patch_size[1])
+    print patch_scale
+    tform_patch_scale = build_rescale_transform(patch_scale, normalised_patch_size, target_shape=patch_size)
+
+    total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale + tform_uncenter + orient_tform + tform_center
+
+    # build random augmentation
+    if random_augmentation_params:
+        augment_tform = build_augmentation_transform(rotation=random_augmentation_params.rotation,
+                                                     shear=random_augmentation_params.shear,
+                                                     translation=random_augmentation_params.translation,
+                                                     flip=random_augmentation_params.flip)
+        total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale + tform_uncenter + orient_tform + tform_center
+
+    # apply transformation per image
+    for i in xrange(data.shape[0]):
+        out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
+
+    # if the sequence is < 30 timesteps, copy last image
+    if data.shape[0] < out_shape[0]:
+        for j in xrange(data.shape[0], out_shape[0]):
+            out_data[j] = out_data[-1]
+
+    # if > 30, remove images
+    if data.shape[0] > out_shape[0]:
+        out_data = out_data[:30]
+
+    # shift the sequence for a number of time steps
+    if random_augmentation_params:
+        out_data = np.roll(out_data, random_augmentation_params.sequence_shift, axis=0)
+
+    return out_data
 
 
 tform_identity = skimage.transform.AffineTransform()
@@ -288,3 +355,38 @@ def fix_contrasts(data):
     low, high = perc[0], perc[1]
     out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
     return out_data
+
+
+def build_shift_center_transform(image_shape, center_location, patch_size):
+    """Shifts the center of the image to a given location.
+    This function tries to include as much as possible of the image in the patch
+    centered around the new center. If the patch arount the ideal center
+    location doesn't fit within the image, we shift the center to the right so
+    that it does.
+    """
+    center_absolute_location = [
+        center_location[0] * image_shape[1], center_location[1] * image_shape[0]]
+
+    # Check for overlap at the edges
+    center_absolute_location[0] = max(
+        center_absolute_location[0], patch_size[1] / 2.0)
+    center_absolute_location[1] = max(
+        center_absolute_location[1], patch_size[0] / 2.0)
+    center_absolute_location[0] = min(
+        center_absolute_location[0], image_shape[1] - patch_size[1] / 2.0)
+    center_absolute_location[1] = min(
+        center_absolute_location[1], image_shape[0] - patch_size[0] / 2.0)
+
+    # Check for overlap at both edges
+    if patch_size[0] > image_shape[0]:
+        center_absolute_location[1] = image_shape[0] / 2.0
+    if patch_size[1] > image_shape[1]:
+        center_absolute_location[0] = image_shape[1] / 2.0
+
+    # Build transform
+    new_center = np.array(center_absolute_location)
+    translation_center = new_center - 0.5
+    translation_uncenter = -np.array((patch_size[1] / 2.0, patch_size[0] / 2.0)) - 0.5
+    return (
+        skimage.transform.SimilarityTransform(translation=translation_center),
+        skimage.transform.SimilarityTransform(translation=translation_uncenter))

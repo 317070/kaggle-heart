@@ -20,20 +20,27 @@ from updates import build_adam_updates
 validate_every = 10
 validate_train_set = False
 save_every = 10
-restart_from_save = False
+restart_from_save = True
+
 
 dump_network_loaded_data = False
 
-batches_per_chunk = 8
+batches_per_chunk = 1
 
-batch_size = 64
+batch_size = 256
 sunny_batch_size = 4
 num_epochs_train = 2000
 
-image_size = 96
+image_size = 128
 
 learning_rate_schedule = {
     0:     0.0001,
+}
+
+augmentation_params = {
+    "rotation": (0, 360),
+    "shear": (0, 0),
+    "translation": (-4, 4),
 }
 
 from preprocess import preprocess, preprocess_with_augmentation

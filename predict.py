@@ -139,6 +139,7 @@ def predict_model(expid):
         print "  estimated %s to go (ETA: %s)" % (utils.hms(est_time_left), eta_str)
         print
 
+    already_printed = False
     for prediction in predictions:
         if prediction["systole"].size>0 and prediction["diastole"].size>0:
             prediction["systole_average"] = np.mean(prediction["systole"], axis=0)
@@ -147,8 +148,9 @@ def predict_model(expid):
                 test_if_valid_distribution(prediction["systole_average"])
                 test_if_valid_distribution(prediction["diastole_average"])
             except:
-                print "WARNING: These distributions are not distributions"
-
+                if not already_printed:
+                    print "WARNING: These distributions are not distributions"
+                    already_printed = True
                 prediction["systole_average"] = make_monotone_distribution(prediction["systole_average"])
                 prediction["diastole_average"] = make_monotone_distribution(prediction["diastole_average"])
 

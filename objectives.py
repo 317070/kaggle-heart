@@ -24,7 +24,7 @@ class TargetVarDictObjective(object):
         """
         raise NotImplementedError
 
-    def compute_average(self, losses):
+    def compute_average(self, losses, loss_name=""):
         """Averages the aggregated losses in Numpy."""
         return losses.mean(axis=0)
 
@@ -48,21 +48,25 @@ class KaggleObjective(TargetVarDictObjective):
         self.target_vars["systole"]  = T.fmatrix("systole_target")
         self.target_vars["diastole"] = T.fmatrix("diastole_target")
 
-    def get_loss(self, average=True, *args, **kwargs):
+    def get_loss(self, average=True, other_losses={}, *args, **kwargs):
         network_systole  = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)
         network_diastole = lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)
 
         systole_target = self.target_vars["systole"]
         diastole_target = self.target_vars["diastole"]
 
-        if not average:
-            CRPS = 0.5 * T.mean((network_systole - systole_target)**2,  axis = (1,)) + \
-                   0.5 * T.mean((network_diastole - diastole_target)**2, axis = (1,))
-            return CRPS
+        CRPS_systole = T.mean((network_systole - systole_target)**2, axis=(1,))
+        CRPS_diastole = T.mean((network_diastole - diastole_target)**2, axis=(1,))
+        loss = 0.5*CRPS_systole + 0.5*CRPS_diastole
 
-        CRPS = 0.5 * T.mean((network_systole - systole_target)**2,  axis = (0,1)) + \
-               0.5 * T.mean((network_diastole - diastole_target)**2, axis = (0,1))
-        return CRPS + self.penalty
+        if average:
+            loss = T.mean(loss, axis=(0,))
+            CRPS_systole = T.mean(CRPS_systole, axis=(0,))
+            CRPS_diastole = T.mean(CRPS_diastole, axis=(0,))
+
+        other_losses['CRPS_systole'] = CRPS_systole
+        other_losses['CRPS_diastole'] = CRPS_diastole
+        return loss + self.penalty
 
     #def get_kaggle_loss(self, *args, **kwargs):
     #    return self.get_loss(*args, **kwargs)

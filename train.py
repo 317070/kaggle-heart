@@ -1,6 +1,7 @@
 from __future__ import division
 
 import argparse
+import collections
 from configuration import config, set_configuration
 import numpy as np
 import string
@@ -55,7 +56,8 @@ def train_model(expid):
     kaggle_loss_theano = obj.get_kaggle_loss()
     segmentation_loss_theano = obj.get_segmentation_loss()
 
-    validation_train_loss = obj.get_loss(average=False, deterministic=True, validation=True)
+    validation_other_losses = collections.OrderedDict()
+    validation_train_loss = obj.get_loss(average=False, deterministic=True, validation=True, other_losses=validation_other_losses)
     validation_kaggle_loss = obj.get_kaggle_loss(average=False, deterministic=True, validation=True)
     validation_segmentation_loss = obj.get_segmentation_loss(average=False, deterministic=True, validation=True)
 
@@ -100,7 +102,7 @@ def train_model(expid):
                                  givens=givens, on_unused_input="ignore", updates=updates,
                                  # mode=NanGuardMode(nan_is_error=True, inf_is_error=True, big_is_error=True)
                                  )
-    iter_validate = theano.function([idx], [validation_train_loss, validation_kaggle_loss, validation_segmentation_loss] + theano_printer.get_the_stuff_to_print(),
+    iter_validate = theano.function([idx], [validation_train_loss, validation_kaggle_loss, validation_segmentation_loss] + [v for _, v in validation_other_losses.items()] + theano_printer.get_the_stuff_to_print(),
                                     givens=givens, on_unused_input="ignore")
 
     num_chunks_train = int(config().num_epochs_train * NUM_TRAIN_PATIENTS / (config().batch_size * config().batches_per_chunk))
@@ -211,6 +213,7 @@ def train_model(expid):
                 vld_losses = []
                 vld_kaggle_losses = []
                 vld_segmentation_losses = []
+                vld_other_losses = {k:[] for k,_ in validation_other_losses.items()}
                 print "  %s set (%d samples)" % (subset, get_number_of_validation_samples(set=subset))
 
                 for validation_data in buffering.buffered_gen_threaded(create_gen()):
@@ -228,14 +231,20 @@ def train_model(expid):
                     #print "validate:", validation_data["output"]["patients"]
 
                     for b in xrange(num_batches_chunk_eval):
-                        loss, kaggle_loss, segmentation_loss = tuple(iter_validate(b)[:3])
+                        losses = tuple(iter_validate(b)[:3+len(validation_other_losses)])
+                        loss, kaggle_loss, segmentation_loss = losses[:3]
+                        other_losses = losses[3:]
                         vld_losses.extend(loss)
                         vld_kaggle_losses.extend(kaggle_loss)
                         vld_segmentation_losses.extend(segmentation_loss)
+                        for k, other_loss in zip(validation_other_losses, other_losses):
+                            vld_other_losses[k].extend(other_loss)
 
                 vld_losses = np.array(vld_losses)
                 vld_kaggle_losses = np.array(vld_kaggle_losses)
                 vld_segmentation_losses = np.array(vld_segmentation_losses)
+                for k in validation_other_losses:
+                    vld_other_losses[k] = np.array(vld_other_losses[k])
 
                 # now select only the relevant section to average
                 sunny_len = get_lenght_of_set(name="sunny", set=subset)
@@ -250,6 +259,8 @@ def train_model(expid):
                 print "  mean kaggle loss:\t\t%.6f"   % np.mean(vld_kaggle_losses[:regular_len])
                 print "  mean segment loss:\t\t%.6f"  % np.mean(vld_segmentation_losses[:sunny_len])
                 # print "    acc:\t%.2f%%" % (acc * 100)
+                for k, v in vld_other_losses.items():
+                    print "  mean %s loss:\t\t%.6f"  % (k, obj.compute_average(v[:num_valid_samples], loss_name=k))
                 print
 
                 losses_validation.append(loss_to_save)

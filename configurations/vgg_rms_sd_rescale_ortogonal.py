@@ -68,7 +68,9 @@ conv3 = partial(Conv2DDNNLayer,
                 stride=(1, 1),
                 pad="same",
                 filter_size=(3, 3),
-                nonlinearity=nn.nonlinearities.rectify)
+                nonlinearity=nn.nonlinearities.rectify,
+                b=nn.init.Constant(0.1),
+                W=nn.init.Orthogonal("relu"))
 
 max_pool = partial(MaxPool2DDNNLayer,
                    pool_size=(2, 2),

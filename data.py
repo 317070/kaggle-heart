@@ -150,6 +150,9 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     out_shape = (30,) + patch_size
     out_data = np.zeros(out_shape, dtype='float32')
 
+    # normalize contrasts
+    data = normalize_contrast_percentile(data)
+
     # if random_augmentation_params=None -> sample new params
     # if the transformation implies no augmentations then random_augmentation_params remains None
     if not random_augmentation_params:
@@ -195,8 +198,8 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     if data.shape[0] > out_shape[0]:
         out_data = out_data[:30]
 
-    # normalize constrast
-    normalize_contrast_zmuv(out_data)
+    # # normalize constrast
+    # normalize_contrast_zmuv(out_data)
 
     # shift the sequence for a number of time steps
     if random_augmentation_params:
@@ -336,3 +339,10 @@ def normalize_contrast_zmuv(data, z=2):
         img = data[i]
         img = ((img - mean) / (2 * std * z) + 0.5)
         data[i] = np.clip(img, -0.0, 1.0)
+
+
+def normalize_contrast_percentile(data):
+    perc = np.percentile(data[0], q=[5, 95])
+    low, high = perc[0], perc[1]
+    out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
+    return out_data

@@ -245,13 +245,13 @@ def train_model(expid):
                 #print losses[:num_valid_samples]
                 #print kaggle_losses[:regular_len]
                 #print segmentation_losses[:sunny_len]
-                print "  mean training loss:\t\t%.6f" % obj.compute_average(vld_losses[:num_valid_samples])
+                loss_to_save = obj.compute_average(vld_losses[:num_valid_samples])
+                print "  mean training loss:\t\t%.6f" % loss_to_save
                 print "  mean kaggle loss:\t\t%.6f"   % np.mean(vld_kaggle_losses[:regular_len])
                 print "  mean segment loss:\t\t%.6f"  % np.mean(vld_segmentation_losses[:sunny_len])
                 # print "    acc:\t%.2f%%" % (acc * 100)
                 print
 
-                loss_to_save = np.mean(vld_losses[:num_valid_samples])
                 losses_validation.append(loss_to_save)
 
                 kaggle_to_save = np.mean(vld_kaggle_losses[:regular_len])

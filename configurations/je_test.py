@@ -50,9 +50,9 @@ augmentation_params = {
 }
 
 cleaning_processes = [
-    set_upside_up,
-    normalize_contrast_zmuv]
-cleaning_processes_post = []
+    set_upside_up,]
+cleaning_processes_post = [
+    partial(normalize_contrast_zmuv, z=2)]
 
 build_updates = build_adam_updates
 postprocess = postprocess

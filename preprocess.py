@@ -99,18 +99,20 @@ def preprocess_normscale(patient_data, result, index, augment=True,
         
         if tag.startswith("sliced:data:singleslice"):
             # Cleaning data before extracting a patch
+            cleaning_processes = getattr(config(), 'cleaning_processes', [])
+            cleaning_processes_post = getattr(config(), 'cleaning_processes_post', [])
             data = clean_images(
                 [patient_data[tag]], metadata=metadata_tag,
-                cleaning_processes=config().cleaning_processes)
+                cleaning_processes=cleaning_processes)
             # Augment and extract patch
             patient_3d_tensor = normscale_resize_and_augment(
                 data, output_shape=desired_shape[-2:],
                 augment=augmentation_params,
                 pixel_spacing=metadata_tag["PixelSpacing"])[0]
             # Clean data further
-            #patient_4d_tensor = clean_images(
-            #    patient_4d_tensor, metadata=metadata_tag,
-            #    cleaning_processes=config().cleaning_processes)
+            patient_3d_tensor = clean_images(
+                patient_3d_tensor, metadata=metadata_tag,
+                cleaning_processes=cleaning_processes_post)
 
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()

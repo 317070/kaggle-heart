@@ -8,11 +8,14 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
+import utils
+
 from matplotlib import animation
 from pkl2patient import clean_metadata
 
 import configuration
 import data_loader
+import utils
 
 configuration.set_configuration('je_test')
 _config = configuration.config

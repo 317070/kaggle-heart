@@ -7,6 +7,7 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 import data_test
 
+
 patch_size = (128, 128)
 train_transformation_params = {
     'patch_size': patch_size,
@@ -14,7 +15,7 @@ train_transformation_params = {
     'translation_range': (-8, 8),
     'shear_range': (0, 0),
     'do_flip': True,
-    'sequence_shift': True
+    'sequence_shift': False
 }
 
 valid_transformation_params = {
@@ -56,7 +57,7 @@ for p in patient_path:
 
         # ---------------------------------
 
-        out_data = data_test.transform_with_jeroen(data, metadata, valid_transformation_params)
+        out_data = data_test.transform_with_jeroen(data, metadata, train_transformation_params)
 
 
         def init_out():

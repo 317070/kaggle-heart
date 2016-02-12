@@ -3,10 +3,14 @@ import re
 import numpy as np
 import skimage.io
 import skimage.transform
+import skimage.exposure
 from configuration import config
 import cPickle as pickle
 from collections import namedtuple
 import numpy as np
+import skimage.restoration
+from skimage.filters import roberts, sobel, scharr, prewitt
+from skimage.filters import threshold_otsu
 
 rng = np.random.RandomState()
 
@@ -96,10 +100,6 @@ def transform_with_metadata(data, metadata, transformation, random_augmentation_
     if not random_augmentation_params:
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
-    # fix the contrast
-    # data = fix_image_orientation(data, metadata)
-    data = fix_contrasts(data)
-
     # build scaling transformation
     scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
     tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
@@ -160,7 +160,7 @@ def transform_with_jeroen(data, metadata, transformation, random_augmentation_pa
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
     # fix the contrast
-    data = fix_contrasts(data)
+    # data = fix_contrasts(data)
 
     # build transform for orientation correction
     orient_tform = build_orientation_correction_transform(metadata)
@@ -192,9 +192,17 @@ def transform_with_jeroen(data, metadata, transformation, random_augmentation_pa
                                                      flip=random_augmentation_params.flip)
         total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale + tform_uncenter + orient_tform + tform_center
 
+
     # apply transformation per image
     for i in xrange(data.shape[0]):
         out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
+        # out_data[i] = sobel(out_data[i])
+        # out_data[i] = skimage.exposure.equalize_adapthist(out_data[i], clip_limit=0.03)
+        out_data[i] = skimage.exposure.equalize_hist(out_data[i])
+        print np.min(out_data[i]), np.max(out_data[i])
+        # out_data[i] = skimage.restoration.denoise_bilateral(out_data[i], sigma_range=0.05, sigma_spatial=15)
+        # thr = threshold_otsu(out_data[i])
+        # out_data[i] = out_data[i] > thr
 
     # if the sequence is < 30 timesteps, copy last image
     if data.shape[0] < out_shape[0]:

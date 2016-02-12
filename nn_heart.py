@@ -50,11 +50,6 @@ class NormalCDFLayer(nn.layers.MergeLayer):
         return cdf
 
 
-class NormalizationLayer(nn.layers.Layer):
-    def get_output_for(self, input, **kwargs):
-        return (input - T.mean(input, axis=[-2, -1], keepdims=True)) / T.std(input, axis=[-2, -1], keepdims=True)
-
-
 class AttentionLayer(nn.layers.Layer):
     def __init__(self, incoming, u=nn.init.GlorotUniform(), **kwargs):
         super(AttentionLayer, self).__init__(incoming, **kwargs)

@@ -7,7 +7,8 @@ import theano.tensor as T
 import utils
 from collections import defaultdict
 from functools import partial
-import nn_heart
+
+caching = 'memory'
 
 restart_from_save = None
 rng = np.random.RandomState(42)
@@ -16,47 +17,51 @@ train_transformation_params = {
     'patch_size': patch_size,
     'rotation_range': (-16, 16),
     'translation_range': (-8, 8),
-    'shear_range': (0, 0)
+    'shear_range': (0, 0),
+    'do_flip': True,
+    'sequence_shift': False,
 }
 
 valid_transformation_params = {
     'patch_size': patch_size,
     'rotation_range': None,
     'translation_range': None,
-    'shear_range': None
+    'shear_range': None,
+    'do_flip': None,
+    'sequence_shift': None
 }
 
 batch_size = 32
 nbatches_chunk = 16
 chunk_size = batch_size * nbatches_chunk
 
-train_data_iterator = data_iterators.SlicesDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
-                                                         batch_size=chunk_size,
-                                                         transform_params=train_transformation_params,
-                                                         labels_path='/data/dsb15_pkl/train.csv',
-                                                         full_batch=True, random=True, infinite=True)
+train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
+                                                                   batch_size=chunk_size,
+                                                                   transform_params=train_transformation_params,
+                                                                   labels_path='/data/dsb15_pkl/train.csv',
+                                                                   full_batch=True, random=True, infinite=True)
 
-valid_data_iterator = data_iterators.SlicesDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
-                                                         batch_size=chunk_size,
-                                                         transform_params=valid_transformation_params,
-                                                         labels_path='/data/dsb15_pkl/train.csv',
-                                                         full_batch=False, random=False, infinite=False)
+valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
+                                                                   batch_size=chunk_size,
+                                                                   transform_params=valid_transformation_params,
+                                                                   labels_path='/data/dsb15_pkl/train.csv',
+                                                                   full_batch=False, random=False, infinite=False)
 
-test_data_iterator = data_iterators.SlicesDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
-                                                        batch_size=batch_size,
-                                                        transform_params=valid_transformation_params,
-                                                        full_batch=False, random=False, infinite=False)
+test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
+                                                                  batch_size=chunk_size,
+                                                                  transform_params=train_transformation_params,
+                                                                  full_batch=False, random=False, infinite=False)
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
-max_nchunks = nchunks_per_epoch * 150
+max_nchunks = nchunks_per_epoch * 100
 learning_rate_schedule = {
     0: 0.0001,
     int(max_nchunks * 0.25): 0.00007,
     int(max_nchunks * 0.5): 0.00003,
     int(max_nchunks * 0.75): 0.00001,
 }
-validate_every = nchunks_per_epoch
-save_every = nchunks_per_epoch
+validate_every = 2 * nchunks_per_epoch
+save_every = 2 * nchunks_per_epoch
 l2_weight = 0.0005
 
 conv3 = partial(Conv2DDNNLayer,
@@ -76,9 +81,7 @@ max_pool = partial(MaxPool2DDNNLayer,
 def build_model():
     l_in = nn.layers.InputLayer((None, 30) + patch_size)
 
-    l_norm = nn_heart.NormalizationLayer(l_in)
-
-    l = conv3(l_norm, num_filters=64)
+    l = conv3(l_in, num_filters=64)
     l = conv3(l, num_filters=64)
 
     l = max_pool(l)
@@ -106,14 +109,14 @@ def build_model():
 
     l = max_pool(l)
 
-    l_d01 = nn.layers.DenseLayer(l, num_units=2048, W=nn.init.Orthogonal("relu"),
+    l_d01 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
     # ---------------------------------------------------------------
 
-    l_d11 = nn.layers.DenseLayer(l, num_units=2048, W=nn.init.Orthogonal("relu"),
+    l_d11 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
     l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))

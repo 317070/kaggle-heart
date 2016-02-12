@@ -16,7 +16,7 @@ import updates
 
 from preprocess import preprocess, preprocess_with_augmentation, set_upside_up, normalize_contrast, normalize_contrast_zmuv, preprocess_normscale
 
-cached = None
+caching = None
 
 # Save and validation frequency
 validate_every = 10
@@ -51,7 +51,7 @@ preprocess_train = preprocess_normscale
 preprocess_validation = partial(preprocess_train, augment=False)
 preprocess_test = preprocess_normscale
 test_time_augmentations = 100 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
-create_test_gen = partial(generate_test_batch, set='validation')  # validate as well by default
+create_test_gen = partial(generate_test_batch, set='test')  # validate as well by default
 
 augmentation_params = {
     "rotation": (-16, 16),

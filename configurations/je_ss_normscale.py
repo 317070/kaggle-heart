@@ -16,7 +16,7 @@ import updates
 
 from preprocess import preprocess, preprocess_with_augmentation, set_upside_up, normalize_contrast, preprocess_normscale
 
-cached = "memory"
+caching = 'uncompressed'
 
 # Save and validation frequency
 validate_every = 10

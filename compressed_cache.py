@@ -51,6 +51,7 @@ def memoize():
     def actual_memoize_decorator(obj):
 
         cache = obj.cache = CompressedCache()
+        uncompressed_cache = obj.uncompressed_cache = dict()
      
         @functools.wraps(obj)
         def memoizer(*args, **kwargs):
@@ -58,9 +59,11 @@ def memoize():
             # Check config file 
             cache_location = (
                 _config().caching if hasattr(_config(), 'caching') else None)
-            if not cache_location in (None, 'disk', 'memory'):
+            # Check validity
+            possible_args = (None, 'disk', 'memory', 'uncompressed')
+            if not cache_location in possible_args:
                 raise ValueError(
-                    "location should be either None, 'disk' or 'memory'")
+                    "location should be in", possible_args )
             if cache_location == 'disk':
                 raise NotImplementedError('Saving on disk not yet supported')
 
@@ -69,11 +72,12 @@ def memoize():
                 return obj(*args, **kwargs)
             else:
                 # Do caching
+                cache_to_use = cache if cache_location == 'memory' else uncompressed_cache
                 key = str(args) + str(kwargs)
-                if key not in cache:
+                if key not in cache_to_use:
 #                    print "[Memoize] Caching call of %s" % str(obj)
-                    cache[key] = obj(*args, **kwargs)
-                return cache[key]
+                    cache_to_use[key] = obj(*args, **kwargs)
+                return cache_to_use[key]
         return memoizer
     return actual_memoize_decorator
 

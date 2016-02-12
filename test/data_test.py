@@ -192,17 +192,17 @@ def transform_with_jeroen(data, metadata, transformation, random_augmentation_pa
                                                      flip=random_augmentation_params.flip)
         total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale + tform_uncenter + orient_tform + tform_center
 
-
     # apply transformation per image
     for i in xrange(data.shape[0]):
         out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
         # out_data[i] = sobel(out_data[i])
         # out_data[i] = skimage.exposure.equalize_adapthist(out_data[i], clip_limit=0.03)
-        out_data[i] = skimage.exposure.equalize_hist(out_data[i])
-        print np.min(out_data[i]), np.max(out_data[i])
+        # out_data[i] = skimage.exposure.equalize_hist(out_data[i])
+        # print np.min(out_data[i]), np.max(out_data[i])
         # out_data[i] = skimage.restoration.denoise_bilateral(out_data[i], sigma_range=0.05, sigma_spatial=15)
         # thr = threshold_otsu(out_data[i])
         # out_data[i] = out_data[i] > thr
+
 
     # if the sequence is < 30 timesteps, copy last image
     if data.shape[0] < out_shape[0]:
@@ -212,6 +212,8 @@ def transform_with_jeroen(data, metadata, transformation, random_augmentation_pa
     # if > 30, remove images
     if data.shape[0] > out_shape[0]:
         out_data = out_data[:30]
+
+    normalize_contrast_zmuv(out_data)
 
     # shift the sequence for a number of time steps
     if random_augmentation_params:
@@ -353,18 +355,6 @@ def fix_image_orientation(data, metadata):
     return out_data
 
 
-def fix_contrasts(data):
-    """
-    normalizes the contrast over slice
-    :param data:  data from one slice (30, h, w)
-    :return:
-    """
-    perc = np.percentile(data[0], q=[5, 95])
-    low, high = perc[0], perc[1]
-    out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
-    return out_data
-
-
 def build_shift_center_transform(image_shape, center_location, patch_size):
     """Shifts the center of the image to a given location.
     This function tries to include as much as possible of the image in the patch
@@ -398,3 +388,12 @@ def build_shift_center_transform(image_shape, center_location, patch_size):
     return (
         skimage.transform.SimilarityTransform(translation=translation_center),
         skimage.transform.SimilarityTransform(translation=translation_uncenter))
+
+
+def normalize_contrast_zmuv(data, z=2):
+    mean = np.mean(data)
+    std = np.std(data)
+    for i in xrange(len(data)):
+        img = data[i]
+        img = ((img - mean) / (2 * std * z) + 0.5)
+        data[i] = np.clip(img, -0.0, 1.0)

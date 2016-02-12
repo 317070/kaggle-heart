@@ -185,7 +185,6 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     # apply transformation per image
     for i in xrange(data.shape[0]):
         out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
-        out_data[i] = skimage.exposure.equalize_hist(out_data[i])
 
     # if the sequence is < 30 timesteps, copy last image
     if data.shape[0] < out_shape[0]:
@@ -195,6 +194,9 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     # if > 30, remove images
     if data.shape[0] > out_shape[0]:
         out_data = out_data[:30]
+
+    # normalize constrast
+    normalize_contrast_zmuv(out_data)
 
     # shift the sequence for a number of time steps
     if random_augmentation_params:
@@ -325,3 +327,12 @@ def build_shift_center_transform(image_shape, center_location, patch_size):
     return (
         skimage.transform.SimilarityTransform(translation=translation_center),
         skimage.transform.SimilarityTransform(translation=translation_uncenter))
+
+
+def normalize_contrast_zmuv(data, z=2):
+    mean = np.mean(data)
+    std = np.std(data)
+    for i in xrange(len(data)):
+        img = data[i]
+        img = ((img - mean) / (2 * std * z) + 0.5)
+        data[i] = np.clip(img, -0.0, 1.0)

@@ -22,6 +22,7 @@ from configuration import config, set_configuration
 if len(sys.argv) < 2:
     sys.exit("Usage: train.py <configuration_name>")
 config_name = sys.argv[1]
+config_name = config_name.split("/")[-1][:-3]
 set_configuration(config_name)
 expid = utils.generate_expid(config_name)
 print

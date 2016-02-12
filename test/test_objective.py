@@ -63,13 +63,12 @@ def test2():
     f_cdf = theano.function([l_mu.input_var, l_log_sigma.input_var], nn.layers.get_output(p0))
     f_crps = theano.function([l_mu.input_var, l_log_sigma.input_var, l_target.input_var], crps0)
 
-    mu = np.array([[6], [7], [8]], dtype='float32')
-    log_sigma = np.array([[-100], [-100], [-100]], dtype='float32')
-    tgt = np.array([[6], [7], [8]], dtype='float32')
+    mu = np.array([[60], [70], [90]], dtype='float32')
+    log_sigma = np.array([[5], [2], [-100]], dtype='float32')
+    tgt = np.array([[50], [80], [90]], dtype='float32')
 
     t_hvs = f_hvs(tgt)
     p_cdf = f_cdf(mu, log_sigma)
-    print t_hvs[0]
     print p_cdf[0]
 
     fig = plt.figure()

@@ -160,7 +160,7 @@ def transform_with_jeroen(data, metadata, transformation, random_augmentation_pa
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
     # fix the contrast
-    # data = fix_contrasts(data)
+    # data = normalize_contrast_percentile(data)
 
     # build transform for orientation correction
     orient_tform = build_orientation_correction_transform(metadata)
@@ -397,3 +397,10 @@ def normalize_contrast_zmuv(data, z=2):
         img = data[i]
         img = ((img - mean) / (2 * std * z) + 0.5)
         data[i] = np.clip(img, -0.0, 1.0)
+
+
+def normalize_contrast_percentile(data):
+    perc = np.percentile(data[0], q=[5, 95])
+    low, high = perc[0], perc[1]
+    out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
+    return out_data

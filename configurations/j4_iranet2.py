@@ -12,7 +12,7 @@ import objectives
 import theano_printer
 import updates
 
-cached = "memory"
+cached = None
 
 # Save and validation frequency
 validate_every = 10
@@ -32,7 +32,7 @@ num_epochs_train = 300
 learning_rate_schedule = {
     0:   0.000010,
     75:  0.000007,
-    150: 0.000003,
+    150:  0.000003,
     225: 0.000001,
 }
 
@@ -118,10 +118,10 @@ def build_model():
     l_scale = nn.layers.InputLayer(data_sizes[key_scale])
 
     # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5, num_units=1024, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ldsys1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
-    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=1024, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=64, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=1, b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
@@ -129,10 +129,10 @@ def build_model():
     l_systole = layers.ScaleLayer(ldsys3, scale=l_scale)
 
     # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5, num_units=1024, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia1drop = nn.layers.dropout(lddia1, p=0.5)
-    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=1024, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=64, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
     lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=1, b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)

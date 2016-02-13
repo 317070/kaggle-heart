@@ -96,7 +96,11 @@ class RMSEObjective(TargetVarDictObjective):
         super(RMSEObjective, self).__init__(input_layers, *args, **kwargs)
         self.input_systole = input_layers["systole:value"]
         self.input_diastole = input_layers["diastole:value"]
+        self.input_systole_sigma = input_layers["systole:sigma"]
+        self.input_diastole_sigma = input_layers["diastole:sigma"]
 
+        self.target_vars["systole"]  = T.fmatrix("systole_target_kaggle")
+        self.target_vars["diastole"] = T.fmatrix("diastole_target_kaggle")
         self.target_vars["systole:value"] = T.fvector("systole_target_value")
         self.target_vars["diastole:value"] = T.fvector("diastole_target_value")
 
@@ -112,6 +116,27 @@ class RMSEObjective(TargetVarDictObjective):
         if average:
             loss = T.sqrt(T.mean(loss, axis=(0,)))
         return loss
+
+    def get_kaggle_loss(self, validation=False, average=True, *args, **kwargs):
+        if not validation:  # only evaluate this one in the validation step
+            return theano.shared([-1])
+
+        network_systole  = utils.theano_mu_sigma_erf(lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)[:,0],
+                                                     lasagne.layers.helper.get_output(self.input_systole_sigma, *args, **kwargs)[:,0])
+        network_diastole = utils.theano_mu_sigma_erf(lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)[:,0],
+                                                     lasagne.layers.helper.get_output(self.input_diastole_sigma, *args, **kwargs)[:,0])
+
+        systole_target = self.target_vars["systole"]
+        diastole_target = self.target_vars["diastole"]
+
+        if not average:
+            CRPS = (T.mean((network_systole - systole_target)**2,  axis = (1,)) +
+                    T.mean((network_diastole - diastole_target)**2, axis = (1,)) )/2
+            return CRPS
+        else:
+            CRPS = (T.mean((network_systole - systole_target)**2,  axis = (0,1)) +
+                    T.mean((network_diastole - diastole_target)**2, axis = (0,1)) )/2
+            return CRPS
 
     def compute_average(self, aggregate):
         return np.sqrt(np.mean(aggregate, axis=0))

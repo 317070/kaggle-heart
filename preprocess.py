@@ -96,11 +96,12 @@ def preprocess_with_augmentation(patient_data, result, index, augment=True, meta
         # try to fit data into the desired shape
         if tag.startswith("sliced:data:singleslice"):
             data = clean_images([patient_data[tag]], metadata=metadata)
-            patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)[0]
+            patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)
+            patient_3d_tensor = patient_4d_tensor[0]
             if "area_per_pixel:sax" in result:
                 result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata["PixelSpacing"])
 
-            put_in_the_middle(result[tag][index], patient_4d_tensor)
+            put_in_the_middle(result[tag][index], patient_3d_tensor)
         elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
             data = clean_images(patient_data[tag], metadata=metadata)
@@ -158,19 +159,24 @@ def set_upside_up(imdata, metadata=None):
     y_e = np.array([0,1,0])
     z_e = np.array([0,0,1])
 
+    a, b, c = False, False, False
     if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
         for i in xrange(len(imdata)):
             image = imdata[i]
             image = np.swapaxes(image, 1, 2)
             imdata[i] = image
             f_1,f_2 = f_2,f_1
+        a = True
 
     if np.dot(y_e, f_1) < 0:
         for i in xrange(len(imdata)):
             imdata[i] = imdata[i][:,::-1,:]
+        b = True
 
     if np.dot(x_e, f_2) < 0:
         for i in xrange(len(imdata)):
             imdata[i] = imdata[i][:,:,::-1]
+
+        print "FLIP COLS %d"%metadata["PatientID"], a,b,c
 
     return imdata

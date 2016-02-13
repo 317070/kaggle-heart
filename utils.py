@@ -168,7 +168,20 @@ def convert_to_number(value):
     return value
 
 
+METADATA_CLEAN_TAG = 'META_CLEANED'
+def _is_clean(metadatadict):
+    return metadatadict.get(METADATA_CLEAN_TAG, False)
+
+
+def _tag_clean(metadatadict, is_cleaned=True):
+    metadatadict[METADATA_CLEAN_TAG] = is_cleaned
+
+
 def clean_metadata(metadatadict):
+    # Check if already cleaned
+    if _is_clean(metadatadict):
+        return metadatadict
+    # Do cleaning
     keys = sorted(list(metadatadict.keys()))
     for key in keys:
         value = metadatadict[key]
@@ -182,4 +195,5 @@ def clean_metadata(metadatadict):
                 metadatadict[key] = [convert_to_number(i) for i in value]
             else:
                 metadatadict[key] = convert_to_number(value)
+    _tag_clean(metadatadict)
     return metadatadict

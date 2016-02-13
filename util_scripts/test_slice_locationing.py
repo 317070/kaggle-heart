@@ -2,7 +2,21 @@ import numpy as np
 
 
 
-def convert_pkls_2_patient(metadata_dict):
+import re
+
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    '''
+    alist.sort(key=natural_keys) sorts in human order
+    http://nedbatchelder.com/blog/200712/human_sorting.html
+    (See Toothy's implementation in the comments)
+    '''
+    return [ atoi(c) for c in re.split('(\d+)', text) ]
+
+
+def slice_location_finder(metadata_dict):
     """
     :param metadata_dict: dict with arbitrary keys, and metadata values
     :return: dict with "relative_position" and "middle_pixel_position" (and others)
@@ -52,7 +66,7 @@ def convert_pkls_2_patient(metadata_dict):
                     max_dist = distance
         # project the others on the line between these 2 points
         # sort the keys, so the order is more or less the same as they were
-        max_dist_keys.sort(key[])
+        max_dist_keys.sort(key=natural_keys)
         p_ref1 = datadict[max_dist_keys[0]]["middle_pixel_position"]
         p_ref2 = datadict[max_dist_keys[1]]["middle_pixel_position"]
         v1 = p_ref2-p_ref1
@@ -79,12 +93,12 @@ if __name__ == '__main__':
 
     for patient_folder in folder_list:
         print '\n******** %s *********' % patient_folder.split('/')[-2]
-        file_list = glob.glob(patient_folder + '/study/sax_*.pkl')
+        file_list = glob.glob(patient_folder + 'study/sax_*.pkl')
         metadict = dict()
         for file in file_list:
             metadict[file] = pickle.load(open(file, "r"))['metadata'][0]
 
-        result = convert_pkls_2_patient(metadict)
+        result = slice_location_finder(metadict)
 
         for key in sorted(result.keys()):
             print key.split('/')[-1], result[key]["relative_position"]

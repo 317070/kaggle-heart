@@ -17,7 +17,7 @@ class TargetVarDictObjective(object):
 
     def get_loss(self, average=True, *args, **kwargs):
         """Compute the loss in Theano.
-        
+
         Args:
             average: Indicates whether the loss should already be averaged over the batch.
                 If not, call the compute_average method on the aggregated losses.
@@ -89,7 +89,7 @@ class MSEObjective(TargetVarDictObjective):
         diastole_target = self.target_vars["diastole:value"]
 
         loss = 0.5 * (network_systole  - systole_target )**2 + 0.5 * (network_diastole - diastole_target)**2
-         
+
         if average:
             loss = T.mean(loss, axis=(0,))
         return loss + self.penalty
@@ -154,6 +154,13 @@ class KaggleValidationMSEObjective(MSEObjective):
             return CRPS
 
 
+def _theano_pdf_to_cdf(pdfs):
+    return T.extra_ops.cumsum(pdfs, axis=1)
+
+
+def _crps(cdfs1, cdfs2):
+    return T.mean((cdfs1 - cdfs2)**2, axis=(1,))
+
 
 class LogLossObjective(TargetVarDictObjective):
     def __init__(self, input_layers, *args, **kwargs):
@@ -164,20 +171,30 @@ class LogLossObjective(TargetVarDictObjective):
         self.target_vars["systole:onehot"]  = T.fmatrix("systole_target_onehot")
         self.target_vars["diastole:onehot"] = T.fmatrix("diastole_target_onehot")
 
-    def get_loss(self, *args, **kwargs):
+    def get_loss(self, average=True, other_losses={}, *args, **kwargs):
         network_systole  = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)
         network_diastole = lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)
 
         systole_target = self.target_vars["systole:onehot"]
         diastole_target = self.target_vars["diastole:onehot"]
 
-        if "average" in kwargs and not kwargs["average"]:
-            ll = 0.5 * log_loss(network_systole, systole_target) + \
-                 0.5 * log_loss(network_diastole, diastole_target)
-            return ll
+        ll_sys = log_loss(network_systole, systole_target)
+        ll_dia = log_loss(network_diastole, diastole_target)
+        ll = 0.5 * ll_sys + 0.5 * ll_dia
 
-        ll = 0.5 * T.mean(log_loss(network_systole, systole_target),  axis = (0,)) + \
-             0.5 * T.mean(log_loss(network_diastole, diastole_target), axis = (0,))
+        # CRPS scores
+        cdf = _theano_pdf_to_cdf
+        CRPS_systole = _crps(cdf(network_systole), cdf(systole_target))
+        CRPS_diastole = _crps(cdf(network_diastole), cdf(diastole_target))
+
+        if average:
+            ll = T.mean(ll, axis=(0,))
+            CRPS_systole = T.mean(CRPS_systole, axis=(0,))
+            CRPS_diastole = T.mean(CRPS_diastole, axis=(0,))
+
+        other_losses['CRPS_systole'] = CRPS_systole
+        other_losses['CRPS_diastole'] = CRPS_diastole
+
         return ll + self.penalty
 
 

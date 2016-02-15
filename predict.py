@@ -142,8 +142,9 @@ def predict_model(expid, mfile=None):
     already_printed = False
     for prediction in predictions:
         if prediction["systole"].size>0 and prediction["diastole"].size>0:
-            prediction["systole_average"] = np.mean(prediction["systole"], axis=0)
-            prediction["diastole_average"] = np.mean(prediction["diastole"], axis=0)
+            average_method =  getattr(config(), 'tta_average_method', partial(np.mean, axis=0))
+            prediction["systole_average"] = average_method(prediction["systole"])
+            prediction["diastole_average"] = average_method(prediction["diastole"])
             try:
                 test_if_valid_distribution(prediction["systole_average"])
                 test_if_valid_distribution(prediction["diastole_average"])

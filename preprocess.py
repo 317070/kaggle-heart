@@ -239,8 +239,8 @@ def set_upside_up_slice(dslice, metadata=None):
     else:
         out_data = dslice
 
-    if np.dot(y_e, f_1) < 0:
-        out_data = out_data[:, ::-1, :]
+#    if np.dot(y_e, f_1) < 0:
+#        out_data = out_data[:, ::-1, :]
 
 #    if np.dot(x_e, f_2) < 0:
 #        out_data = out_data[:, :, ::-1]

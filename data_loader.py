@@ -31,7 +31,7 @@ _TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 ALL_PATIENT_IDS = range(1, 501)
 
 
-_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1)) 
+_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1))
 
 
 def _find_patient_folders(root_folder):
@@ -120,7 +120,7 @@ sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indi
 ##################################
 
 
-def get_patient_data(indices, wanted_input_tags, wanted_output_tags, 
+def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                      set="train", preprocess_function=None):
     """
     return a dict with the desired data matched to the required tags
@@ -168,7 +168,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
     result = initialise_empty()
 
-    if set not in patient_folders: 
+    if set not in patient_folders:
         raise ValueError("Don't know the dataset %s" % set)
     folders = [
         patient_folders[set][i] for i in indices if 0<=i<num_patients[set]]
@@ -178,35 +178,49 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         wildcard_file_path = os.path.join(folder, "*")
         files = sorted(glob.glob(wildcard_file_path))  # glob is non-deterministic!
         patient_result = dict()
+        metadatas_result = dict()
+        # function for loading and cleaning metadata
+        load_clean_metadata = lambda f: (
+            utils.clean_metadata(disk_access.load_metadata_from_file(f)[0]))
         # Iterate over input tags
         for tag in wanted_input_tags:
             if tag.startswith("sliced:data:singleslice"):
                 l = [sax for sax in files if "sax" in sax]
                 if "middle" in tag:
+                    # Sort sax files, based on the integer in their name
+                    l.sort(key=lambda f: int(re.findall("\d+", os.path.basename(f))[0]))
                     f = l[len(l)/2]
                 else:
                     f = random.choice(l)
                 patient_result[tag] = disk_access.load_data_from_file(f)
+                metadatas_result[tag] = load_clean_metadata(f)
                 if "difference" in tag:
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
+
             elif tag.startswith("sliced:data:ax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
+                metadatas_result[tag] = [load_clean_metadata(f) for f in files if "sax" in f]
+
             elif tag.startswith("sliced:data:shape"):
                 patient_result[tag] = [disk_access.load_data_from_file(f).shape for f in files]
+                metadatas_result[tag] = [load_clean_metadata(f) for f in files if "sax" in f]
+
             elif tag.startswith("sliced:data"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files]
+                metadatas_result[tag] = [load_clean_metadata(f) for f in files]
+
             elif tag.startswith("area_per_pixel"):
                 patient_result[tag] = None  # they are filled in in preprocessing
+
             elif tag.startswith("sliced:meta"):
                 # get the key used in the pickle
                 key = tag[len("slided:meta"):]
                 patient_result[tag] = [disk_access.load_metadata_from_file(f)[key] for f in files]
             # add others when needed
 
-        metadata = utils.clean_metadata(disk_access.load_metadata_from_file(files[0])[0])
-        preprocess_function(patient_result, result=result["input"], index=i, metadata=metadata)
+        preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
 
         # load the labels
         # find the id of the current patient in the folder name (=safer)
@@ -246,22 +260,14 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
 
     # Check if any of the inputs or outputs are still empty!
-    for key, value in itertools.chain(result["input"].iteritems(), result["output"].iteritems()):
-        if not np.any(value): #there are only zeros in value
-            raise Exception("there is an empty value at key %s" % key)
-        if not np.isfinite(value).all(): #there are NaN's or infinites somewhere
-            print value
-            raise Exception("there is a NaN at key %s" % key)
-
-        """
-        if set=="train" and sum([0 if 0<=i<len(train_patient_folders) else 1 for i in indices]) > 0:
-            raise Exception("not filled train batch at key %s" % key)
-
-        for idx, sample in enumerate(value[:len(folders)]):
+    if not hasattr(_config(), 'check_inputs') or _config().check_inputs:
+        for key, value in itertools.chain(result["input"].iteritems(), result["output"].iteritems()):
             if not np.any(value): #there are only zeros in value
+                raise Exception("there is an empty value at key %s" % key)
+            if not np.isfinite(value).all(): #there are NaN's or infinites somewhere
                 print value
-                raise Exception("there is an empty sample at key %s" % key)
-        """
+                raise Exception("there is a NaN at key %s" % key)
+
     return result
 
 
@@ -373,6 +379,8 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
 def generate_test_batch(required_input_keys, required_output_keys, augmentation=False, set=None):
     if set is None:
         sets = ["train", "validation", "test"]
+    elif type(set) == list:
+        sets = set
     else:
         sets=[set]
 

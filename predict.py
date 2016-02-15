@@ -21,8 +21,8 @@ from data_loader import NUM_PATIENTS
 from utils import CRSP
 from postprocess import make_monotone_distribution, test_if_valid_distribution
 
-def predict_model(expid):
-    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % expid
+def predict_model(expid, mfile=None):
+    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % (expid if not mfile else mfile)
     prediction_path = "/mnt/storage/metadata/kaggle-heart/predictions/%s.pkl" % expid
     submission_path = "/mnt/storage/metadata/kaggle-heart/submissions/%s.csv" % expid
 
@@ -216,10 +216,15 @@ if __name__ == "__main__":
     required.add_argument('-c', '--config',
                           help='configuration to run',
                           required=True)
+    optional = parser.add_argument_group('optional arguments')
+    optional.add_argument('-m', '--metadata',
+                          help='metadatafile to use',
+                          required=False)
 
     args = parser.parse_args()
     set_configuration(args.config)
 
     expid = utils.generate_expid(args.config)
+    mfile = args.metadata
 
-    predict_model(expid)
+    predict_model(expid, mfile)

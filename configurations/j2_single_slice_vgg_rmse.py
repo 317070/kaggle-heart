@@ -71,7 +71,7 @@ def build_objective(interface_layers):
     l2_penalty = nn.regularization.regularize_layer_params_weighted(
         interface_layers["regularizable"], nn.regularization.l2)
     # build objective
-    return objectives.MSEObjective(interface_layers["outputs"], penalty=l2_penalty)
+    return objectives.RMSEObjective(interface_layers["outputs"], penalty=l2_penalty)
 
 
 # Architecture

@@ -83,6 +83,16 @@ class ScaleLayer(lasagne.layers.MergeLayer):
 
 
 class NormalisationLayer(lasagne.layers.Layer):
+<<<<<<< HEAD
+    def __init__(self, incoming, norm_sum=1.0, **kwargs):
+        super(NormalisationLayer, self).__init__(incoming, **kwargs)
+        self.norm_sum = norm_sum
+
+    def get_output_for(self, input, **kwargs):
+        # take the minimal working slice size, and use that one.
+        inp_low_zero = input #- T.min(input)
+        return inp_low_zero / T.sum(inp_low_zero) * self.norm_sum
+=======
     def __init__(self, incoming, norm_sum=1.0, allow_negative=False, **kwargs):
         super(NormalisationLayer, self).__init__(incoming, **kwargs)
         self.norm_sum = norm_sum
@@ -95,6 +105,7 @@ class NormalisationLayer(lasagne.layers.Layer):
         else:
             inp_low_zero = input
         return inp_low_zero / T.sum(inp_low_zero, axis=1).dimshuffle(0, 'x') * self.norm_sum
+>>>>>>> 7286277eaf455caa49377dcba5b8ef1f1188f56f
 
 
 class WideConv2DDNNLayer(Conv2DDNNLayer):

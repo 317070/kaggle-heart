@@ -21,8 +21,8 @@ from data_loader import NUM_PATIENTS
 from utils import CRSP
 from postprocess import make_monotone_distribution, test_if_valid_distribution
 
-def predict_model(expid):
-    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % expid
+def predict_model(expid, mfile=None):
+    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % (expid if not mfile else mfile)
     prediction_path = "/mnt/storage/metadata/kaggle-heart/predictions/%s.pkl" % expid
     submission_path = "/mnt/storage/metadata/kaggle-heart/submissions/%s.csv" % expid
 
@@ -142,8 +142,9 @@ def predict_model(expid):
     already_printed = False
     for prediction in predictions:
         if prediction["systole"].size>0 and prediction["diastole"].size>0:
-            prediction["systole_average"] = np.mean(prediction["systole"], axis=0)
-            prediction["diastole_average"] = np.mean(prediction["diastole"], axis=0)
+            average_method =  getattr(config(), 'tta_average_method', partial(np.mean, axis=0))
+            prediction["systole_average"] = average_method(prediction["systole"])
+            prediction["diastole_average"] = average_method(prediction["diastole"])
             try:
                 test_if_valid_distribution(prediction["systole_average"])
                 test_if_valid_distribution(prediction["diastole_average"])
@@ -216,10 +217,15 @@ if __name__ == "__main__":
     required.add_argument('-c', '--config',
                           help='configuration to run',
                           required=True)
+    optional = parser.add_argument_group('optional arguments')
+    optional.add_argument('-m', '--metadata',
+                          help='metadatafile to use',
+                          required=False)
 
     args = parser.parse_args()
     set_configuration(args.config)
 
     expid = utils.generate_expid(args.config)
+    mfile = args.metadata
 
-    predict_model(expid)
+    predict_model(expid, mfile)

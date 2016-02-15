@@ -165,7 +165,20 @@ def convert_to_number(value):
     return value
 
 
+METADATA_CLEAN_TAG = 'META_CLEANED'
+def _is_clean(metadatadict):
+    return metadatadict.get(METADATA_CLEAN_TAG, False)
+
+
+def _tag_clean(metadatadict, is_cleaned=True):
+    metadatadict[METADATA_CLEAN_TAG] = is_cleaned
+
+
 def clean_metadata(metadatadict):
+    # Check if already cleaned
+    if _is_clean(metadatadict):
+        return metadatadict
+    # Do cleaning
     keys = sorted(list(metadatadict.keys()))
     for key in keys:
         value = metadatadict[key]
@@ -179,4 +192,67 @@ def clean_metadata(metadatadict):
                 metadatadict[key] = [convert_to_number(i) for i in value]
             else:
                 metadatadict[key] = convert_to_number(value)
+    _tag_clean(metadatadict)
     return metadatadict
+
+
+def norm_geometric_average(x):
+    """Computes the geometric average over the first dimension of a matrix.
+    """
+    # Convert to log domain
+    x_log = np.log(x)
+    # Compute the mean
+    geom_av_log = np.mean(x_log, axis=0)
+    # Go back to normal domain and renormalise
+    geom_av_log = geom_av_log - np.max(geom_av_log)
+    geom_av = np.exp(geom_av_log)
+    return geom_av / geom_av.sum()
+
+
+def geometric_average(x):
+    """Computes the geometric average over the first dimension of a matrix.
+    """
+    # Convert to log domain
+    x_log = np.log(x)
+    # Compute the mean
+    geom_av_log = np.mean(x_log, axis=0)
+    # Go back to normal domain and renormalise
+    geom_av_log = geom_av_log
+    geom_av = np.exp(geom_av_log)
+    return geom_av
+
+
+def norm_prod(x):
+    """Computes the product and renormalises over the first dimension of a matrix.
+    """
+    # Convert to log domain
+    x_log = np.log(x)
+    # Compute the mean
+    geom_sum_log = np.sum(x_log, axis=0)
+    # Go back to normal domain and renormalise
+    geom_sum_log = geom_sum_log - np.max(geom_sum_log)
+    geom_sum = np.exp(geom_sum_log)
+    return geom_sum / geom_sum.sum()
+
+
+def prod(x):
+    """Computes the product and renormalises over the first dimension of a matrix.
+    """
+    print 'prodding'
+    # Convert to log domain
+    x_log = np.log(x)
+    # Compute the mean
+    geom_sum_log = np.sum(x_log, axis=0)
+    # Go back to normal domain and renormalise
+    geom_sum_log = geom_sum_log
+    geom_sum = np.exp(geom_sum_log)
+    return geom_sum
+
+
+def cdf_to_pdf(x):
+    res = np.diff(x, axis=1)
+    return np.hstack([x[:, :1], res])
+
+
+def pdf_to_cdf(x):
+    return np.cumsum(x, axis=1)

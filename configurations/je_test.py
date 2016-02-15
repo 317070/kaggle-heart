@@ -36,7 +36,7 @@ learning_rate_schedule = {
 }
 
 from postprocess import postprocess_onehot, postprocess
-from preprocess import preprocess, preprocess_with_augmentation, set_upside_up, normalize_contrast, preprocess_normscale
+from preprocess import preprocess, preprocess_with_augmentation, set_upside_up, normalize_contrast, preprocess_normscale, normalize_contrast_zmuv
 
 preprocess_train = preprocess_normscale  # with augmentation
 preprocess_validation = preprocess  # no augmentation
@@ -46,10 +46,13 @@ augmentation_params = {
     "rotation": (0, 0),
     "shear": (0, 0),
     "translation": (0, 0),
-    "flip_vert": (0, 1),
+    "flip_vert": (0, 0),
 }
 
-cleaning_processes = [normalize_contrast, set_upside_up]
+cleaning_processes = [
+    set_upside_up,]
+cleaning_processes_post = [
+    partial(normalize_contrast_zmuv, z=2)]
 
 build_updates = build_adam_updates
 postprocess = postprocess

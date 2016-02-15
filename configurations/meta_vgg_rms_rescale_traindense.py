@@ -3,10 +3,10 @@ import lasagne as nn
 import data_iterators
 import numpy as np
 import theano.tensor as T
-import utils
 import nn_heart
 from configuration import subconfig
 from collections import defaultdict
+import utils_heart
 
 caching = 'memory'
 restart_from_save = None
@@ -168,36 +168,11 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
             p.append(batch_predictions[j][i])
             t.append(batch_targets[j][i])
         p, t = np.vstack(p), np.vstack(t)
-        target_cdf = utils.heaviside_function(t)
+        target_cdf = utils_heart.heaviside_function(t)
         crpss.append(np.mean((p - target_cdf) ** 2))
 
     return crpss
 
 
-def get_avg_patient_predictions(batch_predictions, batch_patient_ids):
-    nbatches = len(batch_predictions)
-    npredictions = len(batch_predictions[0])
-
-    patient_ids = []
-    for i in xrange(nbatches):
-        patient_ids += batch_patient_ids[i]
-
-    patient2idxs = defaultdict(list)
-    for i, pid in enumerate(patient_ids):
-        patient2idxs[pid].append(i)
-
-    patient2cdf = defaultdict(list)  # list[0] -systole cdf, list[1] - diastole cdf
-    for i in xrange(npredictions):
-        # collect predictions over batches
-        p = []
-        for j in xrange(nbatches):
-            p.append(batch_predictions[j][i])
-        p = np.vstack(p)
-
-        # average predictions over patient's predictions
-        for patient_id, patient_idxs in patient2idxs.iteritems():
-            prediction_cdfs = p[patient_idxs]
-            avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
-            patient2cdf[patient_id].append(avg_prediction_cdf)
-    return patient2cdf
-
+def get_avg_patient_predictions(batch_predictions, batch_patient_ids, mean):
+    return utils_heart.get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean)

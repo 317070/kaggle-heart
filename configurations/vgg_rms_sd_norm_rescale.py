@@ -8,6 +8,8 @@ import utils
 from collections import defaultdict
 from functools import partial
 
+import utils_heart
+
 caching = 'memory'
 
 restart_from_save = None
@@ -195,10 +197,14 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
         # collect crps over patients
         patient_crpss = []
         for patient_id, patient_idxs in patient2idxs.iteritems():
-            prediction_cdf = utils.heaviside_function(p[patient_idxs])
+            prediction_cdf = utils_heart.heaviside_function(p[patient_idxs])
             avg_prediction_cdf = np.mean(prediction_cdf, axis=0)
-            target_cdf = utils.heaviside_function(t[patient_idxs])[0]
-            patient_crpss.append(utils.crps(avg_prediction_cdf, target_cdf))
+            target_cdf = utils_heart.heaviside_function(t[patient_idxs])[0]
+            patient_crpss.append(utils_heart.crps(avg_prediction_cdf, target_cdf))
 
         crpss.append(np.mean(patient_crpss))
     return crpss
+
+
+def get_avg_patient_predictions(batch_predictions, batch_patient_ids, mean):
+    return utils_heart.get_patient_average_heaviside_predictions(batch_predictions, batch_patient_ids, mean)

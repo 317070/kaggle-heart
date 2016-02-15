@@ -1,13 +1,12 @@
-import time
-import platform
-import numpy as np
-import csv
-from scipy.stats import norm
-import subprocess
 import cPickle
-from collections import defaultdict
+import csv
 import os
+import platform
 import pwd
+import subprocess
+import time
+
+import numpy as np
 
 
 def get_dir_path(dir_name, root_dir='/mnt/storage/metadata/kaggle-heart'):
@@ -94,62 +93,3 @@ def save_submisssion(patient_predictions, submission_path):
     f.close()
 
 
-def rmse(predictions, targets):
-    """
-    :param predictions: (batch_size, 1)
-    :param targets: (batch_size, 1)
-    :return: RMSE (mean over batch)
-    """
-    return np.sqrt(np.mean((predictions - targets) ** 2))
-
-
-def crps(prediction_cdf, target_cdf):
-    """
-    Use it with batch_size of 1
-    :param prediction_cdf: (batch_size, 600)
-    :param target_cdf: (batch_size, 600)
-    :return: CRPS mean over batch
-    """
-    return np.mean((prediction_cdf - target_cdf) ** 2)
-
-
-def real_to_cdf(y, sigma=1e-10):
-    cdf = np.zeros((y.shape[0], 600))
-    for i in range(y.shape[0]):
-        cdf[i] = norm.cdf(np.linspace(0, 599, 600), y[i], sigma)
-    return cdf
-
-
-def heaviside_function(x):
-    return np.float32((np.linspace(0, 599, 600) - x) >= 0)
-
-
-def get_avg_patient_predictions(batch_predictions, batch_patient_ids):
-    # TODO where is the best place for this function?
-    nbatches = len(batch_predictions)
-    npredictions = len(batch_predictions[0])
-
-    patient_ids = []
-    for i in xrange(nbatches):
-        patient_ids += batch_patient_ids[i]
-
-    patient2idxs = defaultdict(list)
-    for i, pid in enumerate(patient_ids):
-        patient2idxs[pid].append(i)
-
-    patient2cdf = defaultdict(list)  # list[0] -systole cdf, list[1] - diastole cdf
-    for i in xrange(npredictions):
-        # collect predictions over batches
-        p = []
-        for j in xrange(nbatches):
-            p.append(batch_predictions[j][i])
-        p = np.vstack(p)
-
-        # average predictions over patient's predictions
-        for patient_id, patient_idxs in patient2idxs.iteritems():
-            # print patient_id, p[patient_idxs]
-            prediction_cdfs = heaviside_function(p[patient_idxs])
-            avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
-            patient2cdf[patient_id].append(avg_prediction_cdf)
-
-    return patient2cdf

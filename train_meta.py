@@ -23,7 +23,8 @@ submodel_metadata_path = sys.argv[2]
 metadata_dir = utils.get_dir_path('train')
 submodel_metadata = utils.load_pkl(metadata_dir + '/%s' % submodel_metadata_path)
 
-set_subconfiguration(submodel_metadata['configuration'])
+subconfig_name = submodel_metadata['configuration']
+set_subconfiguration(subconfig_name)
 set_configuration(config_name)
 
 expid = utils.generate_expid(config_name)
@@ -180,6 +181,7 @@ for chunk_idx, (xs_chunk, ys_chunk, patient_idx) in izip(chunk_idxs,
         with open(metadata_path, 'w') as f:
             pickle.dump({
                 'configuration': config_name,
+                'subconfiguration': subconfig_name,
                 'git_revision_hash': utils.get_git_revision_hash(),
                 'experiment_id': expid,
                 'chunks_since_start': chunk_idx,

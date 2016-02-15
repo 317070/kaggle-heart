@@ -5,6 +5,7 @@ import numpy as np
 import theano.tensor as T
 import utils
 import nn_heart
+import utils_heart
 from configuration import subconfig
 from functools import partial
 
@@ -173,7 +174,7 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
             p.append(batch_predictions[j][i])
             t.append(batch_targets[j][i])
         p, t = np.vstack(p), np.vstack(t)
-        target_cdf = utils.heaviside_function(t)
+        target_cdf = utils_heart.heaviside_function(t)
         crpss.append(np.mean((p - target_cdf) ** 2))
 
     return crpss

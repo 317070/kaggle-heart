@@ -8,6 +8,7 @@ import utils
 from collections import defaultdict
 from functools import partial
 import nn_heart
+import utils_heart
 
 caching = 'memory'
 
@@ -203,10 +204,10 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
         # collect crps over patients
         patient_crpss = []
         for patient_id, patient_idxs in patient2idxs.iteritems():
-            prediction_cdf = utils.heaviside_function(p[patient_idxs])
+            prediction_cdf = utils_heart.heaviside_function(p[patient_idxs])
             avg_prediction_cdf = np.mean(prediction_cdf, axis=0)
-            target_cdf = utils.heaviside_function(t[patient_idxs])[0]
-            patient_crpss.append(utils.crps(avg_prediction_cdf, target_cdf))
+            target_cdf = utils_heart.heaviside_function(t[patient_idxs])[0]
+            patient_crpss.append(utils_heart.crps(avg_prediction_cdf, target_cdf))
 
         crpss.append(np.mean(patient_crpss))
     return crpss

@@ -6,27 +6,37 @@ import lasagne as nn
 import string
 import utils
 import buffering
-from configuration import config, set_configuration
+import utils_heart
+from configuration import config, set_configuration, set_subconfiguration
 
 if not (3 <= len(sys.argv) <= 5):
-    sys.exit("Usage: predict.py <metadata_path> <set: valid|test> <n_tta_iterations>")
+    sys.exit("Usage: predict.py <metadata_path> <set: valid|test> <n_tta_iterations> "
+             "<average: arithmetic, geometric, harmonic>")
 
 metadata_path = sys.argv[1]
 set = sys.argv[2] if len(sys.argv) >= 2 else 'test'
 n_tta_iterations = int(sys.argv[3]) if len(sys.argv) >= 3 else 100
+mean = sys.argv[4] if len(sys.argv) >= 4 else 'arithmetic'
+
+print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, set, mean)
 
 metadata_dir = utils.get_dir_path('train')
 metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
+if 'subconfiguration' in metadata:
+    set_subconfiguration(metadata['subconfiguration'])
+
+# TODO
+set_subconfiguration('vgg_rms_sd_norm_rescale')
 set_configuration(config_name)
 
 # predictions paths
 prediction_dir = utils.get_dir_path('predictions')
-prediction_path = prediction_dir + "/%s--%s.pkl" % (metadata['experiment_id'], set)
+prediction_path = prediction_dir + "/%s-%s-%s.pkl" % (metadata['experiment_id'], set, mean)
 
 # submissions paths
 submission_dir = utils.get_dir_path('submissions')
-submission_path = submission_dir + "/%s--%s.csv" % (metadata['experiment_id'], set)
+submission_path = submission_dir + "/%s-%s-%s.csv" % (metadata['experiment_id'], set, mean)
 
 print "Build model"
 model = config().build_model()
@@ -72,24 +82,14 @@ if set == 'valid':
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)
 
-    valid_crps = config().get_mean_crps_loss(batch_predictions, batch_targets, batch_ids)
-    print 'Validation CRPS: ', valid_crps
-    valid_loss = config().get_mean_validation_loss(batch_predictions, batch_targets)
-    print 'Validation loss: ', valid_loss
-
-    # TODO gives different results
-    if not hasattr(config(), 'get_avg_patient_predictions'):
-        avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
-        patient_targets = utils.get_avg_patient_predictions(batch_targets, batch_ids)
-    else:
-        avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids)
-        patient_targets = config().get_avg_patient_predictions(batch_targets, batch_ids)
+    avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
+    patient_targets = utils_heart.get_patient_average_heaviside_predictions(batch_targets, batch_ids, mean=mean)
 
     assert avg_patient_predictions.viewkeys() == patient_targets.viewkeys()
     crpss_sys, crpss_dst = [], []
     for id in avg_patient_predictions.iterkeys():
-        crpss_sys.append(utils.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
-        crpss_dst.append(utils.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
+        crpss_sys.append(utils_heart.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
+        crpss_dst.append(utils_heart.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
 
     print 'Validation Systole CRPS: ', np.mean(crpss_sys)
     print 'Validation Diastole CRPS: ', np.mean(crpss_dst)
@@ -114,10 +114,7 @@ if set == 'test':
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)
 
-    if not hasattr(config(), 'get_avg_patient_predictions'):
-        avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
-    else:
-        avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids)
+    avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
 
     utils.save_pkl(avg_patient_predictions, prediction_path)
     print ' predictions saved to %s' % prediction_path

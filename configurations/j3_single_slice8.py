@@ -11,7 +11,7 @@ from lasagne.layers.dnn import MaxPool2DDNNLayer as MaxPoolLayer
 from lasagne.layers import InputLayer
 from lasagne.layers import reshape
 from lasagne.layers import DenseLayer
-from lasagne.layers import BatchNormLayer
+from lasagne.layers import BatchNormLayer, batch_norm
 from postprocess import upsample_segmentation
 from volume_estimation_layers import GaussianApproximationVolumeLayer
 import theano_printer
@@ -20,20 +20,21 @@ from updates import build_adam_updates
 validate_every = 10
 validate_train_set = False
 save_every = 10
-restart_from_save = False
+restart_from_save = True
 
 dump_network_loaded_data = False
 
-batches_per_chunk = 8
+batches_per_chunk = 16
 
-batch_size = 64
+batch_size = 32
 sunny_batch_size = 4
 num_epochs_train = 2000
 
-image_size = 96
+image_size = 128
 
 learning_rate_schedule = {
     0:     0.0001,
+    600:   0.00001,
 }
 
 from preprocess import preprocess, preprocess_with_augmentation
@@ -74,51 +75,56 @@ def build_model():
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
 
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
 
-    l = BatchNormLayer(l, gamma=None)
-    l = lasagne.layers.NonlinearityLayer(l, nonlinearity=lasagne.nonlinearities.rectify)
+    l = batch_norm(l)
+
     l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
 
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
-    l = BatchNormLayer(l, gamma=None)
-    l = lasagne.layers.NonlinearityLayer(l, nonlinearity=lasagne.nonlinearities.rectify)
+    l = batch_norm(l)
     l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
 
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
-    l = BatchNormLayer(l, gamma=None)
-    l = lasagne.layers.NonlinearityLayer(l, nonlinearity=lasagne.nonlinearities.rectify)
-    l = MaxPoolOver2DAxisLayer(l, pool_size=(4, 4), axis=(2,3), stride=(4,4))
+    l = batch_norm(l)
+    l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
+
+    l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
+                                     axis=(2,3), channel=1,
+                                     W=lasagne.init.Orthogonal(),
+                                     b=lasagne.init.Constant(0.1),
+                                     )
+    l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
+                                     axis=(2,3), channel=1,
+                                     W=lasagne.init.Orthogonal(),
+                                     b=lasagne.init.Constant(0.1),
+                                     )
+    l = batch_norm(l)
+    l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
 
 
     l_dense = lasagne.layers.DenseLayer(lasagne.layers.DropoutLayer(l),
@@ -134,51 +140,57 @@ def build_model():
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
 
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
 
-    l = BatchNormLayer(l, gamma=None)
-    l = lasagne.layers.NonlinearityLayer(l, nonlinearity=lasagne.nonlinearities.rectify)
+    l = batch_norm(l)
     l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
 
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
-    l = BatchNormLayer(l, gamma=None)
-    l = lasagne.layers.NonlinearityLayer(l, nonlinearity=lasagne.nonlinearities.rectify)
+    l = batch_norm(l)
     l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
 
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
     l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
                                      axis=(2,3), channel=1,
                                      W=lasagne.init.Orthogonal(),
                                      b=lasagne.init.Constant(0.1),
-                                     nonlinearity=lasagne.nonlinearities.identity
                                      )
-    l = BatchNormLayer(l, gamma=None)
-    l = lasagne.layers.NonlinearityLayer(l, nonlinearity=lasagne.nonlinearities.rectify)
-    l = MaxPoolOver2DAxisLayer(l, pool_size=(4, 4), axis=(2,3), stride=(4,4))
+    l = batch_norm(l)
+    l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
+
+    l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
+                                     axis=(2,3), channel=1,
+                                     W=lasagne.init.Orthogonal(),
+                                     b=lasagne.init.Constant(0.1),
+                                     )
+    l = ConvolutionOver2DAxisLayer(l, num_filters=64, filter_size=(3, 3),
+                                     axis=(2,3), channel=1,
+                                     W=lasagne.init.Orthogonal(),
+                                     b=lasagne.init.Constant(0.1),
+                                     )
+    l = batch_norm(l)
+    l = MaxPoolOver2DAxisLayer(l, pool_size=(2, 2), axis=(2,3), stride=(2,2))
+
+
 
 
     l_dense = lasagne.layers.DenseLayer(lasagne.layers.DropoutLayer(l),

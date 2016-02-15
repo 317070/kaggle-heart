@@ -12,12 +12,20 @@ import utils
 
 
 tform_identity = skimage.transform.AffineTransform()
+NO_AUGMENT_PARAMS = {
+    "zoom": (1.0, 1.0),
+    "rotation": 0.0,
+    "shear": 0.0,
+    "translation": (0.0, 0.0),
+    "flip_vert": 0,
+}
 
 def resize_to_make_it_fit(images, output_shape=(50, 50)):
     max_time = max(images[i].shape[0] for i in xrange(len(images)))
     final_shape = (len(images),max_time) + output_shape
     result = np.zeros(final_shape, dtype="float32")
 
+    volume_change = []
     #result.reshape((final_shape[0],-1) + output_shape)
     for i, mri_slice in enumerate(images):
         mri_slice = mri_slice.reshape((-1,)+mri_slice.shape[-2:])
@@ -28,7 +36,63 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
             # TODO: can't this be done better?
             result[i,j] = fast_warp(frame, tform, output_shape=output_shape)
 
+        A = tform.params[:2, :2]
+        volume_change.append(np.linalg.norm(A[:,0]) * np.linalg.norm(A[:,1]))
+        assert tform.params[2,2] == 1, (tform.params[2,2],)
+
     #result.reshape(final_shape)
+    return result, volume_change
+
+
+def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
+                                 pixel_spacing=(1,1), shift_center=(.4, .5),
+                                 normalised_patch_size=(200,200)):
+    """Normalizes the scale, augments, and crops the image.
+    """
+    if not pixel_spacing[0] == pixel_spacing[1]:
+        raise NotImplementedError("Only supports square pixels")
+
+    # No augmentation:
+    if augment is None:
+        augment = NO_AUGMENT_PARAMS
+
+    current_shape = slices[0].shape[-2:]
+    normalised_shape = tuple(int(float(d)*ps) for d,ps in zip(current_shape, pixel_spacing))
+
+    max_time = max(slices[i].shape[0] for i in xrange(len(slices)))
+    final_shape = (len(slices),max_time) + output_shape
+    result = np.zeros(final_shape, dtype="float32")    
+
+    for i, mri_slice in enumerate(slices):
+        # For each slice, build a transformation that extracts the right patch,
+        # and augments the data.
+        # First, we scale the images such that they all have the same scale
+        norm_rescaling = 1./pixel_spacing[0]
+        tform_normscale = build_rescale_transform(
+            norm_rescaling, mri_slice[0].shape[-2:], target_shape=normalised_shape)
+        # Next, we shift the center of the image to the left (assumes upside_up normalisation)
+        tform_shift_center, tform_shift_uncenter = (
+            build_shift_center_transform(
+                normalised_shape, shift_center, normalised_patch_size))
+
+        augment_tform = build_augmentation_transform(
+            zoom=(1.0, 1.0),    # No zooming to preserve scale!
+            rotation=augment["rotation"],
+            shear=augment["shear"],
+            translation=augment["translation"],
+            flip_vert=augment["flip_vert"]>.5,
+        )
+
+        patch_scale = max(
+            normalised_patch_size[0]/output_shape[0],
+            normalised_patch_size[1]/output_shape[1])
+        tform_patch_scale = build_rescale_transform(
+            patch_scale, normalised_patch_size, target_shape=output_shape)
+
+        total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale
+        for j, frame in enumerate(mri_slice):
+            result[i,j] = fast_warp(frame, total_tform, output_shape=output_shape)
+
     return result
 
 
@@ -40,6 +104,7 @@ def resize_and_augment(images, output_shape=(50, 50), augment=None):
     final_shape = (len(images),max_time) + output_shape
     result = np.zeros(final_shape, dtype="float32")
 
+    volume_change = []
     #result.reshape((final_shape[0],-1) + output_shape)
     for i, mri_slice in enumerate(images):
         mri_slice = mri_slice.reshape((-1,)+mri_slice.shape[-2:])
@@ -54,8 +119,12 @@ def resize_and_augment(images, output_shape=(50, 50), augment=None):
         for j, frame in enumerate(mri_slice):
             result[i,j] = fast_warp(frame, total_tform, output_shape=output_shape)
 
+        A = total_tform.params[:2, :2]
+        volume_change.append(np.linalg.norm(A[:,0]) * np.linalg.norm(A[:,1]))
+        assert total_tform.params[2,2] == 1, (total_tform.params[2,2],)
+
     #result.reshape(final_shape)
-    return result
+    return result, volume_change
 
 
 def resize_to_make_sunny_fit(image, output_shape=(50, 50)):
@@ -128,12 +197,51 @@ def build_center_uncenter_transforms(image_shape):
     return tform_center, tform_uncenter
 
 
-def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translation=(0, 0), flip=False):
+def build_shift_center_transform(image_shape, center_location, patch_size):
+    """Shifts the center of the image to a given location.
+
+    This function tries to include as much as possible of the image in the patch
+    centered around the new center. If the patch arount the ideal center
+    location doesn't fit within the image, we shift the center to the right so
+    that it does.
+    """
+    center_absolute_location = [
+        center_location[0]*image_shape[1], center_location[1]*image_shape[0]]
+
+    # Check for overlap at the edges
+    center_absolute_location[0] = max(
+        center_absolute_location[0], patch_size[1]/2.0)
+    center_absolute_location[1] = max(
+        center_absolute_location[1], patch_size[0]/2.0)
+    center_absolute_location[0] = min(
+        center_absolute_location[0], image_shape[1] - patch_size[1]/2.0)
+    center_absolute_location[1] = min(
+        center_absolute_location[1], image_shape[0] - patch_size[0]/2.0)
+
+    # Check for overlap at both edges
+    if patch_size[0] > image_shape[0]:
+        center_absolute_location[1] = image_shape[0] / 2.0
+    if patch_size[1] > image_shape[1]:
+        center_absolute_location[0] = image_shape[1] / 2.0
+
+    # Build transform
+    new_center = np.array(center_absolute_location)
+    translation_center = new_center - 0.5
+    translation_uncenter = -np.array((patch_size[1]/2.0, patch_size[0]/2.0)) - 0.5
+    return (
+        skimage.transform.SimilarityTransform(translation=translation_center),
+        skimage.transform.SimilarityTransform(translation=translation_uncenter))
+
+
+def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translation=(0, 0), flip=False, flip_vert=False):
     if flip:
         shear += 180
         rotation += 180
         # shear by 180 degrees is equivalent to rotation by 180 degrees + flip.
         # So after that we rotate it another 180 degrees to get just the flip.
+
+    if flip_vert:
+        shear += 180
 
     tform_augment = skimage.transform.AffineTransform(scale=(1/zoom[0], 1/zoom[1]), rotation=np.deg2rad(rotation), shear=np.deg2rad(shear), translation=translation)
     return tform_augment

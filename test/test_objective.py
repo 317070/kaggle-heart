@@ -77,8 +77,15 @@ def test2():
     plt.plot(x_range, p_cdf[0])
     plt.show()
 
-
     print f_crps(mu, log_sigma, tgt)
 
 
-test2()
+def test3():
+    def heaviside_function(x):
+        return np.float32((np.linspace(0, 599, 600) - x) >= 0)
+
+    x = np.array([[2], [3], [4]])
+    print heaviside_function(x)
+
+
+test3()

@@ -9,7 +9,7 @@ import buffering
 from configuration import config, set_configuration
 
 if not (3 <= len(sys.argv) <= 5):
-    sys.exit("Usage: test.py <metadata_path> <set: valid|test> <n_tta_iterations>")
+    sys.exit("Usage: predict.py <metadata_path> <set: valid|test> <n_tta_iterations>")
 
 metadata_path = sys.argv[1]
 set = sys.argv[2] if len(sys.argv) >= 2 else 'test'
@@ -78,9 +78,13 @@ if set == 'valid':
     print 'Validation loss: ', valid_loss
 
     # TODO gives different results
+    if not hasattr(config(), 'get_avg_patient_predictions'):
+        avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
+        patient_targets = utils.get_avg_patient_predictions(batch_targets, batch_ids)
+    else:
+        avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids)
+        patient_targets = config().get_avg_patient_predictions(batch_targets, batch_ids)
 
-    avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
-    patient_targets = utils.get_avg_patient_predictions(batch_targets, batch_ids)
     assert avg_patient_predictions.viewkeys() == patient_targets.viewkeys()
     crpss_sys, crpss_dst = [], []
     for id in avg_patient_predictions.iterkeys():
@@ -110,7 +114,10 @@ if set == 'test':
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)
 
-    avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
+    if not hasattr(config(), 'get_avg_patient_predictions'):
+        avg_patient_predictions = utils.get_avg_patient_predictions(batch_predictions, batch_ids)
+    else:
+        avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids)
 
     utils.save_pkl(avg_patient_predictions, prediction_path)
     print ' predictions saved to %s' % prediction_path

@@ -49,13 +49,16 @@ def read_slice(path):
 @compressed_cache.memoize()
 def read_metadata(path):
     d = pickle.load(open(path))['metadata'][0]
-    metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient', 'SliceLocation',
-                                  'PatientSex', 'PatientAge']}
+    metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient', 'ImagePositionPatient', 'SliceLocation',
+                                  'PatientSex', 'PatientAge', 'Rows', 'Columns']}
     metadata['PixelSpacing'] = np.float32(metadata['PixelSpacing'])
     metadata['ImageOrientationPatient'] = np.float32(metadata['ImageOrientationPatient'])
     metadata['SliceLocation'] = np.float32(metadata['SliceLocation'])
+    metadata['ImagePositionPatient'] = np.float32(metadata['ImagePositionPatient'])
     metadata['PatientSex'] = 1 if metadata['PatientSex'] == 'F' else 0
     metadata['PatientAge'] = int(metadata['PatientAge'][1:3])
+    metadata['Rows'] = int(metadata['Rows'])
+    metadata['Columns'] = int(metadata['Columns'])
     return metadata
 
 
@@ -285,9 +288,9 @@ def build_orientation_correction_transform(metadata):
     if np.dot(y_e, fy) < 0:
         tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
 
-    if np.dot(x_e, fx) < 0:
-        tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
-        tform_list.append(skimage.transform.AffineTransform(rotation=np.deg2rad(180)))
+    # if np.dot(x_e, fx) < 0:
+    #     tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
+    #     tform_list.append(skimage.transform.AffineTransform(rotation=np.deg2rad(180)))
 
     tform_total = tform_identity
 
@@ -346,3 +349,57 @@ def normalize_contrast_percentile(data):
     low, high = perc[0], perc[1]
     out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
     return out_data
+
+
+def slice_location_finder(slicepath2metadata):
+    """
+    :param slicepath2metadata: dict with arbitrary keys, and metadata values
+    :return: dict with "relative_position" and "middle_pixel_position" (and others)
+    """
+    slicepath2midpix = {}
+    slicepath2position = {}
+
+    for sp, metadata in slicepath2metadata.iteritems():
+        image_orientation = metadata["ImageOrientationPatient"]
+        image_position = metadata["ImagePositionPatient"]
+        pixel_spacing = metadata["PixelSpacing"]
+        rows = metadata['Rows']
+        columns = metadata['Columns']
+
+        # calculate value of middle pixel
+        F = np.array(image_orientation).reshape((2, 3))
+        # reversed order, as per http://nipy.org/nibabel/dicom/dicom_orientation.html
+        i, j = columns / 2.0, rows / 2.0
+        im_pos = np.array([[i * pixel_spacing[0], j * pixel_spacing[1]]], dtype='float32')
+        pos = np.array(image_position).reshape((1, 3))
+        position = np.dot(im_pos, F) + pos
+        slicepath2midpix[sp] = position[0, :]
+
+    if len(slicepath2midpix) == 1:
+        for sp, midpix in slicepath2midpix.iteritems():
+            slicepath2position[sp] = 0.0
+    else:
+        # find the keys of the 2 points furthest away from each other
+        max_dist = -1.0
+        max_dist_keys = []
+        for sp1, midpix1 in slicepath2midpix.iteritems():
+            for sp2, midpix2 in slicepath2midpix.iteritems():
+                if sp1 == sp2:
+                    continue
+                distance = np.sqrt(np.sum((midpix1 - midpix2) ** 2))
+                if distance > max_dist:
+                    max_dist_keys = [sp1, sp2]
+                    max_dist = distance
+        # project the others on the line between these 2 points
+        # sort the keys, so the order is more or less the same as they were
+        max_dist_keys.sort(key=lambda x: int(re.search(r'/sax_(\d+)\.pkl$', x).group(1)))
+        p_ref1 = slicepath2midpix[max_dist_keys[0]]
+        p_ref2 = slicepath2midpix[max_dist_keys[1]]
+        v1 = p_ref2 - p_ref1
+        v1 /= np.linalg.norm(v1)
+
+        for sp, midpix in slicepath2midpix.iteritems():
+            v2 = midpix - p_ref1
+            slicepath2position[sp] = np.inner(v1, v2)
+
+    return slicepath2position

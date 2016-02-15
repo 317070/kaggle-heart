@@ -9,7 +9,6 @@ from collections import defaultdict
 from functools import partial
 
 caching = 'memory'
-
 restart_from_save = None
 rng = np.random.RandomState(42)
 patch_size = (128, 128)
@@ -19,7 +18,7 @@ train_transformation_params = {
     'translation_range': (-8, 8),
     'shear_range': (0, 0),
     'do_flip': True,
-    'sequence_shift': True,
+    'sequence_shift': False,
 }
 
 valid_transformation_params = {
@@ -53,7 +52,7 @@ test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/da
                                                                   full_batch=False, random=False, infinite=False)
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
-max_nchunks = nchunks_per_epoch * 100
+max_nchunks = nchunks_per_epoch * 150
 learning_rate_schedule = {
     0: 0.0001,
     int(max_nchunks * 0.25): 0.00007,
@@ -68,15 +67,17 @@ conv3 = partial(Conv2DDNNLayer,
                 stride=(1, 1),
                 pad="same",
                 filter_size=(3, 3),
-                nonlinearity=nn.nonlinearities.rectify)
+                nonlinearity=nn.nonlinearities.rectify,
+                b=nn.init.Constant(0.1),
+                W=nn.init.Orthogonal("relu"))
 
 max_pool = partial(MaxPool2DDNNLayer,
                    pool_size=(2, 2),
                    stride=(2, 2))
 
 
-def build_model(l_in=None):
-    l_in = nn.layers.InputLayer((None, 30) + patch_size) if not l_in else l_in
+def build_model():
+    l_in = nn.layers.InputLayer((None, 30) + patch_size)
 
     l = conv3(l_in, num_filters=64)
     l = conv3(l, num_filters=64)
@@ -125,12 +126,11 @@ def build_model(l_in=None):
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
-    regularizable_layers = [l_d01, l_d02, l_d11, l_d12]
-    dense_layers = [l_d01, l_d02, l_d11, l_d12]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top',
-                                'regularizable_layers', 'dense_layers'])([l_in], l_outs, l_targets, l_top,
-                                                                         regularizable_layers, dense_layers)
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'regularizable_layers'])([l_in], l_outs,
+                                                                                                  l_targets, l_top,
+                                                                                                  [l_d01, l_d02, l_d11,
+                                                                                                   l_d12])
 
 
 def build_objective(model, deterministic=False):
@@ -149,7 +149,7 @@ def build_objective(model, deterministic=False):
     else:
         l2_penalty = 0.0
 
-    return T.sqrt(T.mean((p0 - t0) ** 2)) + T.sqrt(T.mean((p1 - t1) ** 2)) + l2_penalty
+    return T.sqrt(0.5 * T.mean((p0 - t0) ** 2 + (p1 - t1) ** 2)) + l2_penalty
 
 
 def build_updates(train_loss, model, learning_rate):
@@ -160,15 +160,15 @@ def build_updates(train_loss, model, learning_rate):
 def get_mean_validation_loss(batch_predictions, batch_targets):
     nbatches = len(batch_predictions)
     npredictions = len(batch_predictions[0])
-    losses = []
+    losses = 0
     for i in xrange(npredictions):
         x, y = [], []
         for j in xrange(nbatches):
             x.append(batch_predictions[j][i])
             y.append(batch_targets[j][i])
         x, y = np.vstack(x), np.vstack(y)
-        losses.append(np.sqrt(np.mean((x - y) ** 2)))
-    return losses
+        losses += (x - y) ** 2
+    return np.sqrt(0.5 * np.mean(losses))
 
 
 def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):

@@ -6,7 +6,6 @@ from lasagne import nonlinearities, init
 
 
 def heaviside(x):
-    # return T.repeat(T.arange(0, 600).reshape((1, 600)), repeats=x.shape[0], axis=0) - T.repeat(x, 600, axis=1) >= 0
     return T.arange(0, 600).dimshuffle('x', 0) - T.repeat(x, 600, axis=1) >= 0
 
 
@@ -232,3 +231,16 @@ def batch_norm(layer, **kwargs):
     if nonlinearity is not None:
         layer = NonlinearityLayer(layer, nonlinearity)
     return layer
+
+
+class CumSumLayer(nn.layers.Layer):
+    def __init__(self, incoming, axis=1, **kwargs):
+        super(CumSumLayer, self).__init__(incoming, **kwargs)
+        self.axis = axis
+
+    def get_output_shape_for(self, input_shape):
+        return input_shape
+
+    def get_output_for(self, input, **kwargs):
+        result = T.extra_ops.cumsum(input, axis=self.axis)
+        return result

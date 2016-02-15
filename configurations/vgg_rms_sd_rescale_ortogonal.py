@@ -9,7 +9,6 @@ from collections import defaultdict
 from functools import partial
 
 caching = 'memory'
-
 restart_from_save = None
 rng = np.random.RandomState(42)
 patch_size = (128, 128)

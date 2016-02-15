@@ -9,16 +9,21 @@ import theano
 from datetime import datetime, timedelta
 import utils
 import logger
-import importlib
 import theano.tensor as T
 import buffering
-from configuration import config, set_configuration
+from configuration import config, set_configuration, set_subconfiguration
 
 if len(sys.argv) < 3:
     sys.exit("Usage: train.py <configuration_name> <submodel_metadata>")
 
 config_name = sys.argv[1]
 submodel_metadata_path = sys.argv[2]
+
+# set submodel and model config
+metadata_dir = utils.get_dir_path('train')
+submodel_metadata = utils.load_pkl(metadata_dir + '/%s' % submodel_metadata_path)
+
+set_subconfiguration(submodel_metadata['configuration'])
 set_configuration(config_name)
 
 expid = utils.generate_expid(config_name)
@@ -26,23 +31,13 @@ print
 print "Experiment ID: %s" % expid
 print
 
-# meta metadata
-metadata_dir = utils.get_dir_path('train')
+# meta metadata and logs paths
 metadata_path = metadata_dir + '/%s.pkl' % expid
-
-# logs
 logs_dir = utils.get_dir_path('logs')
 sys.stdout = logger.Logger(logs_dir + '/%s.log' % expid)
 
-submodel_metadata = utils.load_pkl(metadata_dir + '/%s' % submodel_metadata_path)
-sub_config_name = submodel_metadata['configuration']
-submodel_config = importlib.import_module("configurations.%s" % config_name)
-print 'Build Submodel', sub_config_name
-submodel = submodel_config.build_model()
-nn.layers.set_all_param_values(submodel.ltop, submodel_metadata['param_values'])
-
 print 'Build model'
-model = config().build_model(submodel)
+model = config().build_model()
 all_layers = nn.layers.get_all_layers(model.l_top)
 all_params = nn.layers.get_all_params(model.l_top)
 num_params = nn.layers.count_params(model.l_top)
@@ -55,6 +50,8 @@ for layer in all_layers[:-1]:
     num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
     num_param = string.ljust(num_param.__str__(), 10)
     print '    %s %s %s' % (name, num_param, layer.output_shape)
+
+nn.layers.set_all_param_values(model.submodel.l_top, submodel_metadata['param_values'])
 
 train_loss = config().build_objective(model)
 
@@ -79,7 +76,7 @@ for l_in, x in izip(model.l_ins, xs_shared):
 # theano functions
 iter_train = theano.function([idx], train_loss, givens=givens_train, updates=updates, on_unused_input='ignore')
 iter_validate = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
-                                givens=givens_valid)
+                                givens=givens_valid, on_unused_input='ignore')
 
 if config().restart_from_save:
     print 'Load model parameters for resuming'
@@ -116,8 +113,9 @@ start_time = time.time()
 prev_time = start_time
 tmp_losses_train = []
 
-for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
-                                               buffering.buffered_gen_threaded(train_data_iterator.generate())):
+for chunk_idx, (xs_chunk, ys_chunk, patient_idx) in izip(chunk_idxs,
+                                                         buffering.buffered_gen_threaded(
+                                                             train_data_iterator.generate())):
     if chunk_idx in learning_rate_schedule:
         lr = np.float32(learning_rate_schedule[chunk_idx])
         print '  setting learning rate to %.7f' % lr

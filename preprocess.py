@@ -150,20 +150,22 @@ def preprocess_with_augmentation(patient_data, result, index, augment=True, meta
     for tag, data in patient_data.iteritems():
         desired_shape = result[tag][index].shape
         # try to fit data into the desired shape
-        if tag.startswith("sliced:data:singleslice"):
-            data = clean_images([patient_data[tag]], metadata=metadata)
+        if tag.startswith("sliced:data:singleslice") or tag.startswith("sliced:data:ch"):
+            data = clean_images([patient_data[tag]], metadata=metadata[tag],
+                                cleaning_processes = getattr(config(), 'cleaning_processes', []))
             patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)
             patient_3d_tensor = patient_4d_tensor[0]
             if "area_per_pixel:sax" in result:
-                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata_tag["PixelSpacing"])
+                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata[tag]["PixelSpacing"])
 
             put_in_the_middle(result[tag][index], patient_3d_tensor)
         elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
-            data = clean_images(patient_data[tag], metadata=metadata_tag)
+            data = clean_images(patient_data[tag], metadata=metadata[tag],
+                                cleaning_processes = getattr(config(), 'cleaning_processes', []))
             patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)
             if "area_per_pixel:sax" in result:
-                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata_tag[0]["PixelSpacing"])
+                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata[tag][0]["PixelSpacing"])
 
             if "noswitch" not in tag:
                 patient_4d_tensor = np.swapaxes(patient_4d_tensor,1,0)
@@ -217,14 +219,14 @@ def normalize_contrast_zmuv(imdata, metadata=None, z=2):
     return imdata
 
 
-def set_upside_up(data, metadata=None):
+def set_upside_up(data, metadata=None, do_swap=False):
     out_data = []
     for idx, dslice in enumerate(data):
-        out_data.append(set_upside_up_slice(dslice, metadata))
+        out_data.append(set_upside_up_slice(dslice, metadata, do_swap=do_swap))
     return out_data
 
 
-def set_upside_up_slice(dslice, metadata=None):
+def set_upside_up_slice(dslice, metadata=None, do_swap=False):
     # turn upside up
     F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
 
@@ -234,16 +236,18 @@ def set_upside_up_slice(dslice, metadata=None):
     x_e = np.array([1, 0, 0])
     y_e = np.array([0, 1, 0])
 
+    a, b, c = False, False, False
     if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
         out_data = np.transpose(dslice, (0, 2, 1))
         f_1, f_2 = f_2, f_1
     else:
         out_data = dslice
 
-    if np.dot(y_e, f_1) < 0:
-        out_data = out_data[:, ::-1, :]
+    if do_swap:
+        if np.dot(y_e, f_1) < 0:
+            out_data = out_data[:, ::-1, :]
 
-#    if np.dot(x_e, f_2) < 0:
-#        out_data = out_data[:, :, ::-1]
+        if np.dot(x_e, f_2) < 0:
+            out_data = out_data[:, :, ::-1]
 
     return out_data

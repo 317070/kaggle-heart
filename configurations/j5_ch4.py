@@ -32,7 +32,7 @@ batch_size = 32
 sunny_batch_size = 4
 batches_per_chunk = 16
 AV_SLICE_PER_PAT = 11
-num_epochs_train = 150 * AV_SLICE_PER_PAT
+num_epochs_train = 151 * AV_SLICE_PER_PAT
 
 learning_rate_schedule = {
     0:   0.00010,
@@ -42,6 +42,15 @@ learning_rate_schedule = {
 }
 
 build_updates = updates.build_adam_updates
+
+def filter_samples(folders):
+    # don't use patients who don't have 4ch
+    import glob
+    def has_4ch(f):
+        return len(glob.glob(f+"/4ch_*.pkl")) > 0
+
+    return [folder for folder in folders if has_4ch(folder)]
+
 
 cleaning_processes = [normalize_contrast_zmuv, partial(set_upside_up, do_swap=False)]
 

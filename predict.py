@@ -12,6 +12,7 @@ from configuration import config, set_configuration
 import numpy as np
 import string
 from data_loader import get_number_of_test_batches, validation_patients_indices, train_patients_indices, regular_labels
+import data_loader
 import theano_printer
 import utils
 import theano.tensor as T
@@ -86,6 +87,8 @@ def predict_model(expid, mfile=None):
     num_chunks = int(np.ceil(num_batches / float(config().batches_per_chunk)))
 
     chunks_train_idcs = range(1, num_chunks+1)
+
+    data_loader.filter_patient_folders()
 
     create_test_gen = partial(config().create_test_gen,
                               required_input_keys = xs_shared.keys(),

@@ -115,6 +115,13 @@ sunny_validation_images = np.array(_sunny_data["images"])[_validation_sunny_indi
 sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indices]
 
 
+def filter_patient_folders():
+    global train_patient_folders, validation_patient_folders, test_patient_folders
+    if hasattr(_config(), 'filter_samples'):
+        train_patient_folders = _config().filter_samples(validation_patient_folders)
+        validation_patient_folders = _config().filter_samples(validation_patient_folders)
+        test_patient_folders = _config().filter_samples(test_patient_folders)
+
 ##################################
 # Methods for accessing the data #
 ##################################
@@ -198,6 +205,22 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
+
+            elif tag.startswith("sliced:data:ch"):
+                if tag.startswith("sliced:data:ch:4"):
+                    ch = "4ch"
+                elif tag.startswith("sliced:data:ch:2"):
+                    ch = "2ch"
+                else:
+                    raise Exception("please choose which slice you want")
+
+                l = [slice for slice in files if ch in slice]
+                if len(l)>=1:
+                    f = l[0]
+                    patient_result[tag] = disk_access.load_data_from_file(f)
+                    metadatas_result[tag] = load_clean_metadata(f)
+                else:
+                    print "patient %d has no %s slice" % (id, ch)
 
             elif tag.startswith("sliced:data:ax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
@@ -309,9 +332,13 @@ def get_sunny_patient_data(indices, set="train"):
 
 def generate_train_batch(required_input_keys, required_output_keys):
     """Creates an iterator that returns train batches."""
+    global train_patient_folders
 
     sunny_chunk_size = _config().sunny_batch_size * _config().batches_per_chunk
     chunk_size = _config().batch_size * _config().batches_per_chunk
+
+    if hasattr(_config(), 'filter_samples'):
+        train_patient_folders = _config().filter_samples(train_patient_folders)
 
     while True:
         result = {}
@@ -336,6 +363,7 @@ def generate_train_batch(required_input_keys, required_output_keys):
 
 def generate_validation_batch(required_input_keys, required_output_keys, set="validation"):
     # generate sunny data
+
     sunny_length = get_lenght_of_set(name="sunny", set=set)
     regular_length = get_lenght_of_set(name="regular", set=set)
 

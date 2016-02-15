@@ -6,6 +6,7 @@ from configuration import config, set_configuration
 import numpy as np
 import string
 from data_loader import get_lenght_of_set, get_number_of_validation_samples, validation_patients_indices, NUM_TRAIN_PATIENTS
+import data_loader
 from predict import predict_model
 import utils
 import cPickle as pickle
@@ -131,6 +132,8 @@ def train_model(expid):
         losses_eval_valid_kaggle = []
         losses_eval_train_kaggle = []
 
+    data_loader.filter_patient_folders()
+
     create_train_gen = partial(config().create_train_gen,
                                required_input_keys = xs_shared.keys(),
                                required_output_keys = ys_shared.keys()# + ["patients"],
@@ -152,6 +155,7 @@ def train_model(expid):
     prev_time = start_time
 
     num_batches_chunk = config().batches_per_chunk
+
 
     for e, train_data in izip(chunks_train_idcs, buffering.buffered_gen_threaded(create_train_gen())):
         print "Chunk %d/%d" % (e + 1, num_chunks_train)

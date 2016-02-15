@@ -18,6 +18,8 @@ NO_AUGMENT_PARAMS = {
     "shear": 0.0,
     "translation": (0.0, 0.0),
     "flip_vert": 0,
+    "roll_time": 0,
+    "flip_time": 0,
 }
 
 def resize_to_make_it_fit(images, output_shape=(50, 50)):
@@ -61,7 +63,7 @@ def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
 
     max_time = max(slices[i].shape[0] for i in xrange(len(slices)))
     final_shape = (len(slices),max_time) + output_shape
-    result = np.zeros(final_shape, dtype="float32")    
+    result = np.zeros(final_shape, dtype="float32")
 
     for i, mri_slice in enumerate(slices):
         # For each slice, build a transformation that extracts the right patch,
@@ -89,9 +91,19 @@ def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
         tform_patch_scale = build_rescale_transform(
             patch_scale, normalised_patch_size, target_shape=output_shape)
 
+        # x and y axis transform
         total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale
+
+        # Time axis transform
+        t_map = range(mri_slice.shape[0])
+        if "roll_time" in augment:
+            t_map = np.roll(t_map, int(np.floor(augment["roll_time"])))
+        if "flip_time" in augment and augment["flip_time"] > 0.5:
+            t_map = t_map[::-1]
+
         for j, frame in enumerate(mri_slice):
-            result[i,j] = fast_warp(frame, total_tform, output_shape=output_shape)
+            j_shifted = t_map[j]
+            result[i,j_shifted] = fast_warp(frame, total_tform, output_shape=output_shape)
 
     return result
 

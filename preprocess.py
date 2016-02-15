@@ -96,7 +96,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
     for tag, data in patient_data.iteritems():
         metadata_tag = metadata[tag]
         desired_shape = result[tag][index].shape
-        
+
         if tag.startswith("sliced:data:singleslice"):
             # Cleaning data before extracting a patch
             cleaning_processes = getattr(config(), 'cleaning_processes', [])
@@ -125,7 +125,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()
-        
+
         elif tag.startswith("sliced:data"):
             raise NotImplementedError()
 
@@ -242,7 +242,7 @@ def set_upside_up_slice(dslice, metadata=None):
     if np.dot(y_e, f_1) < 0:
         out_data = out_data[:, ::-1, :]
 
-    if np.dot(x_e, f_2) < 0:
-        out_data = out_data[:, :, ::-1]
+#    if np.dot(x_e, f_2) < 0:
+#        out_data = out_data[:, :, ::-1]
 
     return out_data

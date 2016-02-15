@@ -153,7 +153,7 @@ for i in range(0, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
     result = data_loader.get_patient_data(
-        indices, wanted_input_tags, wanted_output_tags, set="train",
+        indices, wanted_input_tags, wanted_output_tags, set="test",
         preprocess_function=_config().preprocess_train)
 #    raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
     patient_id = result['output']['patients'][0]

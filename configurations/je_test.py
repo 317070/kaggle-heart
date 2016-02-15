@@ -46,7 +46,7 @@ augmentation_params = {
     "rotation": (0, 0),
     "shear": (0, 0),
     "translation": (0, 0),
-    "flip_vert": (0, 1),
+    "flip_vert": (0, 0),
 }
 
 cleaning_processes = [

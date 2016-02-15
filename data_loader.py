@@ -31,7 +31,7 @@ _TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 ALL_PATIENT_IDS = range(1, 501)
 
 
-_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1)) 
+_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1))
 
 
 def _find_patient_folders(root_folder):
@@ -120,7 +120,7 @@ sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indi
 ##################################
 
 
-def get_patient_data(indices, wanted_input_tags, wanted_output_tags, 
+def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                      set="train", preprocess_function=None):
     """
     return a dict with the desired data matched to the required tags
@@ -168,7 +168,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
     result = initialise_empty()
 
-    if set not in patient_folders: 
+    if set not in patient_folders:
         raise ValueError("Don't know the dataset %s" % set)
     folders = [
         patient_folders[set][i] for i in indices if 0<=i<num_patients[set]]
@@ -379,6 +379,8 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
 def generate_test_batch(required_input_keys, required_output_keys, augmentation=False, set=None):
     if set is None:
         sets = ["train", "validation", "test"]
+    elif type(set) == list:
+        sets = set
     else:
         sets=[set]
 

@@ -48,7 +48,6 @@ def filter_samples(folders):
     import glob
     def has_4ch(f):
         return len(glob.glob(f+"/4ch_*.pkl")) > 0
-
     return [folder for folder in folders if has_4ch(folder)]
 
 

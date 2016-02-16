@@ -118,9 +118,8 @@ sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indi
 def filter_patient_folders():
     global train_patient_folders, validation_patient_folders, test_patient_folders
     if hasattr(_config(), 'filter_samples'):
-        train_patient_folders = _config().filter_samples(validation_patient_folders)
-        validation_patient_folders = _config().filter_samples(validation_patient_folders)
-        test_patient_folders = _config().filter_samples(test_patient_folders)
+        for key in patient_folders.itervalues():
+            key[:] = _config().filter_samples(key)
 
 ##################################
 # Methods for accessing the data #
@@ -189,6 +188,12 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         # function for loading and cleaning metadata
         load_clean_metadata = lambda f: (
             utils.clean_metadata(disk_access.load_metadata_from_file(f)[0]))
+
+        # find the id of the current patient in the folder name (=safer)
+        id = _extract_id_from_path(folder)
+        if "patients" in wanted_output_tags:
+            result["output"]["patients"][i] = id
+
         # Iterate over input tags
         for tag in wanted_input_tags:
             if tag.startswith("sliced:data:singleslice"):
@@ -222,6 +227,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     metadatas_result[tag] = load_clean_metadata(f)
                 else:
                     print "patient %d has no %s slice" % (id, ch)
+                    print files
 
             elif tag.startswith("sliced:data:ax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
@@ -247,10 +253,6 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
 
         # load the labels
-        # find the id of the current patient in the folder name (=safer)
-        id = _extract_id_from_path(folder)
-        if "patients" in wanted_output_tags:
-            result["output"]["patients"][i] = id
 
         # only read labels, when we actually have them
         if id in regular_labels[:, 0]:

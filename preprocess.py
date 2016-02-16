@@ -85,7 +85,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
     Args:
         patient_data: the data to be preprocessed.
         result: dict to store the result in.
-        index: index indicating which in which slot in the result dict the data
+        index: index indicating in which slot the result dict the data
             should go.
         augment: flag indicating wheter augmentation is needed.
         metadata: metadata belonging to the patient data.
@@ -118,10 +118,6 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 raise NotImplementedError()
 
             put_in_the_middle(result[tag][index], patient_3d_tensor)
-            # For now, simply copy the data
-
-#            result[tag+':raw_%d' % index] = data[0]
-#            result[tag+':patch_%d' % index] = patient_4d_tensor
 
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()
@@ -223,7 +219,7 @@ def set_upside_up(data, metadata=None):
     return out_data
 
 
-def set_upside_up_slice(dslice, metadata=None):
+def set_upside_up_slice(dslice, metadata=None, do_flip=False):
     # turn upside up
     F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
 
@@ -239,10 +235,10 @@ def set_upside_up_slice(dslice, metadata=None):
     else:
         out_data = dslice
 
-#    if np.dot(y_e, f_1) < 0:
-#        out_data = out_data[:, ::-1, :]
+    if np.dot(y_e, f_1) < 0 and do_flip:
+        out_data = out_data[:, ::-1, :]
 
-#    if np.dot(x_e, f_2) < 0:
-#        out_data = out_data[:, :, ::-1]
+    if np.dot(x_e, f_2) < 0 and do_flip:
+        out_data = out_data[:, :, ::-1]
 
     return out_data

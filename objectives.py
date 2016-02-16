@@ -17,7 +17,7 @@ class TargetVarDictObjective(object):
 
     def get_loss(self, average=True, *args, **kwargs):
         """Compute the loss in Theano.
-        
+
         Args:
             average: Indicates whether the loss should already be averaged over the batch.
                 If not, call the compute_average method on the aggregated losses.

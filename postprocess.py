@@ -12,6 +12,11 @@ def make_monotone_distribution(distribution):
     distribution = np.clip(distribution, 0.0, 1.0)
     return distribution
 
+
+def make_monotone_distribution_fast(distributions):
+    return utils.pdf_to_cdf(np.clip(utils.cdf_to_pdf(distributions), 0.0, 1.0))
+
+
 def test_if_valid_distribution(distribution):
     if not np.isfinite(distribution).all():
         raise Exception("There is a non-finite numer in there")
@@ -37,7 +42,8 @@ def postprocess(network_outputs_dict):
     if kaggle_systoles is None or kaggle_diastoles is None:
         raise Exception("This is the wrong postprocessing for this model")
 
-    return kaggle_systoles, kaggle_diastoles
+    mmd = make_monotone_distribution_fast
+    return mmd(kaggle_systoles), mmd(kaggle_diastoles)
 
 
 def postprocess_onehot(network_outputs_dict):

@@ -206,6 +206,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
 
+
             elif tag.startswith("sliced:data:ch"):
                 if tag.startswith("sliced:data:ch:4"):
                     ch = "4ch"
@@ -332,13 +333,9 @@ def get_sunny_patient_data(indices, set="train"):
 
 def generate_train_batch(required_input_keys, required_output_keys):
     """Creates an iterator that returns train batches."""
-    global train_patient_folders
 
     sunny_chunk_size = _config().sunny_batch_size * _config().batches_per_chunk
     chunk_size = _config().batch_size * _config().batches_per_chunk
-
-    if hasattr(_config(), 'filter_samples'):
-        train_patient_folders = _config().filter_samples(train_patient_folders)
 
     while True:
         result = {}
@@ -363,7 +360,6 @@ def generate_train_batch(required_input_keys, required_output_keys):
 
 def generate_validation_batch(required_input_keys, required_output_keys, set="validation"):
     # generate sunny data
-
     sunny_length = get_lenght_of_set(name="sunny", set=set)
     regular_length = get_lenght_of_set(name="regular", set=set)
 

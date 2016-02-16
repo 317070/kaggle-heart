@@ -15,6 +15,7 @@ import postprocess
 import objectives
 import theano_printer
 import updates
+import utils
 
 # Random params
 rng = np.random
@@ -76,7 +77,7 @@ sunny_preprocess_test = preprocess.sunny_preprocess_validation
 create_train_gen = data_loader.generate_train_batch
 create_eval_valid_gen = functools.partial(data_loader.generate_validation_batch, set="validation")
 create_eval_train_gen = functools.partial(data_loader.generate_validation_batch, set="train")
-create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
+create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation"])
 
 # Input sizes
 image_size = 128
@@ -98,11 +99,12 @@ def build_objective(interface_layers):
     l2_penalty = nn.regularization.regularize_layer_params_weighted(
         interface_layers["regularizable"], nn.regularization.l2)
     # build objective
-    return objectives.LogLossObjective(interface_layers["outputs"], penalty=l2_penalty)
+    return objectives.KaggleObjective(interface_layers["outputs"], penalty=l2_penalty)
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 100 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+test_time_augmentations = 10 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture
 def build_model():
@@ -146,7 +148,8 @@ def build_model():
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
-    l_systole = ldsys3
+    ldsys3drop = nn.layers.dropout(ldsys3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
+    l_systole = layers.CumSumLayer(ldsys3)
 
     # Diastole Dense layers
     lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
@@ -157,7 +160,8 @@ def build_model():
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
     lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
-    l_diastole = lddia3
+    lddia3drop = nn.layers.dropout(lddia3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
+    l_diastole = layers.CumSumLayer(lddia3drop)
 
 
     return {
@@ -165,8 +169,8 @@ def build_model():
             "sliced:data:singleslice": l0
         },
         "outputs": {
-            "systole:onehot": l_systole,
-            "diastole:onehot": l_diastole,
+            "systole": l_systole,
+            "diastole": l_diastole,
         },
         "regularizable": {
             ldsys1: l2_weight,

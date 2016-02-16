@@ -115,6 +115,23 @@ sunny_validation_images = np.array(_sunny_data["images"])[_validation_sunny_indi
 sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indices]
 
 
+def filter_patient_folders():
+    global train_patient_folders, validation_patient_folders, test_patient_folders,\
+            NUM_TRAIN_PATIENTS, NUM_VALID_PATIENTS, NUM_TEST_PATIENTS, NUM_PATIENTS,\
+            num_patients
+    if not hasattr(_config(), 'filter_samples'):
+        return
+
+    for set, key in patient_folders.iteritems():
+        key[:] = _config().filter_samples(key)
+        num_patients[set]=len(key)
+
+    NUM_TRAIN_PATIENTS = num_patients['train']
+    NUM_VALID_PATIENTS = num_patients['validation']
+    NUM_TEST_PATIENTS = num_patients['test']
+    NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
+
+
 ##################################
 # Methods for accessing the data #
 ##################################
@@ -182,6 +199,12 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         # function for loading and cleaning metadata
         load_clean_metadata = lambda f: (
             utils.clean_metadata(disk_access.load_metadata_from_file(f)[0]))
+
+        # find the id of the current patient in the folder name (=safer)
+        id = _extract_id_from_path(folder)
+        if "patients" in wanted_output_tags:
+            result["output"]["patients"][i] = id
+
         # Iterate over input tags
         for tag in wanted_input_tags:
             if tag.startswith("sliced:data:singleslice"):
@@ -198,6 +221,24 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
+
+
+            elif tag.startswith("sliced:data:ch"):
+                if tag.startswith("sliced:data:ch:4"):
+                    ch = "4ch"
+                elif tag.startswith("sliced:data:ch:2"):
+                    ch = "2ch"
+                else:
+                    raise Exception("please choose which slice you want")
+
+                l = [slice for slice in files if ch in slice]
+                if len(l)>=1:
+                    f = l[0]
+                    patient_result[tag] = disk_access.load_data_from_file(f)
+                    metadatas_result[tag] = load_clean_metadata(f)
+                else:
+                    print "patient %d has no %s slice" % (id, ch)
+                    print files
 
             elif tag.startswith("sliced:data:ax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
@@ -223,10 +264,6 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
 
         # load the labels
-        # find the id of the current patient in the folder name (=safer)
-        id = _extract_id_from_path(folder)
-        if "patients" in wanted_output_tags:
-            result["output"]["patients"][i] = id
 
         # only read labels, when we actually have them
         if id in regular_labels[:, 0]:

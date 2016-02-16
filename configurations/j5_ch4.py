@@ -52,7 +52,7 @@ def filter_samples(folders):
     return [folder for folder in folders if has_4ch(folder)]
 
 
-cleaning_processes = [normalize_contrast_zmuv, partial(set_upside_up, do_swap=False)]
+cleaning_processes = [normalize_contrast_zmuv, set_upside_up]
 
 preprocess_train = preprocess_with_augmentation
 preprocess_validation = partial(preprocess_train, augment=False)

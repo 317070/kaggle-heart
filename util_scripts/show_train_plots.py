@@ -6,7 +6,7 @@ import cPickle as pickle
 import time
 
 print "Looking for the metadata files..."
-files = sorted(glob.glob(os.path.expanduser("/mnt/storage/metadata/kaggle-heart/train/je_ss_normscale*.pkl")))
+files = sorted(glob.glob(os.path.expanduser("/mnt/storage/metadata/kaggle-heart/train/je_ss_smcrps_nrmsc_sharedense_dropoutput.pkl")))
 print "Plotting..."
 
 NUM_TRAIN_PATIENTS = 417
@@ -15,12 +15,9 @@ for file in files:
 #    try:
         filename = os.path.basename(os.path.normpath(file))
         data = pickle.load(open(file, "r"))
-        train_losses = data['losses_train']
+        train_losses = data['losses_eval_train']
         valid_losses = data['losses_eval_valid']
         kaggle_losses = data['losses_eval_valid_kaggle']
-
-        # Because of a bug, the valid losses are MSE instead of RMSE
-        valid_losses = map(np.sqrt, valid_losses)
 
         fig = plt.figure()
 

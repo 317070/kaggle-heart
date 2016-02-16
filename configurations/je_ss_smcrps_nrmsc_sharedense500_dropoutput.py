@@ -15,6 +15,7 @@ import postprocess
 import objectives
 import theano_printer
 import updates
+import utils
 
 # Random params
 rng = np.random
@@ -102,7 +103,8 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 100 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture
 def build_model():
@@ -110,7 +112,7 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_size = data_sizes["sliced:data:singleslice:difference"]
+    input_size = data_sizes["sliced:data:singleslice"]
 
     l0 = nn.layers.InputLayer(input_size)
 
@@ -138,9 +140,9 @@ def build_model():
     l5 = nn.layers.dnn.MaxPool2DDNNLayer(l5c, pool_size=(2,2), stride=(2,2))
 
     # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ld1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
+    ldsys1drop = nn.layers.dropout(ld1, p=0.5)
     ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
@@ -150,9 +152,7 @@ def build_model():
     l_systole = layers.CumSumLayer(ldsys3)
 
     # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
-
-    lddia1drop = nn.layers.dropout(lddia1, p=0.5)
+    lddia1drop = nn.layers.dropout(ld1, p=0.5)
     lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
@@ -171,10 +171,9 @@ def build_model():
             "diastole": l_diastole,
         },
         "regularizable": {
-            ldsys1: l2_weight,
+            ld1: l2_weight,
             ldsys2: l2_weight,
             ldsys3: l2_weight_out,
-            lddia1: l2_weight,
             lddia2: l2_weight,
             lddia3: l2_weight_out,
         },

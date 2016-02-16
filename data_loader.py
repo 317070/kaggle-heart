@@ -116,10 +116,19 @@ sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indi
 
 
 def filter_patient_folders():
-    global train_patient_folders, validation_patient_folders, test_patient_folders
-    if hasattr(_config(), 'filter_samples'):
-        for key in patient_folders.itervalues():
-            key[:] = _config().filter_samples(key)
+    global train_patient_folders, validation_patient_folders, test_patient_folders,\
+            NUM_TRAIN_PATIENTS, NUM_VALID_PATIENTS, NUM_TEST_PATIENTS, NUM_PATIENTS
+    if not hasattr(_config(), 'filter_samples'):
+        return
+
+    for key in patient_folders.itervalues():
+        key[:] = _config().filter_samples(key)
+
+    NUM_TRAIN_PATIENTS = num_patients['train']
+    NUM_VALID_PATIENTS = num_patients['validation']
+    NUM_TEST_PATIENTS = num_patients['test']
+    NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
+
 
 ##################################
 # Methods for accessing the data #

@@ -1,48 +1,34 @@
 from __future__ import division
+
 import argparse
-from functools import partial
-import itertools
-from itertools import izip
-from datetime import timedelta, datetime
-import lasagne
-import theano
-import time
-import buffering
-from configuration import config, set_configuration
-import numpy as np
-import string
-from data_loader import get_number_of_test_batches, validation_patients_indices, train_patients_indices, regular_labels
-import theano_printer
-import utils
-import theano.tensor as T
 import cPickle as pickle
 import csv
+import itertools
+import string
+import sys
+import time
+
+from datetime import timedelta, datetime
+from functools import partial
+from itertools import izip
+
+import lasagne
+import numpy as np
+import theano
+import theano.tensor as T
+
+import buffering
+import theano_printer
+import utils
+
+from configuration import config, set_configuration
+from data_loader import get_number_of_test_batches, validation_patients_indices, train_patients_indices, regular_labels
 from data_loader import NUM_PATIENTS
-from utils import CRSP
 from postprocess import make_monotone_distribution, test_if_valid_distribution
+from utils import CRSP
 
-def predict_model(expid, mfile=None):
-    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % (expid if not mfile else mfile)
-    prediction_path = "/mnt/storage/metadata/kaggle-heart/predictions/%s.pkl" % expid
-    submission_path = "/mnt/storage/metadata/kaggle-heart/submissions/%s.csv" % expid
 
-    if theano.config.optimizer != "fast_run":
-        print "WARNING: not running in fast mode!"
-
-    print "Using"
-    print "  %s" % metadata_path
-    print "To generate"
-    print "  %s" % prediction_path
-    print "  %s" % submission_path
-
-    print "Build model"
-    interface_layers = config().build_model()
-
-    output_layers = interface_layers["outputs"]
-    input_layers = interface_layers["inputs"]
-    top_layer = lasagne.layers.MergeLayer(
-        incomings=output_layers.values()
-    )
+def _print_architecture(top_layer):
     all_layers = lasagne.layers.get_all_layers(top_layer)
     num_params = lasagne.layers.count_params(top_layer)
     print "  number of parameters: %d" % num_params
@@ -54,6 +40,39 @@ def predict_model(expid, mfile=None):
         num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
         num_param = string.ljust(num_param.__str__(), 10)
         print "    %s %s %s" % (name,  num_param, layer.output_shape)
+
+
+def _check_slicemodel(input_layers):
+    for inp in input_layers.keys():
+        # If the input is image data but not a single slice
+        if not inp.startswith("sliced:data:singleslice") and inp.startswith("sliced:data"):
+            raise ValueError("predict_per_slice requires a slice model")
+
+
+def predict_slice_model(expid, mfile=None):
+    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % (expid if not mfile else mfile)
+    prediction_path = "/mnt/storage/metadata/kaggle-heart/predictions/per_slice_%s.pkl" % expid
+
+    if theano.config.optimizer != "fast_run":
+        print "WARNING: not running in fast mode!"
+
+    print "Using"
+    print "  %s" % metadata_path
+    print "To generate"
+    print "  %s" % prediction_path
+
+    print "Build model"
+    interface_layers = config().build_model()
+
+    output_layers = interface_layers["outputs"]
+    input_layers = interface_layers["inputs"]
+    top_layer = lasagne.layers.MergeLayer(
+        incomings=output_layers.values()
+    )
+    _check_slicemodel(input_layers)
+
+    # Print the architecture
+    _print_architecture(top_layer)
 
     xs_shared = {
         key: lasagne.utils.shared_empty(dim=len(l_in.output_shape), dtype='float32') for (key, l_in) in input_layers.iteritems()
@@ -89,7 +108,7 @@ def predict_model(expid, mfile=None):
 
     create_test_gen = partial(config().create_test_gen,
                               required_input_keys = xs_shared.keys(),
-                              required_output_keys = ["patients"],
+                              required_output_keys = ["patients", "slices"],
                               )
 
     print "Generate predictions with this model"
@@ -228,4 +247,4 @@ if __name__ == "__main__":
     expid = utils.generate_expid(args.config)
     mfile = args.metadata
 
-    predict_model(expid, mfile)
+    predict_slice_model(expid, mfile)

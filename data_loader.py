@@ -179,7 +179,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         files = sorted(glob.glob(wildcard_file_path))  # glob is non-deterministic!
         patient_result = dict()
         metadatas_result = dict()
-        # function for loading and cleaning metadata
+        # function for loading and cleaning metadata. Only use the first frame
         load_clean_metadata = lambda f: (
             utils.clean_metadata(disk_access.load_metadata_from_file(f)[0]))
         # Iterate over input tags

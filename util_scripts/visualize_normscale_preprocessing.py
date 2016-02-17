@@ -18,6 +18,7 @@ import data_loader
 import utils
 
 configuration.set_configuration('je_test')
+#configuration.set_configuration('je_ss_smcrps_nrmsc_500_dropnorm')
 _config = configuration.config
 
 
@@ -118,7 +119,7 @@ def animate_slice_crop(raw_slicedata, cropped_slicedata, index):
     fig, (ax1, ax2) = plt.subplots(1, 2)
     mngr = plt.get_current_fig_manager()
     # to put it into the upper left corner for example:
-    mngr.window.setGeometry(50, 100, 600, 300)
+#    mngr.window.setGeometry(50, 100, 600, 300)
 
     im1 = ax1.imshow(raw_slicedata[0], cmap='gist_gray_r')
     im2 = ax2.imshow(cropped_slicedata[0], cmap='gist_gray_r')
@@ -143,8 +144,6 @@ def animate_slice_crop(raw_slicedata, cropped_slicedata, index):
 # largest normalised: 67 -> id 83
 # smallest normalised: 54 -> id 66
 
-crop_size = (30, 200, 200)
-
 wanted_input_tags = ['sliced:data:singleslice:middle']
 wanted_output_tags = ['systole', 'diastole', 'patients']
 
@@ -153,7 +152,7 @@ for i in range(0, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
     result = data_loader.get_patient_data(
-        indices, wanted_input_tags, wanted_output_tags, set="test",
+        indices, wanted_input_tags, wanted_output_tags, set="train",
         preprocess_function=_config().preprocess_train)
 #    raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
     patient_id = result['output']['patients'][0]

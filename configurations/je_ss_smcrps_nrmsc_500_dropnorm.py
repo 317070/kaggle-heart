@@ -15,6 +15,7 @@ import postprocess
 import objectives
 import theano_printer
 import updates
+import utils
 
 # Random params
 rng = np.random
@@ -111,7 +112,7 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_size = data_sizes["sliced:data:singleslice:difference"]
+    input_size = data_sizes["sliced:data:singleslice"]
 
     l0 = nn.layers.InputLayer(input_size)
 
@@ -148,7 +149,8 @@ def build_model():
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
     ldsys3drop = nn.layers.dropout(ldsys3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    l_systole = layers.CumSumLayer(ldsys3)
+    ldsys3dropnorm = layers.NormalisationLayer(ldsys3drop)
+    l_systole = layers.CumSumLayer(ldsys3dropnorm)
 
     # Diastole Dense layers
     lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
@@ -160,12 +162,13 @@ def build_model():
     lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
     lddia3drop = nn.layers.dropout(lddia3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    l_diastole = layers.CumSumLayer(lddia3drop)
+    lddia3dropnorm = layers.NormalisationLayer(lddia3drop)
+    l_diastole = layers.CumSumLayer(lddia3dropnorm)
 
 
     return {
         "inputs":{
-            "sliced:data:singleslice:difference": l0
+            "sliced:data:singleslice": l0
         },
         "outputs": {
             "systole": l_systole,

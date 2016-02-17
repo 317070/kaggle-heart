@@ -52,8 +52,8 @@ build_updates = updates.build_adam_updates
 # Preprocessing stuff
 cleaning_processes = [
     preprocess.set_upside_up,]
-cleaning_processes_post = [
-    functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
+cleaning_processes_post = []
+#    functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
     "rotation": (-16, 16),

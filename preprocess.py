@@ -79,7 +79,8 @@ def sunny_preprocess_validation(chunk_x, img, chunk_y, lbl):
 
 
 def preprocess_normscale(patient_data, result, index, augment=True,
-                         metadata=None):
+                         metadata=None,
+                         normscale_resize_and_augment_function=normscale_resize_and_augment):
     """Normalizes scale and augments the data.
 
     Args:
@@ -105,7 +106,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 [patient_data[tag]], metadata=metadata_tag,
                 cleaning_processes=cleaning_processes)
             # Augment and extract patch
-            patient_3d_tensor = normscale_resize_and_augment(
+            patient_3d_tensor = normscale_resize_and_augment_function(
                 data, output_shape=desired_shape[-2:],
                 augment=augmentation_params,
                 pixel_spacing=metadata_tag["PixelSpacing"])[0]

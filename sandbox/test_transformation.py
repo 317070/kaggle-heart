@@ -27,42 +27,39 @@ valid_transformation_params = {
 }
 
 data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
-# data_path = '/mnt/sda3/CODING/python/kaggle-heart/data/train'
 # data_path = '/data/dsb15_pkl/pkl_train'
-patient_path = sorted(glob.glob(data_path + '/561/study'))
-# patient_path = sorted(glob.glob(data_path + '/212/study'))
-# patient_path = [data_path + '/555/study', data_path+ '/693/study']
+patient_path = sorted(glob.glob(data_path + '/356/study'))
 for p in patient_path:
     print p
     spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
     for s in spaths:
         print s
-        data = data_test.read_slice(s)
-        print data.shape
+        d = data_test.read_slice(s)
+        print d.shape
         metadata = data_test.read_metadata(s)
-        normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(data.shape[1:], metadata['PixelSpacing']))
+        normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(d.shape[1:], metadata['PixelSpacing']))
         print 'shape in mm', normalised_shape
         print '-----------------------------------'
 
 
         def init():
-            im.set_data(data[0])
+            im.set_data(d[0])
 
 
         def animate(i):
-            im.set_data(data[i])
+            im.set_data(d[i])
             return im
 
 
         fig = plt.figure(1)
         fig.canvas.set_window_title(s)
         plt.subplot(121)
-        im = plt.gca().imshow(data[0], cmap='gist_gray_r', vmin=0, vmax=255)
+        im = plt.gca().imshow(d[0], cmap='gist_gray_r', vmin=0, vmax=255)
         anim = animation.FuncAnimation(fig, animate, init_func=init, frames=30, interval=50)
 
         # ---------------------------------
 
-        out_data = data_test.transform_norm_rescale(data, metadata, valid_transformation_params)
+        out_data = data_test.transform_norm_rescale(d, metadata, valid_transformation_params)
 
 
         def init_out():

@@ -1,21 +1,16 @@
+import cPickle as pickle
 import glob
 import re
-import numpy as np
-import skimage.io
-import skimage.transform
-import skimage.exposure
-from configuration import config
-import cPickle as pickle
 from collections import namedtuple
 import numpy as np
+import skimage.exposure
+import skimage.io
 import skimage.restoration
-from skimage.filters import roberts, sobel, scharr, prewitt
-from skimage.filters import threshold_otsu
-import numpy as np
+import skimage.transform
 from scipy.fftpack import fftn, ifftn
-from skimage.transform import hough_circle
-from skimage.feature import peak_local_max, canny
 from skimage.draw import ellipse
+from skimage.feature import peak_local_max, canny
+from skimage.transform import hough_circle
 from skimage.util import img_as_ubyte
 
 rng = np.random.RandomState(42)
@@ -35,6 +30,23 @@ def read_labels(file_path):
     return id2labels
 
 
+def read_patients_data(paths):
+    data_dict = {}
+    for p in paths:
+        patient_id = int(re.search(r'/(\d+)/', p).group(1))
+        data_dict[patient_id] = read_patient(p)
+    return data_dict
+
+
+def read_patient(path):
+    slices_paths = sorted(glob.glob(path + '/*.pkl'))
+    slices_dict = {}
+    for sp in slices_paths:
+        slice = re.search(r'/(\w+\d+)*\.pkl$', sp).group(1)
+        slices_dict[slice] = read_slice(sp)
+    return slices_dict
+
+
 def read_slice(path):
     return pickle.load(open(path))['data']
 
@@ -48,7 +60,6 @@ def read_metadata(path):
     metadata['SliceLocation'] = np.float32(metadata['SliceLocation'])
     metadata['PatientSex'] = 1 if metadata['PatientSex'] == 'F' else 0
     metadata['PatientAge'] = int(metadata['PatientAge'][1:3])
-    print metadata
     return metadata
 
 
@@ -66,7 +77,6 @@ def sample_augmentation_parameters(transformation):
         shear = rng.uniform(*transformation['shear_range'])
         flip = rng.randint(2) > 0 if transformation['do_flip'] else False  # flip half of the time
         sequence_shift = rng.randint(30) if transformation['sequence_shift']  else 0
-        print sequence_shift
         random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'flip', 'sequence_shift'])(
             translation,
             rotation,
@@ -271,13 +281,6 @@ def normalize_contrast_zmuv(imdata, metadata=None, z=2):
     return imdata
 
 
-# def normalize_contrast_percentile(data):
-#     perc = np.percentile(data[0], q=[5, 95])
-#     low, high = perc[0], perc[1]
-#     out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
-#     return out_data
-
-
 def correct_orientation(data, metadata):
     F = metadata["ImageOrientationPatient"].reshape((2, 3))
     f_1 = F[1, :]
@@ -288,3 +291,158 @@ def correct_orientation(data, metadata):
     else:
         out_data = data
     return out_data
+
+
+def extract_roi_joni(data, kernel_width=5, center_margin=8, num_peaks=10, num_circles=20, upscale=1.5, minradius=20,
+                     maxradius=60, radstep=2):
+    ximagesize = data[0]['data'].shape[1]
+    yimagesize = data[0]['data'].shape[2]
+
+    xsurface = np.tile(range(ximagesize), (yimagesize, 1)).T
+    ysurface = np.tile(range(yimagesize), (ximagesize, 1))
+    lsurface = np.zeros((ximagesize, yimagesize))
+
+    allcenters = []
+    allaccums = []
+    allradii = []
+
+    for ddi in data:
+        outdata = ddi['data']
+        ff1 = fftn(outdata)
+        fh = np.absolute(ifftn(ff1[1, :, :]))
+        fh[fh < 0.1 * np.max(fh)] = 0.0
+        image = img_as_ubyte(fh / np.max(fh))
+
+        # find hough circles
+        edges = canny(image, sigma=3, low_threshold=10, high_threshold=50)
+
+        # Detect two radii
+        hough_radii = np.arange(minradius, maxradius, radstep)
+        hough_res = hough_circle(edges, hough_radii)
+
+        if hough_res.any():
+            centers = []
+            accums = []
+            radii = []
+
+            for radius, h in zip(hough_radii, hough_res):
+                # For each radius, extract num_peaks circles
+                peaks = peak_local_max(h, num_peaks=num_peaks)
+                centers.extend(peaks)
+                accums.extend(h[peaks[:, 0], peaks[:, 1]])
+                radii.extend([radius] * num_peaks)
+
+            # Keep the most prominent num_circles circles
+            sorted_circle_idxs = np.argsort(accums)[::-1][:num_circles]
+
+            for idx in sorted_circle_idxs:
+                center_x, center_y = centers[idx]
+                allcenters.append(centers[idx])
+                allradii.append(radii[idx])
+                allaccums.append(accums[idx])
+                brightness = accums[idx]
+                lsurface = lsurface + brightness * np.exp(
+                    -((xsurface - center_x) ** 2 + (ysurface - center_y) ** 2) / kernel_width ** 2)
+
+    lsurface = lsurface / lsurface.max()
+
+    # select most likely ROI center
+    x_axis, y_axis = np.unravel_index(lsurface.argmax(), lsurface.shape)
+
+    # determine ROI radius
+    x_radius = 0
+    y_radius = 0
+    for idx in range(len(allcenters)):
+        xshift = np.abs(allcenters[idx][0] - x_axis)
+        yshift = np.abs(allcenters[idx][1] - y_axis)
+        if (xshift <= center_margin) & (yshift <= center_margin):
+            x_radius = np.max((x_radius, allradii[idx] + xshift))
+            y_radius = np.max((y_radius, allradii[idx] + yshift))
+
+    x_radius = upscale * x_radius
+    y_radius = upscale * y_radius
+
+    ROImask = np.zeros_like(lsurface)
+    [rr, cc] = ellipse(x_axis, y_axis, x_radius, y_radius)
+    ROImask[rr, cc] = 1.
+    print (x_axis, y_axis), x_radius, y_radius
+    return lsurface, ROImask, (x_axis, y_axis)
+
+
+def extract_roi(data, pixel_spacing, minradius_mm=10, maxradius_mm=45, kernel_width=5, center_margin=8, num_peaks=10,
+                num_circles=20, radstep=2):
+    """
+    Returns center and radii of ROI region in (i,j) format
+    """
+    # radius of the smallest and largest circles in mm estimated from the train set
+    # convert to pixel counts
+    minradius = int(minradius_mm / pixel_spacing)
+    maxradius = int(maxradius_mm / pixel_spacing)
+
+    ximagesize = data[0]['data'].shape[1]
+    yimagesize = data[0]['data'].shape[2]
+
+    xsurface = np.tile(range(ximagesize), (yimagesize, 1)).T
+    ysurface = np.tile(range(yimagesize), (ximagesize, 1))
+    lsurface = np.zeros((ximagesize, yimagesize))
+
+    allcenters = []
+    allaccums = []
+    allradii = []
+
+    for dslice in data:
+        ff1 = fftn(dslice['data'])
+        fh = np.absolute(ifftn(ff1[1, :, :]))
+        fh[fh < 0.1 * np.max(fh)] = 0.0
+        image = 1. * fh / np.max(fh)
+
+        # find hough circles and detect two radii
+        edges = canny(image, sigma=3)
+        hough_radii = np.arange(minradius, maxradius, radstep)
+        hough_res = hough_circle(edges, hough_radii)
+
+        if hough_res.any():
+            centers = []
+            accums = []
+            radii = []
+
+            for radius, h in zip(hough_radii, hough_res):
+                # For each radius, extract num_peaks circles
+                peaks = peak_local_max(h, num_peaks=num_peaks)
+                centers.extend(peaks)
+                accums.extend(h[peaks[:, 0], peaks[:, 1]])
+                radii.extend([radius] * num_peaks)
+
+            # Keep the most prominent num_circles circles
+            sorted_circles_idxs = np.argsort(accums)[::-1][:num_circles]
+
+            for idx in sorted_circles_idxs:
+                center_x, center_y = centers[idx]
+                allcenters.append(centers[idx])
+                allradii.append(radii[idx])
+                allaccums.append(accums[idx])
+                brightness = accums[idx]
+                lsurface = lsurface + brightness * np.exp(
+                    -((xsurface - center_x) ** 2 + (ysurface - center_y) ** 2) / kernel_width ** 2)
+
+    lsurface = lsurface / lsurface.max()
+
+    # select most likely ROI center
+    roi_center = np.unravel_index(lsurface.argmax(), lsurface.shape)
+
+    # determine ROI radius
+    roi_x_radius = 0
+    roi_y_radius = 0
+    for idx in range(len(allcenters)):
+        xshift = np.abs(allcenters[idx][0] - roi_center[0])
+        yshift = np.abs(allcenters[idx][1] - roi_center[1])
+        if (xshift <= center_margin) & (yshift <= center_margin):
+            roi_x_radius = np.max((roi_x_radius, allradii[idx] + xshift))
+            roi_y_radius = np.max((roi_y_radius, allradii[idx] + yshift))
+
+    if roi_x_radius > 0 and roi_y_radius > 0:
+        roi_radii = roi_x_radius, roi_y_radius
+    else:
+        roi_radii = None
+
+    return roi_center, roi_radii

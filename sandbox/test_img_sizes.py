@@ -25,3 +25,6 @@ for p in patient_path:
     # if len(img_ss) != 1:
     #     print img_ss
     #     print p
+
+
+

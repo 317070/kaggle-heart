@@ -38,9 +38,7 @@ num_circles = 20
 upscale = 1.5
 radstep = 2
 
-# train_data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate/'
-# validate_data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
-data_path = '/mnt/sda3/CODING/python/kaggle-heart/data/train'
+data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
 
 
 def get_data(pid_path):
@@ -48,8 +46,6 @@ def get_data(pid_path):
     in_data = list()
     for p in patient_path:
         spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
-        print spaths
-        print len(spaths)
         for s in spaths:
             metadata = data_test.read_metadata(s)
             data = data_test.read_slice(s)
@@ -79,6 +75,7 @@ def plot(pid):
 
     maxradius = int(45 / sorted_slices[0]['metadata']['PixelSpacing'][0])
     minradius = int(10 / sorted_slices[0]['metadata']['PixelSpacing'][0])
+    print sorted_slices[0]['metadata']['PixelSpacing'][0]
 
     lsurface, roi_mask, roi_center = data_test.extract_roi_joni(sorted_slices, kernel_width=kernel_width,
                                                                 center_margin=center_margin, num_peaks=num_peaks,
@@ -111,74 +108,75 @@ def plot(pid):
         hough_radii = np.arange(minradius, maxradius, radstep)
         hough_res = hough_circle(edges, hough_radii)
 
-        centers = []
-        accums = []
-        radii = []
+        if hough_res.any():
+            centers = []
+            accums = []
+            radii = []
 
-        for radius, h in zip(hough_radii, hough_res):
-            # For each radius, extract two circles
-            peaks = peak_local_max(h, num_peaks=num_peaks)
-            centers.extend(peaks)
-            accums.extend(h[peaks[:, 0], peaks[:, 1]])
-            radii.extend([radius] * num_peaks)
+            for radius, h in zip(hough_radii, hough_res):
+                # For each radius, extract two circles
+                peaks = peak_local_max(h, num_peaks=num_peaks)
+                centers.extend(peaks)
+                accums.extend(h[peaks[:, 0], peaks[:, 1]])
+                radii.extend([radius] * num_peaks)
 
-        intensity = accums
+            intensity = accums
 
-        # Draw the most prominent 5 circles
-        ximagesize = dslice['data'].shape[1]
-        yimagesize = dslice['data'].shape[2]
-        image = color.gray2rgb(image)
-        sorted_circles = np.argsort(accums)[::-1][:num_circles]
-        accs = []
-        for idx in sorted_circles:
-            accs.append(accums[idx])
-            center_x, center_y = centers[idx]
-            radius = radii[idx]
-            brightness = intensity[idx]
-            cx, cy = circle_perimeter(center_y, center_x, radius)
-            dum = (cx < ximagesize) & (cy < yimagesize)
-            cx = cx[dum]
-            cy = cy[dum]
-            image[cy, cx] = (np.round(brightness * 255), 0, 0)
+            # Draw the most prominent 5 circles
+            ximagesize = dslice['data'].shape[1]
+            yimagesize = dslice['data'].shape[2]
+            image = color.gray2rgb(image)
+            sorted_circles = np.argsort(accums)[::-1][:num_circles]
+            accs = []
+            for idx in sorted_circles:
+                accs.append(accums[idx])
+                center_x, center_y = centers[idx]
+                radius = radii[idx]
+                brightness = intensity[idx]
+                cx, cy = circle_perimeter(center_y, center_x, radius)
+                dum = (cx < ximagesize) & (cy < yimagesize)
+                cx = cx[dum]
+                cy = cy[dum]
+                image[cy, cx] = (np.round(brightness * 255), 0, 0)
 
-        # visualise everything
+            # visualise everything
 
-        for s in range(outdata.shape[0]):
-            outdata[s][roi_mask > 0.5] = 0.4 * outdata[s][roi_mask > 0.5]
+            for s in range(outdata.shape[0]):
+                outdata[s][roi_mask > 0.5] = 0.4 * outdata[s][roi_mask > 0.5]
 
-        for h in range(-4, 5, 1):
-            image[x_roicenter, y_roicenter + h] = (0, 255, 0)
-            outdata[:, x_roicenter, y_roicenter + h] = 0
+            for h in range(-4, 5, 1):
+                image[x_roicenter, y_roicenter + h] = (0, 255, 0)
+                outdata[:, x_roicenter, y_roicenter + h] = 0
 
-        for v in range(-4, 5, 1):
-            image[x_roicenter + v, y_roicenter] = (0, 255, 0)
-            outdata[:, x_roicenter + v, y_roicenter] = 0
+            for v in range(-4, 5, 1):
+                image[x_roicenter + v, y_roicenter] = (0, 255, 0)
+                outdata[:, x_roicenter + v, y_roicenter] = 0
 
-        fig = plt.figure(1)
-        plt.subplot(221)
-        fig.canvas.set_window_title(pid)
+            fig = plt.figure(1)
+            plt.subplot(221)
+            fig.canvas.set_window_title(pid)
 
-        def init_out():
-            im2.set_data(outdata[0])
+            def init_out():
+                im2.set_data(outdata[0])
 
-        def animate_out(i):
-            im2.set_data(outdata[i])
-            return im2
+            def animate_out(i):
+                im2.set_data(outdata[i])
+                return im2
 
-        im2 = fig.gca().imshow(outdata[0], cmap='gist_gray_r', vmin=0, vmax=255)
-        anim2 = animation.FuncAnimation(fig, animate_out, init_func=init_out, frames=30, interval=50)
+            im2 = fig.gca().imshow(outdata[0], cmap='gist_gray_r', vmin=0, vmax=255)
+            anim2 = animation.FuncAnimation(fig, animate_out, init_func=init_out, frames=30, interval=50)
 
-        plt.subplot(223)
-        fig.gca().imshow(first_harmonic1)
+            plt.subplot(223)
+            fig.gca().imshow(first_harmonic1)
 
-        plt.subplot(222)
-        fig.gca().imshow(image)
+            plt.subplot(222)
+            fig.gca().imshow(image)
 
-        plt.subplot(224)
-        fig.gca().imshow(lsurface)
+            plt.subplot(224)
+            fig.gca().imshow(lsurface)
 
-        plt.show()
+            plt.show()
 
 
-for pid in [501, 502]:
+for pid in [356]:
     plot(pid)

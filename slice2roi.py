@@ -96,35 +96,35 @@ def get_slice2roi(data_path, plot=False):
 
         # init patient dict
         pid = sorted_slices[0]['patient_id']
+        print pid
         slice2roi[pid] = {}
 
-        # find the radius of the smallest and largest circles based on pixel spacing
+        # pixel spacing doesn't change within one patient
         pixel_spacing = sorted_slices[0]['metadata']['PixelSpacing'][0]
-        minradius = int(10 / pixel_spacing)
-        maxradius = int(45 / pixel_spacing)
 
         for slice_group in grouped_slices:
-            roi_center, roi_radii = data.extract_roi(slice_group, minradius=minradius, maxradius=maxradius)
+            try:
+                roi_center, roi_radii = data.extract_roi(slice_group, pixel_spacing)
+            except:
+                print 'Could not find ROI'
+                roi_center, roi_radii = None, None
+            print roi_center, roi_radii
 
-            if plot:
+            if plot and roi_center and roi_radii:
                 plot_roi(slice_group, roi_center, roi_radii)
 
             for s in slice_group:
                 sid = s['slice_id']
                 slice2roi[pid][sid] = {'roi_center': roi_center, 'roi_radii': roi_radii}
 
-    utils.save_pkl(slice2roi, 'slice2roi.pkl')
-    print 'saved'
+    filename = data_path.split('/')[-1] + '_slice2roi.pkl'
+    utils.save_pkl(slice2roi, filename)
+    print 'saved to ', filename
     return slice2roi
 
 
 if __name__ == '__main__':
-    data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
-    # data_path = '/mnt/sda3/CODING/python/kaggle-heart/data/train'
-    s2r = get_slice2roi(data_path, plot=True)
-    for k, v in s2r.iteritems():
-        print 'patient id', k
-        for kk, vv in v.iteritems():
-            print 'slice_id', kk
-            print vv
-        print '----------------------'
+    data_paths = ['/data/dsb15_pkl/pkl_train', '/data/dsb15_pkl/pkl_validate']
+    # data_paths = ['/mnt/sda3/data/kaggle-heart/pkl_validate']
+    for d in data_paths:
+        get_slice2roi(d, plot=False)

@@ -87,7 +87,7 @@ def plot_roi(slice_group, roi_center, roi_radii):
 
 
 def get_slice2roi(data_path, plot=False):
-    patient_paths = sorted(glob.glob(data_path + '/*/study'))
+    patient_paths = sorted(glob.glob(data_path + '/506/study'))
     slice2roi = {}
     for p in patient_paths:
         patient_data = get_patient_data(p)
@@ -101,11 +101,9 @@ def get_slice2roi(data_path, plot=False):
 
         # find the radius of the smallest and largest circles based on pixel spacing
         pixel_spacing = sorted_slices[0]['metadata']['PixelSpacing'][0]
-        minradius = int(10 / pixel_spacing)
-        maxradius = int(45 / pixel_spacing)
-
         for slice_group in grouped_slices:
-            roi_center, roi_radii = data_test.extract_roi(slice_group, minradius=minradius, maxradius=maxradius)
+            roi_center, roi_radii = data_test.extract_roi(slice_group, pixel_spacing)
+            print roi_center, roi_radii
 
             if plot:
                 plot_roi(slice_group, roi_center, roi_radii)
@@ -122,7 +120,7 @@ def get_slice2roi(data_path, plot=False):
 if __name__ == '__main__':
     data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
     # data_path = '/mnt/sda3/CODING/python/kaggle-heart/data/train'
-    s2r = get_slice2roi(data_path, plot=False)
+    s2r = get_slice2roi(data_path, plot=True)
     # for k, v in s2r.iteritems():
     #     print 'patient id', k
     #     for kk, vv in v.iteritems():

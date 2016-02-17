@@ -1,13 +1,21 @@
-import glob
-import re
-import numpy as np
-import skimage.io
-import skimage.transform
-import skimage.exposure
-from configuration import config
 import cPickle as pickle
-import compressed_cache
+import re
 from collections import namedtuple
+import numpy as np
+
+import skimage.exposure
+import skimage.exposure
+import skimage.io
+import skimage.io
+import skimage.restoration
+import skimage.transform
+import skimage.transform
+from scipy.fftpack import fftn, ifftn
+from skimage.feature import peak_local_max, canny
+from skimage.transform import hough_circle
+
+# import compressed_cache
+from configuration import config
 
 
 def read_labels(file_path):
@@ -24,29 +32,12 @@ def read_labels(file_path):
     return id2labels
 
 
-def read_patients_data(paths):
-    data_dict = {}
-    for p in paths:
-        patient_id = int(re.search(r'/(\d+)/', p).group(1))
-        data_dict[patient_id] = read_patient(p)
-    return data_dict
-
-
-def read_patient(path):
-    slices_paths = sorted(glob.glob(path + '/*.pkl'))
-    slices_dict = {}
-    for sp in slices_paths:
-        slice = re.search(r'/(\w+\d+)*\.pkl$', sp).group(1)
-        slices_dict[slice] = read_slice(sp)
-    return slices_dict
-
-
-@compressed_cache.memoize()
+# @compressed_cache.memoize()
 def read_slice(path):
     return pickle.load(open(path))['data']
 
 
-@compressed_cache.memoize()
+# @compressed_cache.memoize()
 def read_metadata(path):
     d = pickle.load(open(path))['metadata'][0]
     metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient', 'ImagePositionPatient', 'SliceLocation',
@@ -94,6 +85,9 @@ def transform_with_pixel_area(data, metadata, transformation, random_augmentatio
     out_shape = (30,) + transformation['patch_size']
     out_data = np.zeros(out_shape, dtype='float32')
 
+    # correct orientation
+    data = correct_orientation(data, metadata)
+
     # if random_augmentation_params=None -> sample new params
     # if the transformation implies no augmentations then random_augmentation_params remains None
     if not random_augmentation_params:
@@ -102,9 +96,8 @@ def transform_with_pixel_area(data, metadata, transformation, random_augmentatio
     # build scaling transformation
     scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
     tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
-    orient_tform = build_orientation_correction_transform(metadata)
     tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
-    total_tform = tform + tform_uncenter + orient_tform + tform_center
+    total_tform = tform
 
     # calculate area per pixel in the rescaled image
     zoom_ratio = []
@@ -119,7 +112,7 @@ def transform_with_pixel_area(data, metadata, transformation, random_augmentatio
                                                      shear=random_augmentation_params.shear,
                                                      translation=random_augmentation_params.translation,
                                                      flip=random_augmentation_params.flip)
-        total_tform = tform + tform_uncenter + augment_tform + orient_tform + tform_center
+        total_tform = tform + tform_uncenter + augment_tform + tform_center
 
     # apply transformation per image
     for i in xrange(data.shape[0]):
@@ -153,6 +146,9 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     out_shape = (30,) + patch_size
     out_data = np.zeros(out_shape, dtype='float32')
 
+    # correct orientation
+    data = correct_orientation(data, metadata)
+
     # normalize contrasts
     data = normalize_contrast_percentile(data)
 
@@ -160,10 +156,6 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     # if the transformation implies no augmentations then random_augmentation_params remains None
     if not random_augmentation_params:
         random_augmentation_params = sample_augmentation_parameters(transformation)
-
-    # build transform for orientation correction
-    orient_tform = build_orientation_correction_transform(metadata)
-    tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
 
     # build scaling transformation
     pixel_spacing = metadata['PixelSpacing']
@@ -178,7 +170,7 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     patch_scale = max(1. * normalised_patch_size[0] / patch_size[0], 1. * normalised_patch_size[1] / patch_size[1])
     tform_patch_scale = build_rescale_transform(patch_scale, normalised_patch_size, target_shape=patch_size)
 
-    total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale + tform_uncenter + orient_tform + tform_center
+    total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale
 
     # build random augmentation
     if random_augmentation_params:
@@ -186,7 +178,7 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
                                                      shear=random_augmentation_params.shear,
                                                      translation=random_augmentation_params.translation,
                                                      flip=random_augmentation_params.flip)
-        total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale + tform_uncenter + orient_tform + tform_center
+        total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale
 
     # apply transformation per image
     for i in xrange(data.shape[0]):
@@ -269,35 +261,16 @@ def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip=F
     return tform_augment
 
 
-def build_orientation_correction_transform(metadata):
-    tform_list = [tform_identity]
-
-    F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
-    fy = F[1, :]
-    fx = F[0, :]
-
-    # unit vectors of patient coordinates
-    x_e = np.array([1, 0, 0])
+def correct_orientation(data, metadata):
+    F = metadata["ImageOrientationPatient"].reshape((2, 3))
+    f_1 = F[1, :]
+    f_2 = F[0, :]
     y_e = np.array([0, 1, 0])
-
-    if abs(np.dot(y_e, fy)) >= abs(np.dot(y_e, fx)):
-        tform_list.append(skimage.transform.AffineTransform(rotation=np.deg2rad(90)))
-        tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
-        fy, fx = fx, fy
-
-    if np.dot(y_e, fy) < 0:
-        tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
-
-    # if np.dot(x_e, fx) < 0:
-    #     tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
-    #     tform_list.append(skimage.transform.AffineTransform(rotation=np.deg2rad(180)))
-
-    tform_total = tform_identity
-
-    for t in tform_list[::-1]:
-        tform_total += t
-
-    return tform_total
+    if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
+        out_data = np.transpose(data, (0, 2, 1))
+    else:
+        out_data = data
+    return out_data
 
 
 def build_shift_center_transform(image_shape, center_location, patch_size):
@@ -403,3 +376,73 @@ def slice_location_finder(slicepath2metadata):
             slicepath2position[sp] = np.inner(v1, v2)
 
     return slicepath2position
+
+
+def extract_roi(data, minradius, maxradius, kernel_width=5, center_margin=8, num_peaks=10,
+                num_circles=20, upscale=1.5, radstep=2):
+    ximagesize = data[0]['data'].shape[1]
+    yimagesize = data[0]['data'].shape[2]
+
+    xsurface = np.tile(range(ximagesize), (yimagesize, 1)).T
+    ysurface = np.tile(range(yimagesize), (ximagesize, 1))
+    lsurface = np.zeros((ximagesize, yimagesize))
+
+    allcenters = []
+    allaccums = []
+    allradii = []
+
+    for ddi in data:
+        outdata = ddi['data']
+        ff1 = fftn(outdata)
+        fh = np.absolute(ifftn(ff1[1, :, :]))
+        fh[fh < 0.1 * np.max(fh)] = 0.0
+        image = fh / np.max(fh)
+
+        # find hough circles and detect two radii
+        edges = canny(image, sigma=3)
+        hough_radii = np.arange(minradius, maxradius, radstep)
+        hough_res = hough_circle(edges, hough_radii)
+
+        centers = []
+        accums = []
+        radii = []
+
+        for radius, h in zip(hough_radii, hough_res):
+            # For each radius, extract num_peaks circles
+            peaks = peak_local_max(h, num_peaks=num_peaks)
+            centers.extend(peaks)
+            accums.extend(h[peaks[:, 0], peaks[:, 1]])
+            radii.extend([radius] * num_peaks)
+
+        # Keep the most prominent num_circles circles
+        sorted_circles_idxs = np.argsort(accums)[::-1][:num_circles]
+
+        for idx in sorted_circles_idxs:
+            center_x, center_y = centers[idx]
+            allcenters.append(centers[idx])
+            allradii.append(radii[idx])
+            allaccums.append(accums[idx])
+            brightness = accums[idx]
+            lsurface = lsurface + brightness * np.exp(
+                -((xsurface - center_x) ** 2 + (ysurface - center_y) ** 2) / kernel_width ** 2)
+
+    lsurface = lsurface / lsurface.max()
+
+    # select most likely ROI center
+    x_axis, y_axis = np.unravel_index(lsurface.argmax(), lsurface.shape)
+
+    # determine ROI radius
+    x_radius = 0
+    y_radius = 0
+    for idx in range(len(allcenters)):
+        xshift = np.abs(allcenters[idx][0] - x_axis)
+        yshift = np.abs(allcenters[idx][1] - y_axis)
+        if (xshift <= center_margin) & (yshift <= center_margin):
+            x_radius = np.max((x_radius, allradii[idx] + xshift))
+            y_radius = np.max((y_radius, allradii[idx] + yshift))
+
+    x_radius *= upscale
+    y_radius *= upscale
+
+    print (x_axis, y_axis), x_radius, y_radius
+    return (x_axis, y_axis), (x_radius, y_radius)

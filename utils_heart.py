@@ -66,8 +66,6 @@ def get_patient_average_heaviside_predictions(batch_predictions, batch_patient_i
             prediction_cdfs = heaviside_function(p[patient_idxs])
             if mean == 'geometric':
                 avg_prediction_cdf = scipy.stats.gmean(prediction_cdfs, axis=0)
-            elif mean == 'harmonic':
-                avg_prediction_cdf = scipy.stats.hmean(prediction_cdfs, axis=0)
             else:
                 # arithmetic mean
                 avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
@@ -78,6 +76,13 @@ def get_patient_average_heaviside_predictions(batch_predictions, batch_patient_i
 
 
 def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean='arithmetic'):
+    """
+
+    :param batch_predictions: cdf predictions per slice
+    :param batch_patient_ids:
+    :param mean:
+    :return:
+    """
     nbatches = len(batch_predictions)
     npredictions = len(batch_predictions[0])
 
@@ -102,8 +107,6 @@ def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, me
             prediction_cdfs = p[patient_idxs]
             if mean == 'geometric':
                 avg_prediction_cdf = scipy.stats.gmean(prediction_cdfs, axis=0)
-            elif mean == 'harmonic':
-                avg_prediction_cdf = scipy.stats.hmean(prediction_cdfs, axis=0)
             else:
                 # arithmetic mean
                 avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)

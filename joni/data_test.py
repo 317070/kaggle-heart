@@ -1,18 +1,19 @@
+import cPickle as pickle
 import glob
 import re
-import numpy as np
-import skimage.io
-import skimage.transform
-import skimage.exposure
-from configuration import config
-import cPickle as pickle
 from collections import namedtuple
 import numpy as np
+import skimage.exposure
+import skimage.io
 import skimage.restoration
-from skimage.filters import roberts, sobel, scharr, prewitt
-from skimage.filters import threshold_otsu
+import skimage.transform
+from scipy.fftpack import fftn, ifftn
+from skimage.draw import ellipse
+from skimage.feature import peak_local_max, canny
+from skimage.transform import hough_circle
+from skimage.util import img_as_ubyte
 
-rng = np.random.RandomState()
+rng = np.random.RandomState(42)
 
 
 def read_labels(file_path):
@@ -76,7 +77,6 @@ def sample_augmentation_parameters(transformation):
         shear = rng.uniform(*transformation['shear_range'])
         flip = rng.randint(2) > 0 if transformation['do_flip'] else False  # flip half of the time
         sequence_shift = rng.randint(30) if transformation['sequence_shift']  else 0
-        print sequence_shift
         random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'flip', 'sequence_shift'])(
             translation,
             rotation,
@@ -85,66 +85,8 @@ def sample_augmentation_parameters(transformation):
     return random_params
 
 
-def transform_with_metadata(data, metadata, transformation, random_augmentation_params=None):
-    """
-    :param data: (30, height, width) matrix from one slice of MRI
-    :param transformation:
-    :return:
-    """
-
-    out_shape = (30,) + transformation['patch_size']
-    out_data = np.zeros(out_shape, dtype='float32')
-
-    # if random_augmentation_params=None -> sample new params
-    # if the transformation implies no augmentations then random_augmentation_params remains None
-    if not random_augmentation_params:
-        random_augmentation_params = sample_augmentation_parameters(transformation)
-
-    # build scaling transformation
-    scaling = max(1. * data.shape[-2] / out_shape[-2], 1. * data.shape[-1] / out_shape[-1])
-    tform = build_rescale_transform(scaling, data.shape[-2:], target_shape=transformation['patch_size'])
-    orient_tform = build_orientation_correction_transform(metadata)
-    tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
-
-    total_tform = tform + tform_uncenter + orient_tform + tform_center
-
-    # calculate area per pixel in the rescaled image
-    zoom_ratio = []
-    A = tform.params[:2, :2]
-    zoom_ratio.append(np.linalg.norm(A[:, 0]) * np.linalg.norm(A[:, 1]))
-    assert tform.params[2, 2] == 1, (tform.params[2, 2],)
-    area_per_pixel = zoom_ratio[0] * np.prod(metadata["PixelSpacing"])
-
-    # build random augmentation
-    if random_augmentation_params:
-        augment_tform = build_augmentation_transform(rotation=random_augmentation_params.rotation,
-                                                     shear=random_augmentation_params.shear,
-                                                     translation=random_augmentation_params.translation,
-                                                     flip=random_augmentation_params.flip)
-        total_tform = tform + tform_uncenter + augment_tform + orient_tform + tform_center
-
-    # apply transformation per image
-    for i in xrange(data.shape[0]):
-        out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
-
-    # if the sequence is < 30 timesteps, copy last image
-    if data.shape[0] < out_shape[0]:
-        for j in xrange(data.shape[0], out_shape[0]):
-            out_data[j] = out_data[-1]
-
-    # if > 30, remove images
-    if data.shape[0] > out_shape[0]:
-        out_data = out_data[:30]
-
-    # shift the sequence for a number of time steps
-    if random_augmentation_params:
-        out_data = np.roll(out_data, random_augmentation_params.sequence_shift, axis=0)
-
-    return out_data, area_per_pixel
-
-
-def transform_with_jeroen(data, metadata, transformation, random_augmentation_params=None, shift_center=(.4, .5),
-                          normalised_patch_size=(200, 200)):
+def transform_norm_rescale(data, metadata, transformation, random_augmentation_params=None, shift_center=(.4, .5),
+                           normalised_patch_size=(200, 200)):
     """
     :param data: (30, height, width) matrix from one slice of MRI
     :param transformation:
@@ -154,36 +96,29 @@ def transform_with_jeroen(data, metadata, transformation, random_augmentation_pa
     out_shape = (30,) + patch_size
     out_data = np.zeros(out_shape, dtype='float32')
 
+    # correct orientation
+    data = correct_orientation(data, metadata)
+
     # if random_augmentation_params=None -> sample new params
     # if the transformation implies no augmentations then random_augmentation_params remains None
     if not random_augmentation_params:
         random_augmentation_params = sample_augmentation_parameters(transformation)
 
-    # fix the contrast
-    data = normalize_contrast_percentile(data)
-
-
-    # build transform for orientation correction
-    orient_tform = build_orientation_correction_transform(metadata)
-    tform_center, tform_uncenter = build_center_uncenter_transforms(data.shape[-2:])
-
     # build scaling transformation
     pixel_spacing = metadata['PixelSpacing']
     assert pixel_spacing[0] == pixel_spacing[1]
-    normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(data.shape[-2:], pixel_spacing))
+    current_shape = data.shape[-2:]
+    normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(current_shape, pixel_spacing))
     # scale the images such that they all have the same scale
     norm_rescaling = 1. / pixel_spacing[0]
     tform_normscale = build_rescale_transform(norm_rescaling, data.shape[-2:], target_shape=normalised_shape)
     tform_shift_center, tform_shift_uncenter = build_shift_center_transform(normalised_shape, shift_center,
                                                                             normalised_patch_size)
 
-    print patch_size
-    print normalised_patch_size
     patch_scale = max(1. * normalised_patch_size[0] / patch_size[0], 1. * normalised_patch_size[1] / patch_size[1])
-    print patch_scale
     tform_patch_scale = build_rescale_transform(patch_scale, normalised_patch_size, target_shape=patch_size)
 
-    total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale + tform_uncenter + orient_tform + tform_center
+    total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale
 
     # build random augmentation
     if random_augmentation_params:
@@ -191,20 +126,13 @@ def transform_with_jeroen(data, metadata, transformation, random_augmentation_pa
                                                      shear=random_augmentation_params.shear,
                                                      translation=random_augmentation_params.translation,
                                                      flip=random_augmentation_params.flip)
-        total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale + tform_uncenter + orient_tform + tform_center
+        total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale
 
     # apply transformation per image
     for i in xrange(data.shape[0]):
-        out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
-        # out_data[i] = sobel(out_data[i])
-        # out_data[i] = skimage.exposure.equalize_adapthist(out_data[i], clip_limit=0.03)
-        # out_data[i] = skimage.exposure.equalize_hist(out_data[i])
-        # print np.min(out_data[i]), np.max(out_data[i])
-        # out_data[i] = skimage.restoration.denoise_bilateral(out_data[i], sigma_range=0.05, sigma_spatial=15)
-        # thr = threshold_otsu(out_data[i])
-        # out_data[i] = out_data[i] > thr
+        out_data[i] = fast_warp(data[i], total_tform, output_shape=patch_size)
 
-    # out_data = normalize_contrast_zmuv(out_data)
+    normalize_contrast_zmuv(out_data)
 
     # if the sequence is < 30 timesteps, copy last image
     if data.shape[0] < out_shape[0]:
@@ -280,79 +208,21 @@ def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip=F
     return tform_augment
 
 
-def build_transpose_transform():
-    tform_rot = skimage.transform.AffineTransform(rotation=np.deg2rad(90))
-    tform_shear = skimage.transform.AffineTransform(shear=np.deg2rad(180))
-    return tform_shear + tform_rot  # rotate first then shear
-
-
 def build_orientation_correction_transform(metadata):
-    tform_list = [tform_identity]
+    tform_total = tform_identity
 
     F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
     fy = F[1, :]
     fx = F[0, :]
-    print F
     # unit vectors of patient coordinates
-    x_e = np.array([1, 0, 0])
     y_e = np.array([0, 1, 0])
 
     if abs(np.dot(y_e, fy)) >= abs(np.dot(y_e, fx)):
         print 'T'
-        tform_list.append(skimage.transform.AffineTransform(rotation=np.deg2rad(90)))
-        tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
-        fy, fx = fx, fy
-
-    if np.dot(y_e, fy) < 0:
-        print 'rows'
-        tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
-
-    # if np.dot(x_e, fx) < 0:
-    #     print 'cols'
-    #     tform_list.append(skimage.transform.AffineTransform(shear=np.deg2rad(180)))
-    #     tform_list.append(skimage.transform.AffineTransform(rotation=np.deg2rad(180)))
-
-    tform_total = tform_identity
-
-    for t in tform_list[::-1]:
-        tform_total += t
+        tform_total += skimage.transform.AffineTransform(shear=np.deg2rad(180))
+        tform_total += skimage.transform.AffineTransform(rotation=np.deg2rad(90))
 
     return tform_total
-
-
-def fix_image_orientation(data, metadata):
-    """
-    rotates the images, so that the belly is to the left
-    read http://dicomiseasy.blogspot.be/2013/06/getting-oriented-using-image-plane.html
-    :param data:  data from one slice (30, h, w)
-    :param metadata:
-    :return:
-    """
-    F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
-
-    fy = F[1, :]
-    fx = F[0, :]
-
-    # unit vectors of patient coordinates
-    x_e = np.array([1, 0, 0])
-    y_e = np.array([0, 1, 0])
-
-    if abs(np.dot(y_e, fy)) >= abs(np.dot(y_e, fx)):
-        out_data = np.transpose(data, (0, 2, 1))
-        print 'TRANSPOSE'
-        fy, fx = fx, fy
-    else:
-        out_data = data
-
-    if np.dot(y_e, fy) < 0:
-        print 'ROWS'
-        out_data = out_data[:, ::-1, :]
-
-    if np.dot(x_e, fx) < 0:
-        print 'COLS'
-        out_data = out_data[:, :, ::-1]
-
-    return out_data
 
 
 def build_shift_center_transform(image_shape, center_location, patch_size):
@@ -411,8 +281,166 @@ def normalize_contrast_zmuv(imdata, metadata=None, z=2):
     return imdata
 
 
-def normalize_contrast_percentile(data):
-    perc = np.percentile(data[0], q=[5, 95])
-    low, high = perc[0], perc[1]
-    out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
+def correct_orientation(data, metadata):
+    F = metadata["ImageOrientationPatient"].reshape((2, 3))
+    f_1 = F[1, :]
+    f_2 = F[0, :]
+    y_e = np.array([0, 1, 0])
+    if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
+        out_data = np.transpose(data, (0, 2, 1))
+    else:
+        out_data = data
     return out_data
+
+
+def extract_roi_joni(data, kernel_width=5, center_margin=8, num_peaks=10, num_circles=20, upscale=1.5, minradius=20,
+                     maxradius=60, radstep=2):
+    ximagesize = data[0]['data'].shape[1]
+    yimagesize = data[0]['data'].shape[2]
+
+    xsurface = np.tile(range(ximagesize), (yimagesize, 1)).T
+    ysurface = np.tile(range(yimagesize), (ximagesize, 1))
+    lsurface = np.zeros((ximagesize, yimagesize))
+
+    allcenters = []
+    allaccums = []
+    allradii = []
+
+    for ddi in data:
+        outdata = ddi['data']
+        ff1 = fftn(outdata)
+        fh = np.absolute(ifftn(ff1[1, :, :]))
+        fh[fh < 0.1 * np.max(fh)] = 0.0
+        # image = img_as_ubyte(fh / np.max(fh))
+        image = fh / np.max(fh)
+
+        # find hough circles
+        edges = canny(image, sigma=3)  # , low_threshold=10, high_threshold=50)
+
+        # Detect two radii
+        hough_radii = np.arange(minradius, maxradius, radstep)
+        hough_res = hough_circle(edges, hough_radii)
+
+        centers = []
+        accums = []
+        radii = []
+
+        for radius, h in zip(hough_radii, hough_res):
+            # For each radius, extract num_peaks circles
+            peaks = peak_local_max(h, num_peaks=num_peaks)
+            centers.extend(peaks)
+            accums.extend(h[peaks[:, 0], peaks[:, 1]])
+            radii.extend([radius] * num_peaks)
+
+        # Keep the most prominent num_circles circles
+        sorted = np.argsort(accums)[::-1][:num_circles]
+
+        for idx in sorted:
+            center_x, center_y = centers[idx]
+            allcenters.append(centers[idx])
+            allradii.append(radii[idx])
+            allaccums.append(accums[idx])
+            brightness = accums[idx]
+            lsurface = lsurface + brightness * np.exp(
+                -((xsurface - center_x) ** 2 + (ysurface - center_y) ** 2) / kernel_width ** 2)
+
+    lsurface = lsurface / lsurface.max()
+
+    # select most likely ROI center
+    x_axis, y_axis = np.unravel_index(lsurface.argmax(), lsurface.shape)
+
+    # determine ROI radius
+    x_radius = 0
+    y_radius = 0
+    for idx in range(len(allcenters)):
+        xshift = np.abs(allcenters[idx][0] - x_axis)
+        yshift = np.abs(allcenters[idx][1] - y_axis)
+        if (xshift <= center_margin) & (yshift <= center_margin):
+            x_radius = np.max((x_radius, allradii[idx] + xshift))
+            y_radius = np.max((y_radius, allradii[idx] + yshift))
+
+    # print x_axis, y_axis, x_radius, y_radius
+    # print allcenters
+
+    x_radius = upscale * x_radius
+    y_radius = upscale * y_radius
+
+    ROImask = np.zeros_like(lsurface)
+    [rr, cc] = ellipse(x_axis, y_axis, x_radius, y_radius)
+    ROImask[rr, cc] = 1.
+    # plt.figure()
+    # plt.imshow(ROImask, cmap='gist_gray_r', vmin=0., vmax=1.)
+    # plt.show()
+
+    print (x_axis, y_axis), x_radius, y_radius
+    return lsurface, ROImask, (x_axis, y_axis)
+
+
+def extract_roi(data, minradius, maxradius, kernel_width=5, center_margin=8, num_peaks=10,
+                num_circles=20, upscale=1.5, radstep=2):
+    ximagesize = data[0]['data'].shape[1]
+    yimagesize = data[0]['data'].shape[2]
+
+    xsurface = np.tile(range(ximagesize), (yimagesize, 1)).T
+    ysurface = np.tile(range(yimagesize), (ximagesize, 1))
+    lsurface = np.zeros((ximagesize, yimagesize))
+
+    allcenters = []
+    allaccums = []
+    allradii = []
+
+    for ddi in data:
+        outdata = ddi['data']
+        ff1 = fftn(outdata)
+        fh = np.absolute(ifftn(ff1[1, :, :]))
+        fh[fh < 0.1 * np.max(fh)] = 0.0
+        image = fh / np.max(fh)
+
+        # find hough circles and detect two radii
+        edges = canny(image, sigma=3)
+        hough_radii = np.arange(minradius, maxradius, radstep)
+        hough_res = hough_circle(edges, hough_radii)
+
+        centers = []
+        accums = []
+        radii = []
+
+        for radius, h in zip(hough_radii, hough_res):
+            # For each radius, extract num_peaks circles
+            peaks = peak_local_max(h, num_peaks=num_peaks)
+            centers.extend(peaks)
+            accums.extend(h[peaks[:, 0], peaks[:, 1]])
+            radii.extend([radius] * num_peaks)
+
+        # Keep the most prominent num_circles circles
+        sorted_circles_idxs = np.argsort(accums)[::-1][:num_circles]
+
+        for idx in sorted_circles_idxs:
+            center_x, center_y = centers[idx]
+            allcenters.append(centers[idx])
+            allradii.append(radii[idx])
+            allaccums.append(accums[idx])
+            brightness = accums[idx]
+            lsurface = lsurface + brightness * np.exp(
+                -((xsurface - center_x) ** 2 + (ysurface - center_y) ** 2) / kernel_width ** 2)
+
+    lsurface = lsurface / lsurface.max()
+
+    # select most likely ROI center
+    x_axis, y_axis = np.unravel_index(lsurface.argmax(), lsurface.shape)
+
+    # determine ROI radius
+    x_radius = 0
+    y_radius = 0
+    for idx in range(len(allcenters)):
+        xshift = np.abs(allcenters[idx][0] - x_axis)
+        yshift = np.abs(allcenters[idx][1] - y_axis)
+        if (xshift <= center_margin) & (yshift <= center_margin):
+            x_radius = np.max((x_radius, allradii[idx] + xshift))
+            y_radius = np.max((y_radius, allradii[idx] + yshift))
+
+    x_radius *= upscale
+    y_radius *= upscale
+
+    print (x_axis, y_axis), x_radius, y_radius
+    return (x_axis, y_axis), (x_radius, y_radius)

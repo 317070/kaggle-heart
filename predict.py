@@ -11,12 +11,12 @@ from configuration import config, set_configuration, set_subconfiguration
 
 if not (3 <= len(sys.argv) <= 5):
     sys.exit("Usage: predict.py <metadata_path> <set: valid|test> <n_tta_iterations> "
-             "<average: arithmetic, geometric, harmonic>")
+             "<average: arithmetic, geometric>")
 
 metadata_path = sys.argv[1]
-set = sys.argv[2] if len(sys.argv) >= 2 else 'test'
-n_tta_iterations = int(sys.argv[3]) if len(sys.argv) >= 3 else 100
-mean = sys.argv[4] if len(sys.argv) >= 4 else 'arithmetic'
+set = sys.argv[2] if len(sys.argv) >= 3 else 'test'
+n_tta_iterations = int(sys.argv[3]) if len(sys.argv) >= 4 else 100
+mean = sys.argv[4] if len(sys.argv) >= 5 else 'arithmetic'
 
 print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, set, mean)
 
@@ -25,9 +25,8 @@ metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 if 'subconfiguration' in metadata:
     set_subconfiguration(metadata['subconfiguration'])
-
-# TODO
-set_subconfiguration('vgg_rms_sd_norm_rescale')
+else:
+    set_subconfiguration('vgg_rms_sd_norm_rescale')
 set_configuration(config_name)
 
 # predictions paths
@@ -44,14 +43,14 @@ all_layers = nn.layers.get_all_layers(model.l_top)
 all_params = nn.layers.get_all_params(model.l_top)
 num_params = nn.layers.count_params(model.l_top)
 print '  number of parameters: %d' % num_params
-print string.ljust('  layer output shapes:', 36),
-print string.ljust('#params:', 10),
-print 'output shape:'
-for layer in all_layers[:-1]:
-    name = string.ljust(layer.__class__.__name__, 32)
-    num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
-    num_param = string.ljust(num_param.__str__(), 10)
-    print '    %s %s %s' % (name, num_param, layer.output_shape)
+# print string.ljust('  layer output shapes:', 36),
+# print string.ljust('#params:', 10),
+# print 'output shape:'
+# for layer in all_layers[:-1]:
+#     name = string.ljust(layer.__class__.__name__, 32)
+#     num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
+#     num_param = string.ljust(num_param.__str__(), 10)
+#     print '    %s %s %s' % (name, num_param, layer.output_shape)
 
 nn.layers.set_all_param_values(model.l_top, metadata['param_values'])
 
@@ -73,7 +72,7 @@ if set == 'valid':
 
     batch_predictions, batch_targets, batch_ids = [], [], []
     for i in xrange(n_tta_iterations):
-        print 'tta iteration %d' % i
+        # print 'tta iteration %d' % i
         for xs_batch_valid, ys_batch_valid, ids_batch in buffering.buffered_gen_threaded(
                 valid_data_iterator.generate()):
             for x_shared, x in zip(xs_shared, xs_batch_valid):

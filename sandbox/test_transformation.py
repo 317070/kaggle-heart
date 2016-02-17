@@ -7,7 +7,6 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 import data_test
 
-
 patch_size = (128, 128)
 train_transformation_params = {
     'patch_size': patch_size,
@@ -28,16 +27,22 @@ valid_transformation_params = {
 }
 
 data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
+# data_path = '/mnt/sda3/CODING/python/kaggle-heart/data/train'
 # data_path = '/data/dsb15_pkl/pkl_train'
-patient_path = sorted(glob.glob(data_path + '/*/study'))
+patient_path = sorted(glob.glob(data_path + '/561/study'))
+# patient_path = sorted(glob.glob(data_path + '/212/study'))
 # patient_path = [data_path + '/555/study', data_path+ '/693/study']
 for p in patient_path:
     print p
-    spaths = sorted(glob.glob(p + '/2ch_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
+    spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
     for s in spaths:
         print s
         data = data_test.read_slice(s)
+        print data.shape
         metadata = data_test.read_metadata(s)
+        normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(data.shape[1:], metadata['PixelSpacing']))
+        print 'shape in mm', normalised_shape
+        print '-----------------------------------'
 
 
         def init():
@@ -57,7 +62,7 @@ for p in patient_path:
 
         # ---------------------------------
 
-        out_data = data_test.transform_with_jeroen(data, metadata, valid_transformation_params)
+        out_data = data_test.transform_norm_rescale(data, metadata, valid_transformation_params)
 
 
         def init_out():

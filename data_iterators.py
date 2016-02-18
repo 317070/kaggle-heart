@@ -4,11 +4,14 @@ import re
 import itertools
 from collections import defaultdict
 import numpy as np
+import os
+import slice2roi
+import utils
 
 
 class SliceDataGenerator(object):
-    def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False,
-                 random=True, infinite=False, **kwargs):
+    def __init__(self, data_path, batch_size, transform_params, labels_path=None, slice2roi_path=None,
+                 full_batch=False, random=True, infinite=False, **kwargs):
         self.data_path = data_path
         self.patient_paths = glob.glob(data_path + '/*/study/')
         self.slice_paths = [sorted(glob.glob(p + '/sax_*.pkl')) for p in self.patient_paths]
@@ -24,6 +27,13 @@ class SliceDataGenerator(object):
         self.infinite = infinite
         self.id2labels = data.read_labels(labels_path) if labels_path else None
         self.transformation_params = transform_params
+        if slice2roi_path:
+            if not os.path.isfile(slice2roi_path):
+                print 'Generating ROI'
+                self.slice2roi = slice2roi.get_slice2roi(data_path)
+            self.slice2roi = utils.load_pkl(slice2roi_path)
+        else:
+            self.slice2roi = None
 
     def generate(self):
         raise NotImplementedError
@@ -65,15 +75,16 @@ class SlicePixAreaDataGenerator(SliceDataGenerator):
                     if nb == self.batch_size:
                         yield [x_batch, pix_area_batch], [y0_batch, y1_batch], patients_ids
                 else:
-                        yield [x_batch, pix_area_batch], [y0_batch, y1_batch], patients_ids
+                    yield [x_batch, pix_area_batch], [y0_batch, y1_batch], patients_ids
             if not self.infinite:
                 break
 
 
 class SliceNormRescaleDataGenerator(SliceDataGenerator):
-    def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False,
+    def __init__(self, data_path, batch_size, transform_params, labels_path=None, slice2roi_path=None, full_batch=False,
                  random=True, infinite=False, **kwargs):
-        super(SliceNormRescaleDataGenerator, self).__init__(data_path, batch_size, transform_params, labels_path,
+        super(SliceNormRescaleDataGenerator, self).__init__(data_path, batch_size, transform_params,
+                                                            labels_path, slice2roi_path,
                                                             full_batch, random, infinite, **kwargs)
 
     def generate(self):
@@ -91,12 +102,18 @@ class SliceNormRescaleDataGenerator(SliceDataGenerator):
                 patients_ids = []
 
                 for i, j in enumerate(idxs_batch):
-                    slice_data = data.read_slice(self.slice_paths[j])
-                    metadata = data.read_metadata(self.slice_paths[j])
-                    x_batch[i] = data.transform_norm_rescale(slice_data, metadata,
-                                                             self.transformation_params)
-                    patient_id = self.slicepath2pid[self.slice_paths[j]]
+                    slicepath = self.slice_paths[j]
+                    patient_id = self.slicepath2pid[slicepath]
                     patients_ids.append(patient_id)
+                    slice_roi = self.slice2roi[str(patient_id)][
+                        utils.get_slice_id(slicepath)] if self.slice2roi else None
+
+                    slice_data = data.read_slice(slicepath)
+                    metadata = data.read_metadata(slicepath)
+                    x_batch[i] = data.transform_norm_rescale(slice_data, metadata,
+                                                             self.transformation_params,
+                                                             roi=slice_roi)
+
                     if self.id2labels:
                         y0_batch[i] = self.id2labels[patient_id][0]
                         y1_batch[i] = self.id2labels[patient_id][1]
@@ -105,7 +122,7 @@ class SliceNormRescaleDataGenerator(SliceDataGenerator):
                     if nb == self.batch_size:
                         yield [x_batch], [y0_batch, y1_batch], patients_ids
                 else:
-                        yield [x_batch], [y0_batch, y1_batch], patients_ids
+                    yield [x_batch], [y0_batch, y1_batch], patients_ids
             if not self.infinite:
                 break
 
@@ -185,7 +202,7 @@ class PatientsDataGenerator(object):
                     if nb == self.batch_size:
                         yield [x_batch, slice_mask_batch, slice_location_batch], [y0_batch, y1_batch], patients_ids
                 else:
-                        yield [x_batch, slice_mask_batch, slice_location_batch], [y0_batch, y1_batch], patients_ids
+                    yield [x_batch, slice_mask_batch, slice_location_batch], [y0_batch, y1_batch], patients_ids
 
             if not self.infinite:
                 break

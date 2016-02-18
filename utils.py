@@ -5,7 +5,7 @@ import platform
 import pwd
 import subprocess
 import time
-
+import re
 import numpy as np
 
 
@@ -57,6 +57,14 @@ def load_pkl(path):
     return obj
 
 
+def get_patient_id(path):
+    return re.search(r'/(\d+)/study', path).group(1)
+
+
+def get_slice_id(path):
+    return re.search(r'/(sax_\d+\.pkl)$', path).group(1)
+
+
 def current_learning_rate(schedule, idx):
     s = schedule.keys()
     s.sort()
@@ -91,5 +99,3 @@ def save_submisssion(patient_predictions, submission_path):
             print 'missed', idx
         fo.writerow(out)
     f.close()
-
-

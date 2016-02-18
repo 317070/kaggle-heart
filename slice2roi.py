@@ -97,7 +97,7 @@ def get_slice2roi(data_path, plot=False):
 
         # init patient dict
         pid = sorted_slices[0]['patient_id']
-        print pid
+        # print pid
         slice2roi[pid] = {}
 
         # pixel spacing doesn't change within one patient

@@ -65,39 +65,33 @@ def read_metadata(path):
 
 def sample_augmentation_parameters(transformation):
     random_params = None
-    if all([transformation['rotation_range'],
-            transformation['translation_range'],
-            transformation['shear_range'],
-            transformation['do_flip'],
-            transformation['sequence_shift']]):
+
+    if not all(v is None for k, v in transformation.items() if k != 'patch_size'):
         shift_x = rng.uniform(*transformation['translation_range'])
         shift_y = rng.uniform(*transformation['translation_range'])
         translation = (shift_x, shift_y)
         rotation = rng.uniform(*transformation['rotation_range'])
         shear = rng.uniform(*transformation['shear_range'])
+        roi_scale = rng.uniform(*transformation['roi_scale_range'])
         flip = rng.randint(2) > 0 if transformation['do_flip'] else False  # flip half of the time
-        sequence_shift = rng.randint(30) if transformation['sequence_shift']  else 0
-        random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'flip', 'sequence_shift'])(
-            translation,
-            rotation,
-            shear, flip,
-            sequence_shift)
+        sequence_shift = rng.randint(30) if transformation['sequence_shift'] else 0
+        random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'roi_scale',
+                                              'flip', 'sequence_shift'])(translation, rotation, shear, roi_scale, flip,
+                                                                         sequence_shift)
     return random_params
 
 
-def transform_norm_rescale(data, metadata, transformation, random_augmentation_params=None, shift_center=(.4, .5),
-                           normalised_patch_size=(200, 200)):
-    """
-    :param data: (30, height, width) matrix from one slice of MRI
-    :param transformation:
-    :return:
-    """
+def transform_norm_rescale(data, metadata, transformation, roi=None, random_augmentation_params=None,
+                           normalised_center_location=(.5, .4), normalised_patch_size=(200, 200)):
     patch_size = transformation['patch_size']
     out_shape = (30,) + patch_size
     out_data = np.zeros(out_shape, dtype='float32')
 
+    roi_center = roi['roi_center'] if roi else None
+    roi_radii = roi['roi_radii'] if roi else None
+
     # correct orientation
-    data = correct_orientation(data, metadata)
+    data, roi_center, roi_radii = correct_orientation(data, metadata, roi_center, roi_radii)
 
     # if random_augmentation_params=None -> sample new params
     # if the transformation implies no augmentations then random_augmentation_params remains None
@@ -108,14 +102,26 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     pixel_spacing = metadata['PixelSpacing']
     assert pixel_spacing[0] == pixel_spacing[1]
     current_shape = data.shape[-2:]
-    normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(current_shape, pixel_spacing))
+
+    # scale ROI radii and find ROI center in normalized patch
+    if roi_center and roi_radii:
+        normalised_center_location = tuple(int(r * ps) for r, ps in zip(roi_center, pixel_spacing))
+        roi_scale = random_augmentation_params.roi_scale if random_augmentation_params else 1  # augmentation
+        normalised_patch_size = tuple(int(2 * r * ps * roi_scale) for r, ps in zip(roi_radii, pixel_spacing))
+        print normalised_patch_size
+
     # scale the images such that they all have the same scale
     norm_rescaling = 1. / pixel_spacing[0]
-    tform_normscale = build_rescale_transform(norm_rescaling, data.shape[-2:], target_shape=normalised_shape)
-    tform_shift_center, tform_shift_uncenter = build_shift_center_transform(normalised_shape, shift_center,
-                                                                            normalised_patch_size)
+    normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(current_shape, pixel_spacing))
 
-    patch_scale = max(1. * normalised_patch_size[0] / patch_size[0], 1. * normalised_patch_size[1] / patch_size[1])
+    tform_normscale = build_rescale_transform(downscale_factor=norm_rescaling,
+                                              image_shape=current_shape, target_shape=normalised_shape)
+    tform_shift_center, tform_shift_uncenter = build_shift_center_transform(image_shape=normalised_shape,
+                                                                            center_location=normalised_center_location,
+                                                                            patch_size=normalised_patch_size)
+
+    patch_scale = max(1. * normalised_patch_size[0] / patch_size[0],
+                      1. * normalised_patch_size[1] / patch_size[1])
     tform_patch_scale = build_rescale_transform(patch_scale, normalised_patch_size, target_shape=patch_size)
 
     total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale
@@ -148,6 +154,20 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
         out_data = np.roll(out_data, random_augmentation_params.sequence_shift, axis=0)
 
     return out_data
+
+
+def make_roi_mask(data, roi_center, roi_radii):
+    """
+    Makes 2D ROI mask for one slice
+    :param data:
+    :param roi:
+    :return:
+    """
+    img_shape = data.shape[-2:]
+    mask = np.zeros(img_shape)
+    mask[roi_center[0] - roi_radii[0]:roi_center[0] + roi_radii[0],
+    roi_center[1] - roi_radii[1]:roi_center[1] + roi_radii[1]] = 1
+    return mask
 
 
 tform_identity = skimage.transform.AffineTransform()
@@ -200,29 +220,11 @@ def build_center_uncenter_transforms(image_shape):
 
 def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip=False, zoom=(1.0, 1.0)):
     if flip:
-        shear += 180
-        # shear by 180 degrees is equivalent to flip along the X-axis
+        shear += 180  # shear by 180 degrees is equivalent to flip along the X-axis
 
     tform_augment = skimage.transform.AffineTransform(scale=(1 / zoom[0], 1 / zoom[1]), rotation=np.deg2rad(rotation),
                                                       shear=np.deg2rad(shear), translation=translation)
     return tform_augment
-
-
-def build_orientation_correction_transform(metadata):
-    tform_total = tform_identity
-
-    F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
-    fy = F[1, :]
-    fx = F[0, :]
-    # unit vectors of patient coordinates
-    y_e = np.array([0, 1, 0])
-
-    if abs(np.dot(y_e, fy)) >= abs(np.dot(y_e, fx)):
-        print 'T'
-        tform_total += skimage.transform.AffineTransform(shear=np.deg2rad(180))
-        tform_total += skimage.transform.AffineTransform(rotation=np.deg2rad(90))
-
-    return tform_total
 
 
 def build_shift_center_transform(image_shape, center_location, patch_size):
@@ -231,33 +233,39 @@ def build_shift_center_transform(image_shape, center_location, patch_size):
     centered around the new center. If the patch arount the ideal center
     location doesn't fit within the image, we shift the center to the right so
     that it does.
+    params in (i,j) coordinates !!!
     """
-    center_absolute_location = [
-        center_location[0] * image_shape[1], center_location[1] * image_shape[0]]
+    if center_location[0] < 1. and center_location[1] < 1.:
+        center_absolute_location = [
+            center_location[0] * image_shape[0], center_location[1] * image_shape[1]]
+    else:
+        center_absolute_location = [center_location[0], center_location[1]]
 
     # Check for overlap at the edges
     center_absolute_location[0] = max(
-        center_absolute_location[0], patch_size[1] / 2.0)
+        center_absolute_location[0], patch_size[0] / 2.0)
     center_absolute_location[1] = max(
-        center_absolute_location[1], patch_size[0] / 2.0)
+        center_absolute_location[1], patch_size[1] / 2.0)
+
     center_absolute_location[0] = min(
-        center_absolute_location[0], image_shape[1] - patch_size[1] / 2.0)
+        center_absolute_location[0], image_shape[0] - patch_size[0] / 2.0)
+
     center_absolute_location[1] = min(
-        center_absolute_location[1], image_shape[0] - patch_size[0] / 2.0)
+        center_absolute_location[1], image_shape[1] - patch_size[1] / 2.0)
 
     # Check for overlap at both edges
     if patch_size[0] > image_shape[0]:
-        center_absolute_location[1] = image_shape[0] / 2.0
+        center_absolute_location[0] = image_shape[0] / 2.0
     if patch_size[1] > image_shape[1]:
-        center_absolute_location[0] = image_shape[1] / 2.0
+        center_absolute_location[1] = image_shape[1] / 2.0
 
     # Build transform
     new_center = np.array(center_absolute_location)
     translation_center = new_center - 0.5
-    translation_uncenter = -np.array((patch_size[1] / 2.0, patch_size[0] / 2.0)) - 0.5
+    translation_uncenter = -np.array((patch_size[0] / 2.0, patch_size[1] / 2.0)) - 0.5
     return (
-        skimage.transform.SimilarityTransform(translation=translation_center),
-        skimage.transform.SimilarityTransform(translation=translation_uncenter))
+        skimage.transform.SimilarityTransform(translation=translation_center[::-1]),
+        skimage.transform.SimilarityTransform(translation=translation_uncenter[::-1]))
 
 
 # def normalize_contrast_zmuv(data, z=2):
@@ -281,16 +289,21 @@ def normalize_contrast_zmuv(imdata, metadata=None, z=2):
     return imdata
 
 
-def correct_orientation(data, metadata):
+def correct_orientation(data, metadata, roi_center, roi_radii):
     F = metadata["ImageOrientationPatient"].reshape((2, 3))
     f_1 = F[1, :]
     f_2 = F[0, :]
     y_e = np.array([0, 1, 0])
     if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
         out_data = np.transpose(data, (0, 2, 1))
+        out_roi_center = (roi_center[1], roi_center[0]) if roi_center else None
+        out_roi_radii = (roi_radii[1], roi_radii[0]) if roi_radii else None
     else:
         out_data = data
-    return out_data
+        out_roi_center = roi_center
+        out_roi_radii = roi_radii
+
+    return out_data, out_roi_center, out_roi_radii
 
 
 def extract_roi_joni(data, maxradius, minradius, kernel_width=5, center_margin=8, num_peaks=10, num_circles=20,

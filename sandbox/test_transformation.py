@@ -5,41 +5,44 @@ import glob
 import re
 from matplotlib import animation
 import matplotlib.pyplot as plt
-import data_test
+# import data_test
+import utils
+import data as data_test
+# import data_test
+from configuration import set_configuration
+
+set_configuration('test_config')
 
 patch_size = (128, 128)
 train_transformation_params = {
     'patch_size': patch_size,
-    'rotation_range': (-16, 16),
-    'translation_range': (-8, 8),
+    'rotation_range': (-90, 90),
+    'translation_range': (-10, 10),
     'shear_range': (0, 0),
-    'do_flip': True,
+    'roi_scale_range': (0.9, 1.3),
+    'do_flip': False,
     'sequence_shift': False
 }
 
 valid_transformation_params = {
-    'patch_size': patch_size,
-    'rotation_range': None,
-    'translation_range': None,
-    'shear_range': None,
-    'do_flip': None,
-    'sequence_shift': None
+    'patch_size': patch_size
 }
 
 data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
-# data_path = '/data/dsb15_pkl/pkl_train'
-patient_path = sorted(glob.glob(data_path + '/356/study'))
+slice2roi = utils.load_pkl('../pkl_train_slice2roi.pkl')
+slice2roi_valid = utils.load_pkl('../pkl_validate_slice2roi.pkl')
+slice2roi.update(slice2roi_valid)
+
+patient_path = sorted(glob.glob(data_path + '/1/study'))
 for p in patient_path:
     print p
     spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
     for s in spaths:
-        print s
         d = data_test.read_slice(s)
-        print d.shape
         metadata = data_test.read_metadata(s)
-        normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(d.shape[1:], metadata['PixelSpacing']))
-        print 'shape in mm', normalised_shape
-        print '-----------------------------------'
+        pid = utils.get_patient_id(s)
+        sid = utils.get_slice_id(s)
+        roi = slice2roi[pid][sid]
 
 
         def init():
@@ -59,7 +62,7 @@ for p in patient_path:
 
         # ---------------------------------
 
-        out_data = data_test.transform_norm_rescale(d, metadata, valid_transformation_params)
+        out_data = data_test.transform_norm_rescale(d, metadata, train_transformation_params, roi=roi)
 
 
         def init_out():

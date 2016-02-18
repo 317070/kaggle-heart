@@ -12,7 +12,7 @@ import skimage.transform
 from scipy.fftpack import fftn, ifftn
 from skimage.feature import peak_local_max, canny
 from skimage.transform import hough_circle
-# import compressed_cache
+import compressed_cache
 from configuration import config
 
 
@@ -30,12 +30,12 @@ def read_labels(file_path):
     return id2labels
 
 
-# @compressed_cache.memoize()
+@compressed_cache.memoize()
 def read_slice(path):
     return pickle.load(open(path))['data']
 
 
-# @compressed_cache.memoize()
+@compressed_cache.memoize()
 def read_metadata(path):
     d = pickle.load(open(path))['metadata'][0]
     metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient', 'ImagePositionPatient', 'SliceLocation',
@@ -53,23 +53,18 @@ def read_metadata(path):
 
 def sample_augmentation_parameters(transformation):
     random_params = None
-    if all([transformation['rotation_range'],
-            transformation['translation_range'],
-            transformation['shear_range'],
-            transformation['do_flip'],
-            transformation['sequence_shift']]):
+    if not all(v is None for k, v in transformation.items() if k != 'patch_size'):
         shift_x = config().rng.uniform(*transformation['translation_range'])
         shift_y = config().rng.uniform(*transformation['translation_range'])
         translation = (shift_x, shift_y)
         rotation = config().rng.uniform(*transformation['rotation_range'])
         shear = config().rng.uniform(*transformation['shear_range'])
-        flip = (config().rng.randint(2) > 0) if transformation['do_flip'] else False  # flip half of the time
+        roi_scale = config().rng.uniform(*transformation['roi_scale_range'])
+        flip = config().rng.randint(2) > 0 if transformation['do_flip'] else False  # flip half of the time
         sequence_shift = config().rng.randint(30) if transformation['sequence_shift'] else 0
-        random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'flip', 'sequence_shift'])(
-            translation,
-            rotation,
-            shear, flip,
-            sequence_shift)
+        random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'roi_scale',
+                                              'flip', 'sequence_shift'])(translation, rotation, shear, roi_scale, flip,
+                                                                         sequence_shift)
     return random_params
 
 
@@ -133,22 +128,17 @@ def transform_with_pixel_area(data, metadata, transformation, random_augmentatio
     return out_data, pix_area
 
 
-def transform_norm_rescale(data, metadata, transformation, random_augmentation_params=None, shift_center=(.4, .5),
-                           normalised_patch_size=(200, 200)):
-    """
-    :param data: (30, height, width) matrix from one slice of MRI
-    :param transformation:
-    :return:
-    """
+def transform_norm_rescale(data, metadata, transformation, roi=None, random_augmentation_params=None,
+                           normalised_center_location=(.5, .4), normalised_patch_size=(200, 200)):
     patch_size = transformation['patch_size']
     out_shape = (30,) + patch_size
     out_data = np.zeros(out_shape, dtype='float32')
 
-    # correct orientation
-    data = correct_orientation(data, metadata)
+    roi_center = roi['roi_center'] if roi else None
+    roi_radii = roi['roi_radii'] if roi else None
 
-    # normalize contrasts
-    data = normalize_contrast_percentile(data)
+    # correct orientation
+    data, roi_center, roi_radii = correct_orientation(data, metadata, roi_center, roi_radii)
 
     # if random_augmentation_params=None -> sample new params
     # if the transformation implies no augmentations then random_augmentation_params remains None
@@ -158,14 +148,26 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     # build scaling transformation
     pixel_spacing = metadata['PixelSpacing']
     assert pixel_spacing[0] == pixel_spacing[1]
-    normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(data.shape[-2:], pixel_spacing))
+    current_shape = data.shape[-2:]
+
+    # scale ROI radii and find ROI center in normalized patch
+    if roi_center and roi_radii:
+        normalised_center_location = tuple(int(r * ps) for r, ps in zip(roi_center, pixel_spacing))
+        roi_scale = random_augmentation_params.roi_scale if random_augmentation_params else 1  # augmentation
+        normalised_patch_size = tuple(int(2 * r * ps * roi_scale) for r, ps in zip(roi_radii, pixel_spacing))
+
     # scale the images such that they all have the same scale
     norm_rescaling = 1. / pixel_spacing[0]
-    tform_normscale = build_rescale_transform(norm_rescaling, data.shape[-2:], target_shape=normalised_shape)
-    tform_shift_center, tform_shift_uncenter = build_shift_center_transform(normalised_shape, shift_center,
-                                                                            normalised_patch_size)
+    normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(current_shape, pixel_spacing))
 
-    patch_scale = max(1. * normalised_patch_size[0] / patch_size[0], 1. * normalised_patch_size[1] / patch_size[1])
+    tform_normscale = build_rescale_transform(downscale_factor=norm_rescaling,
+                                              image_shape=current_shape, target_shape=normalised_shape)
+    tform_shift_center, tform_shift_uncenter = build_shift_center_transform(image_shape=normalised_shape,
+                                                                            center_location=normalised_center_location,
+                                                                            patch_size=normalised_patch_size)
+
+    patch_scale = max(1. * normalised_patch_size[0] / patch_size[0],
+                      1. * normalised_patch_size[1] / patch_size[1])
     tform_patch_scale = build_rescale_transform(patch_scale, normalised_patch_size, target_shape=patch_size)
 
     total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale
@@ -180,7 +182,9 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
 
     # apply transformation per image
     for i in xrange(data.shape[0]):
-        out_data[i] = fast_warp(data[i], total_tform, output_shape=transformation['patch_size'])
+        out_data[i] = fast_warp(data[i], total_tform, output_shape=patch_size)
+
+    normalize_contrast_zmuv(out_data)
 
     # if the sequence is < 30 timesteps, copy last image
     if data.shape[0] < out_shape[0]:
@@ -190,9 +194,6 @@ def transform_norm_rescale(data, metadata, transformation, random_augmentation_p
     # if > 30, remove images
     if data.shape[0] > out_shape[0]:
         out_data = out_data[:30]
-
-    # # normalize constrast
-    # normalize_contrast_zmuv(out_data)
 
     # shift the sequence for a number of time steps
     if random_augmentation_params:
@@ -251,24 +252,28 @@ def build_center_uncenter_transforms(image_shape):
 
 def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip=False, zoom=(1.0, 1.0)):
     if flip:
-        shear += 180
-        # shear by 180 degrees is equivalent to flip along the X-axis
+        shear += 180  # shear by 180 degrees is equivalent to flip along the X-axis
 
     tform_augment = skimage.transform.AffineTransform(scale=(1 / zoom[0], 1 / zoom[1]), rotation=np.deg2rad(rotation),
                                                       shear=np.deg2rad(shear), translation=translation)
     return tform_augment
 
 
-def correct_orientation(data, metadata):
+def correct_orientation(data, metadata, roi_center, roi_radii):
     F = metadata["ImageOrientationPatient"].reshape((2, 3))
     f_1 = F[1, :]
     f_2 = F[0, :]
     y_e = np.array([0, 1, 0])
     if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
         out_data = np.transpose(data, (0, 2, 1))
+        out_roi_center = (roi_center[1], roi_center[0]) if roi_center else None
+        out_roi_radii = (roi_radii[1], roi_radii[0]) if roi_radii else None
     else:
         out_data = data
-    return out_data
+        out_roi_center = roi_center
+        out_roi_radii = roi_radii
+
+    return out_data, out_roi_center, out_roi_radii
 
 
 def build_shift_center_transform(image_shape, center_location, patch_size):
@@ -277,33 +282,39 @@ def build_shift_center_transform(image_shape, center_location, patch_size):
     centered around the new center. If the patch arount the ideal center
     location doesn't fit within the image, we shift the center to the right so
     that it does.
+    params in (i,j) coordinates !!!
     """
-    center_absolute_location = [
-        center_location[0] * image_shape[1], center_location[1] * image_shape[0]]
+    if center_location[0] < 1. and center_location[1] < 1.:
+        center_absolute_location = [
+            center_location[0] * image_shape[0], center_location[1] * image_shape[1]]
+    else:
+        center_absolute_location = [center_location[0], center_location[1]]
 
     # Check for overlap at the edges
     center_absolute_location[0] = max(
-        center_absolute_location[0], patch_size[1] / 2.0)
+        center_absolute_location[0], patch_size[0] / 2.0)
     center_absolute_location[1] = max(
-        center_absolute_location[1], patch_size[0] / 2.0)
+        center_absolute_location[1], patch_size[1] / 2.0)
+
     center_absolute_location[0] = min(
-        center_absolute_location[0], image_shape[1] - patch_size[1] / 2.0)
+        center_absolute_location[0], image_shape[0] - patch_size[0] / 2.0)
+
     center_absolute_location[1] = min(
-        center_absolute_location[1], image_shape[0] - patch_size[0] / 2.0)
+        center_absolute_location[1], image_shape[1] - patch_size[1] / 2.0)
 
     # Check for overlap at both edges
     if patch_size[0] > image_shape[0]:
-        center_absolute_location[1] = image_shape[0] / 2.0
+        center_absolute_location[0] = image_shape[0] / 2.0
     if patch_size[1] > image_shape[1]:
-        center_absolute_location[0] = image_shape[1] / 2.0
+        center_absolute_location[1] = image_shape[1] / 2.0
 
     # Build transform
     new_center = np.array(center_absolute_location)
     translation_center = new_center - 0.5
-    translation_uncenter = -np.array((patch_size[1] / 2.0, patch_size[0] / 2.0)) - 0.5
+    translation_uncenter = -np.array((patch_size[0] / 2.0, patch_size[1] / 2.0)) - 0.5
     return (
-        skimage.transform.SimilarityTransform(translation=translation_center),
-        skimage.transform.SimilarityTransform(translation=translation_uncenter))
+        skimage.transform.SimilarityTransform(translation=translation_center[::-1]),
+        skimage.transform.SimilarityTransform(translation=translation_uncenter[::-1]))
 
 
 def normalize_contrast_zmuv(data, z=2):
@@ -313,13 +324,6 @@ def normalize_contrast_zmuv(data, z=2):
         img = data[i]
         img = ((img - mean) / (2 * std * z) + 0.5)
         data[i] = np.clip(img, -0.0, 1.0)
-
-
-def normalize_contrast_percentile(data):
-    perc = np.percentile(data[0], q=[5, 95])
-    low, high = perc[0], perc[1]
-    out_data = np.clip(1. * (data - low) / (high - low), 0.0, 1.0)
-    return out_data
 
 
 def slice_location_finder(slicepath2metadata):

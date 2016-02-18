@@ -118,7 +118,10 @@ def detect_nans(loss, xs_shared, ys_shared, all_params):
 
 def theano_mu_sigma_erf(mu_erf, sigma_erf, eps=1e-7):
     x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x',0)
-    sigma_erf = T.clip(sigma_erf.dimshuffle('x','x'), eps, 1)
+    if sigma_erf.ndim==0:
+        sigma_erf = T.clip(sigma_erf.dimshuffle('x','x'), eps, 1)
+    elif sigma_erf.ndim==1:
+        sigma_erf = T.clip(sigma_erf.dimshuffle(0,'x'), eps, 1)
     x = (x_axis - mu_erf.dimshuffle(0,'x')) / (sigma_erf * np.sqrt(2).astype('float32'))
     return (T.erf(x) + 1)/2
 

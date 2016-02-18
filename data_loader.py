@@ -113,6 +113,7 @@ NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
 # Load the labels
 regular_labels = _load_file(_TRAIN_LABELS_PATH)
 
+
 ##############
 # Sunny data #
 ##############

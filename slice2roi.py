@@ -54,8 +54,9 @@ def group_slices(slice_stack):
 def plot_roi(slice_group, roi_center, roi_radii):
     x_roi_center, y_roi_center = roi_center[0], roi_center[1]
     x_roi_radius, y_roi_radius = roi_radii[0], roi_radii[1]
+    print 'nslices', len(slice_group)
 
-    for dslice in slice_group:
+    for dslice in [slice_group[len(slice_group) / 2]]:
         outdata = dslice['data']
         # print dslice['slice_id']
         # print dslice['metadata']['SliceLocation']
@@ -124,7 +125,7 @@ def get_slice2roi(data_path, plot=False):
 
 
 if __name__ == '__main__':
-    data_paths = ['/data/dsb15_pkl/pkl_train', '/data/dsb15_pkl/pkl_validate']
-    # data_paths = ['/mnt/sda3/data/kaggle-heart/pkl_validate']
+    # data_paths = ['/data/dsb15_pkl/pkl_train', '/data/dsb15_pkl/pkl_validate']
+    data_paths = ['/mnt/sda3/data/kaggle-heart/pkl_validate']
     for d in data_paths:
-        get_slice2roi(d, plot=False)
+        get_slice2roi(d, plot=True)

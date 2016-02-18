@@ -54,8 +54,9 @@ def group_slices(slice_stack):
 def plot_roi(slice_group, roi_center, roi_radii):
     x_roi_center, y_roi_center = roi_center[0], roi_center[1]
     x_roi_radius, y_roi_radius = roi_radii[0], roi_radii[1]
+    print 'nslices', len(slice_group)
 
-    for dslice in slice_group:
+    for dslice in [slice_group[len(slice_group)/2]]:
         outdata = dslice['data']
         # print dslice['slice_id']
         # print dslice['metadata']['SliceLocation']
@@ -87,7 +88,7 @@ def plot_roi(slice_group, roi_center, roi_radii):
 
 
 def get_slice2roi(data_path, plot=False):
-    patient_paths = sorted(glob.glob(data_path + '/506/study'))
+    patient_paths = sorted(glob.glob(data_path + '/*/study'))
     slice2roi = {}
     for p in patient_paths:
         patient_data = get_patient_data(p)
@@ -120,7 +121,7 @@ def get_slice2roi(data_path, plot=False):
 if __name__ == '__main__':
     data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
     # data_path = '/mnt/sda3/CODING/python/kaggle-heart/data/train'
-    s2r = get_slice2roi(data_path, plot=True)
+    s2r = get_slice2roi(data_path, plot=False)
     # for k, v in s2r.iteritems():
     #     print 'patient id', k
     #     for kk, vv in v.iteritems():

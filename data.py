@@ -376,7 +376,7 @@ def slice_location_finder(slicepath2metadata):
     return slicepath2position
 
 
-def extract_roi(data, pixel_spacing, minradius_mm=10, maxradius_mm=45, kernel_width=5, center_margin=8, num_peaks=10,
+def extract_roi(data, pixel_spacing, minradius_mm=25, maxradius_mm=45, kernel_width=5, center_margin=8, num_peaks=10,
                 num_circles=20, radstep=2):
     """
     Returns center and radii of ROI region in (i,j) format

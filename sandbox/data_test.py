@@ -293,8 +293,8 @@ def correct_orientation(data, metadata):
     return out_data
 
 
-def extract_roi_joni(data, kernel_width=5, center_margin=8, num_peaks=10, num_circles=20, upscale=1.5, minradius=20,
-                     maxradius=60, radstep=2):
+def extract_roi_joni(data, maxradius, minradius, kernel_width=5, center_margin=8, num_peaks=10, num_circles=20,
+                     upscale=1.5, radstep=2):
     ximagesize = data[0]['data'].shape[1]
     yimagesize = data[0]['data'].shape[2]
 
@@ -369,7 +369,7 @@ def extract_roi_joni(data, kernel_width=5, center_margin=8, num_peaks=10, num_ci
     return lsurface, ROImask, (x_axis, y_axis)
 
 
-def extract_roi(data, pixel_spacing, minradius_mm=10, maxradius_mm=45, kernel_width=5, center_margin=8, num_peaks=10,
+def extract_roi(data, pixel_spacing, minradius_mm=25, maxradius_mm=45, kernel_width=5, center_margin=8, num_peaks=10,
                 num_circles=20, radstep=2):
     """
     Returns center and radii of ROI region in (i,j) format

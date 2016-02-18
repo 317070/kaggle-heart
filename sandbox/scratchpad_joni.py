@@ -73,8 +73,8 @@ def plot(pid):
     original_data = get_data(data_path + '/' + str(pid))
     sorted_slices = sort_slices(original_data)
 
-    maxradius = int(45 / sorted_slices[0]['metadata']['PixelSpacing'][0])
-    minradius = int(10 / sorted_slices[0]['metadata']['PixelSpacing'][0])
+    maxradius = int(40 / sorted_slices[0]['metadata']['PixelSpacing'][0])
+    minradius = int(15 / sorted_slices[0]['metadata']['PixelSpacing'][0])
     print sorted_slices[0]['metadata']['PixelSpacing'][0]
 
     lsurface, roi_mask, roi_center = data_test.extract_roi_joni(sorted_slices, kernel_width=kernel_width,
@@ -178,5 +178,5 @@ def plot(pid):
             plt.show()
 
 
-for pid in [356]:
+for pid in [265]:
     plot(pid)

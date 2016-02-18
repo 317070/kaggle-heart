@@ -32,6 +32,8 @@ validate_train_set = True
 save_every = 10
 restart_from_save = False
 
+dump_network_loaded_data = False
+
 # Training (schedule) parameters
 # - batch sizes
 batch_size = 32
@@ -44,8 +46,7 @@ num_epochs_train = 50 * AV_SLICE_PER_PAT
 base_lr = .0001
 learning_rate_schedule = {
     0: base_lr,
-    num_epochs_train*4/5: base_lr/10,
-    num_epochs_train*19/20: base_lr/100,
+    4*num_epochs_train/5: base_lr/10,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -65,12 +66,11 @@ augmentation_params = {
     "flip_time": (0, 0),
 }
 
-use_hough_roi = True  # use roi to center patches
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(100,100)))
+        normalised_patch_size=(128,128)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -110,6 +110,12 @@ def build_objective(interface_layers):
 postprocess = postprocess.postprocess
 test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
+
+
+# nonlinearity putting a lower bound on it's output
+def lb_softplus(lb):
+    return lambda x: nn.nonlinearities.softplus(x) + lb
+
 
 # Architecture
 def build_model():
@@ -152,10 +158,11 @@ def build_model():
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
+    ldsys3mu = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
+    ldsys3sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
+    ldsys3musigma = nn.layers.ConcatLayer([ldsys3mu, ldsys3sigma], axis=1)
 
-    ldsys3drop = nn.layers.dropout(ldsys3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    ldsys3dropnorm = layers.NormalisationLayer(ldsys3drop)
-    l_systole = layers.CumSumLayer(ldsys3dropnorm)
+    l_systole = layers.MuSigmaErfLayer(ldsys3musigma)
 
     # Diastole Dense layers
     lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
@@ -164,11 +171,11 @@ def build_model():
     lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
-    lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
+    lddia3mu = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
+    lddia3sigma = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
+    lddia3musigma = nn.layers.ConcatLayer([lddia3mu, lddia3sigma], axis=1)
 
-    lddia3drop = nn.layers.dropout(lddia3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    lddia3dropnorm = layers.NormalisationLayer(lddia3drop)
-    l_diastole = layers.CumSumLayer(lddia3dropnorm)
+    l_diastole = layers.MuSigmaErfLayer(lddia3musigma)
 
 
     return {
@@ -182,10 +189,12 @@ def build_model():
         "regularizable": {
             ldsys1: l2_weight,
             ldsys2: l2_weight,
-            ldsys3: l2_weight_out,
+            ldsys3mu: l2_weight_out,
+            ldsys3sigma: l2_weight_out,
             lddia1: l2_weight,
             lddia2: l2_weight,
-            lddia3: l2_weight_out,
+            lddia3mu: l2_weight_out,
+            lddia3sigma: l2_weight_out,
         },
     }
 

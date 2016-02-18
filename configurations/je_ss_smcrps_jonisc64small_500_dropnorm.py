@@ -70,7 +70,7 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(100,100)))
+        normalised_patch_size=(64,64)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -85,7 +85,7 @@ create_eval_train_gen = functools.partial(data_loader.generate_validation_batch,
 create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
 
 # Input sizes
-image_size = 128
+image_size = 64
 data_sizes = {
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,

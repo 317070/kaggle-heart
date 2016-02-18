@@ -27,7 +27,7 @@ def sample_augmentation_parameters():
     return res
 
 
-def put_in_the_middle(target_tensor, data_tensor, pad_better=False):
+def put_in_the_middle(target_tensor, data_tensor):
     """
     put data_sensor with arbitrary number of dimensions in the middle of target tensor.
     if data_tensor is bigger, data is cut off

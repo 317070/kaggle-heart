@@ -9,12 +9,14 @@ import theano.tensor as T
 
 import data_loader
 import deep_learning_layers
+import image_transform
 import layers
 import preprocess
 import postprocess
 import objectives
 import theano_printer
 import updates
+import utils
 
 # Random params
 rng = np.random
@@ -30,8 +32,6 @@ validate_train_set = True
 save_every = 10
 restart_from_save = False
 
-dump_network_loaded_data = False
-
 # Training (schedule) parameters
 # - batch sizes
 batch_size = 32
@@ -44,7 +44,8 @@ num_epochs_train = 50 * AV_SLICE_PER_PAT
 base_lr = .0001
 learning_rate_schedule = {
     0: base_lr,
-    4*num_epochs_train/5: base_lr/10,
+    num_epochs_train*4/5: base_lr/10,
+    num_epochs_train*19/20: base_lr/100,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -64,7 +65,12 @@ augmentation_params = {
     "flip_time": (0, 0),
 }
 
-preprocess_train = preprocess.preprocess_normscale
+use_hough_roi = True  # use roi to center patches
+preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
+    preprocess.preprocess_normscale,
+    normscale_resize_and_augment_function=functools.partial(
+        image_transform.normscale_resize_and_augment_2, 
+        normalised_patch_size=(100,100)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -102,7 +108,8 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 100 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture
 def build_model():
@@ -110,7 +117,7 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_size = data_sizes["sliced:data:singleslice:difference"]
+    input_size = data_sizes["sliced:data:singleslice"]
 
     l0 = nn.layers.InputLayer(input_size)
 
@@ -147,7 +154,8 @@ def build_model():
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
     ldsys3drop = nn.layers.dropout(ldsys3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    l_systole = layers.CumSumLayer(ldsys3)
+    ldsys3dropnorm = layers.NormalisationLayer(ldsys3drop)
+    l_systole = layers.CumSumLayer(ldsys3dropnorm)
 
     # Diastole Dense layers
     lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
@@ -159,7 +167,8 @@ def build_model():
     lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
     lddia3drop = nn.layers.dropout(lddia3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    l_diastole = layers.CumSumLayer(lddia3drop)
+    lddia3dropnorm = layers.NormalisationLayer(lddia3drop)
+    l_diastole = layers.CumSumLayer(lddia3dropnorm)
 
 
     return {

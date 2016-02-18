@@ -9,6 +9,7 @@ import theano.tensor as T
 
 import data_loader
 import deep_learning_layers
+import image_transform
 import layers
 import preprocess
 import postprocess
@@ -64,7 +65,9 @@ augmentation_params = {
     "flip_time": (0, 0),
 }
 
-preprocess_train = preprocess.preprocess_normscale
+preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
+    preprocess.preprocess_normscale,
+    normscale_resize_and_augment_function=image_transform.normscale_resize_and_augment_2)
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -110,7 +113,7 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_size = data_sizes["sliced:data:singleslice:difference"]
+    input_size = data_sizes["sliced:data:singleslice"]
 
     l0 = nn.layers.InputLayer(input_size)
 

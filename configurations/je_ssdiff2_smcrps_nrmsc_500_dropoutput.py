@@ -52,8 +52,8 @@ build_updates = updates.build_adam_updates
 # Preprocessing stuff
 cleaning_processes = [
     preprocess.set_upside_up,]
-cleaning_processes_post = [
-    functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
+cleaning_processes_post = []
+#    functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
     "rotation": (-16, 16),
@@ -102,7 +102,8 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 100 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture
 def build_model():
@@ -164,7 +165,7 @@ def build_model():
 
     return {
         "inputs":{
-            "sliced:data:singleslice": l0
+            "sliced:data:singleslice:difference": l0
         },
         "outputs": {
             "systole": l_systole,

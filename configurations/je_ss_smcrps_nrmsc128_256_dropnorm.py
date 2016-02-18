@@ -9,6 +9,7 @@ import theano.tensor as T
 
 import data_loader
 import deep_learning_layers
+import image_transform
 import layers
 import preprocess
 import postprocess
@@ -23,7 +24,7 @@ take_a_dump = False  # dump a lot of data in a pkl-dump file. (for debugging)
 dump_network_loaded_data = False  # dump the outputs from the dataloader (for debugging)
 
 # Memory usage scheme
-caching = 'memory'
+caching = None
 
 # Save and validation frequency
 validate_every = 10
@@ -45,7 +46,8 @@ num_epochs_train = 50 * AV_SLICE_PER_PAT
 base_lr = .0001
 learning_rate_schedule = {
     0: base_lr,
-    4*num_epochs_train/5: base_lr/10,
+    num_epochs_train*4/5: base_lr/10,
+    num_epochs_train*19/20: base_lr/100,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -65,7 +67,11 @@ augmentation_params = {
     "flip_time": (0, 0),
 }
 
-preprocess_train = preprocess.preprocess_normscale
+preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
+    preprocess.preprocess_normscale,
+    normscale_resize_and_augment_function=functools.partial(
+        image_transform.normscale_resize_and_augment_2, 
+        normalised_patch_size=(128,128)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -77,7 +83,7 @@ sunny_preprocess_test = preprocess.sunny_preprocess_validation
 create_train_gen = data_loader.generate_train_batch
 create_eval_valid_gen = functools.partial(data_loader.generate_validation_batch, set="validation")
 create_eval_train_gen = functools.partial(data_loader.generate_validation_batch, set="train")
-create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation"])
+create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
 
 # Input sizes
 image_size = 128
@@ -140,28 +146,30 @@ def build_model():
     l5 = nn.layers.dnn.MaxPool2DDNNLayer(l5c, pool_size=(2,2), stride=(2,2))
 
     # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ldsys1 = nn.layers.DenseLayer(l5, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
-    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=256, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
     ldsys3drop = nn.layers.dropout(ldsys3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    l_systole = layers.CumSumLayer(ldsys3)
+    ldsys3dropnorm = layers.NormalisationLayer(ldsys3drop)
+    l_systole = layers.CumSumLayer(ldsys3dropnorm)
 
     # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia1 = nn.layers.DenseLayer(l5, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia1drop = nn.layers.dropout(lddia1, p=0.5)
-    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=256, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
     lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
     lddia3drop = nn.layers.dropout(lddia3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    l_diastole = layers.CumSumLayer(lddia3drop)
+    lddia3dropnorm = layers.NormalisationLayer(lddia3drop)
+    l_diastole = layers.CumSumLayer(lddia3dropnorm)
 
 
     return {

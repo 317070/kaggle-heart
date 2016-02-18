@@ -88,7 +88,6 @@ def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
         patch_scale = max(
             normalised_patch_size[0]/output_shape[0],
             normalised_patch_size[1]/output_shape[1])
-        print patch_scale
         tform_patch_scale = build_rescale_transform(
             patch_scale, normalised_patch_size, target_shape=output_shape)
 
@@ -109,14 +108,18 @@ def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
     return result
 
 
+NRMSC_DEFAULT_SHIFT_CENTER = (.4, .5)
 def normscale_resize_and_augment_2(slices, output_shape=(50, 50), augment=None,
-                                   pixel_spacing=(1,1), shift_center=(.4, .5),
+                                   pixel_spacing=(1,1), shift_center=(None, None),
                                    normalised_patch_size=(200,200)):
     """Normalizes the scale, augments, and crops the image.
     Fixed a bug !
     """
     if not pixel_spacing[0] == pixel_spacing[1]:
         raise NotImplementedError("Only supports square pixels")
+
+    if shift_center == (None, None):
+        shift_center = NRMSC_DEFAULT_SHIFT_CENTER
 
     # No augmentation:
     if augment is None:

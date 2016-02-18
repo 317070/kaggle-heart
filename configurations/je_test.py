@@ -39,11 +39,12 @@ learning_rate_schedule = {
 from postprocess import postprocess_onehot, postprocess
 from preprocess import preprocess, preprocess_with_augmentation, set_upside_up, normalize_contrast, preprocess_normscale, normalize_contrast_zmuv
 
+use_hough_roi = True
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess_normscale,
     normscale_resize_and_augment_function=partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(200,200)))
+        normalised_patch_size=(128,128)))
 #preprocess_train = preprocess_normscale
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess_with_augmentation  # no augmentation
@@ -81,7 +82,7 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_key = "sliced:data:ax:noswitch"
+    input_key = "sliced:data:singleslice:middle"
     data_size = data_sizes[input_key]
 
     l0 = InputLayer(data_size)

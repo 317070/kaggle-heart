@@ -114,6 +114,23 @@ NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
 regular_labels = _load_file(_TRAIN_LABELS_PATH)
 
 
+def filter_patient_folders():
+    global train_patient_folders, validation_patient_folders, test_patient_folders,\
+            NUM_TRAIN_PATIENTS, NUM_VALID_PATIENTS, NUM_TEST_PATIENTS, NUM_PATIENTS,\
+            num_patients
+    if not hasattr(_config(), 'filter_samples'):
+        return
+
+    for set, key in patient_folders.iteritems():
+        key[:] = _config().filter_samples(key)
+        num_patients[set]=len(key)
+
+    NUM_TRAIN_PATIENTS = num_patients['train']
+    NUM_VALID_PATIENTS = num_patients['validation']
+    NUM_TEST_PATIENTS = num_patients['test']
+    NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
+
+    
 ##############
 # Sunny data #
 ##############

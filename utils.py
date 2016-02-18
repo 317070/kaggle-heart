@@ -149,11 +149,14 @@ def linear_weighted(value):
     return normed
 
 
-def CRSP(distribution, value):
+def cumulative_one_hot(value):
     target = np.zeros( (600,) , dtype='float32')
     target[int(np.ceil(value)):] = 1  # don't forget to ceil!
-    return np.mean( (distribution - target)**2 )
+    return target
 
+
+def CRSP(distribution, value):
+    return np.mean( (distribution - cumulative_one_hot(value))**2 )
 
 
 def convert_to_number(value):
@@ -199,13 +202,13 @@ def clean_metadata(metadatadict):
     return metadatadict
 
 
-def norm_geometric_average(x):
+def norm_geometric_average(x, weights=None):
     """Computes the geometric average over the first dimension of a matrix.
     """
     # Convert to log domain
     x_log = np.log(x)
     # Compute the mean
-    geom_av_log = np.mean(x_log, axis=0)
+    geom_av_log = np.average(x_log, weights=weights, axis=0)
     # Go back to normal domain and renormalise
     geom_av_log = geom_av_log - np.max(geom_av_log)
     geom_av = np.exp(geom_av_log)
@@ -253,8 +256,14 @@ def prod(x):
 
 
 def cdf_to_pdf(x):
-    res = np.diff(x, axis=1)
-    return np.hstack([x[:, :1], res])
+    if x.ndim==1:
+        res = np.diff(x, axis=0)
+        return np.hstack([x[:1], res])
+    elif x.ndim==2:
+        res = np.diff(x, axis=1)
+        return np.hstack([x[:, :1], res])
+    else:
+        return np.apply_along_axis(cdf_to_pdf, axis=-1, arr=x)
 
 
 def pdf_to_cdf(x):

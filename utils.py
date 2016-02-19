@@ -202,11 +202,12 @@ def clean_metadata(metadatadict):
     return metadatadict
 
 
-def norm_geometric_average(x, weights=None):
+
+def norm_geometric_average(x, weights=None, eps=1e-7):
     """Computes the geometric average over the first dimension of a matrix.
     """
     # Convert to log domain
-    x_log = np.log(x)
+    x_log = np.log(x + eps)
     # Compute the mean
     geom_av_log = np.average(x_log, weights=weights, axis=0)
     # Go back to normal domain and renormalise
@@ -215,11 +216,11 @@ def norm_geometric_average(x, weights=None):
     return geom_av / geom_av.sum()
 
 
-def geometric_average(x):
+def geometric_average(x, eps=1e-7):
     """Computes the geometric average over the first dimension of a matrix.
     """
     # Convert to log domain
-    x_log = np.log(x)
+    x_log = np.log(x+eps)
     # Compute the mean
     geom_av_log = np.mean(x_log, axis=0)
     # Go back to normal domain and renormalise
@@ -268,3 +269,10 @@ def cdf_to_pdf(x):
 
 def pdf_to_cdf(x):
     return np.cumsum(x, axis=1)
+
+
+def merge_dicts(dicts):
+    res = {}
+    for d in dicts:
+        res.update(d)
+    return res

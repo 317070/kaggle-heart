@@ -23,7 +23,7 @@ take_a_dump = False  # dump a lot of data in a pkl-dump file. (for debugging)
 dump_network_loaded_data = False  # dump the outputs from the dataloader (for debugging)
 
 # Memory usage scheme
-caching = None
+caching = 'memory'
 
 # Save and validation frequency
 validate_every = 10
@@ -103,7 +103,7 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 10 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture

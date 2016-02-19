@@ -28,13 +28,11 @@ class MuSigmaErfLayer(lasagne.layers.Layer):
     def get_output_shape_for(self, input_shape):
         return (input_shape[0], 600)
 
-    def get_output_for(self, input, **kwargs):
-        eps = 1e-7
-        raise NotImplementedError("don't clip")
+    def get_output_for(self, input, eps=1e-7, **kwargs):
         x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x',0)
-        sigma = T.clip(T.exp(input[:,1].dimshuffle(0,'x')), eps, 1)
+        sigma = input[:,1].dimshuffle(0,'x')
         x = (x_axis - input[:,0].dimshuffle(0,'x')) / (sigma * np.sqrt(2).astype('float32'))
-        return (T.erf(x) + 1)/2
+        return (T.erf(x) + 1.0)/2.0
 
 
 class MuConstantSigmaErfLayer(lasagne.layers.Layer):

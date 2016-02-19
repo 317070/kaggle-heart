@@ -18,6 +18,7 @@ import data_loader
 import utils
 
 configuration.set_configuration('je_test')
+#configuration.set_configuration('je_ss_smcrps_nrmsc_500_dropnorm')
 _config = configuration.config
 
 
@@ -143,17 +144,15 @@ def animate_slice_crop(raw_slicedata, cropped_slicedata, index):
 # largest normalised: 67 -> id 83
 # smallest normalised: 54 -> id 66
 
-crop_size = (30, 200, 200)
-
 wanted_input_tags = ['sliced:data:singleslice:middle']
 wanted_output_tags = ['systole', 'diastole', 'patients']
 
 
-for i in range(0, 417):
+for i in range(71, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
     result = data_loader.get_patient_data(
-        indices, wanted_input_tags, wanted_output_tags, set="test",
+        indices, wanted_input_tags, wanted_output_tags, set="validation",
         preprocess_function=_config().preprocess_train)
 #    raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
     patient_id = result['output']['patients'][0]

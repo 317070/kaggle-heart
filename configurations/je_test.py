@@ -65,6 +65,7 @@ build_updates = build_adam_updates
 postprocess = postprocess
 
 data_sizes = {
+    "sliced:data:randomslices": (batch_size, 8, 30, image_size, image_size),
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
     "sliced:data:ax:noswitch": (batch_size, 15, 30, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
     "area_per_pixel:sax": (batch_size, ),

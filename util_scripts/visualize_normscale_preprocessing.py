@@ -144,11 +144,11 @@ def animate_slice_crop(raw_slicedata, cropped_slicedata, index):
 # largest normalised: 67 -> id 83
 # smallest normalised: 54 -> id 66
 
-wanted_input_tags = ['sliced:data:singleslice:middle']
+wanted_input_tags = ["sliced:data:randomslices", 'sliced:data:singleslice:middle']
 wanted_output_tags = ['systole', 'diastole', 'patients']
 
 
-for i in range(71, 417):
+for i in range(0, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
     result = data_loader.get_patient_data(
@@ -157,9 +157,9 @@ for i in range(71, 417):
 #    raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
     patient_id = result['output']['patients'][0]
 #    crop_slice = result['input']['sliced:data:singleslice:middle:patch_0']
-    raw_slice = result['input']['sliced:data:singleslice:middle'][0]
-    crop_slice = raw_slice
-
-    animate_slice_crop(raw_slice, crop_slice, patient_id)
+    raw_slices = result['input']['sliced:data:randomslices'][0]
+    print raw_slices.shape
+    for crop_slice in raw_slices:
+        animate_slice_crop(crop_slice, crop_slice, patient_id)
 
 

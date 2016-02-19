@@ -6,11 +6,14 @@ import utils
 
 
 def make_monotone_distribution(distribution):
-    for j in xrange(len(distribution)-1):
-        if not distribution[j] <= distribution[j+1]:
-            distribution[j+1] = distribution[j]
-    distribution = np.clip(distribution, 0.0, 1.0)
-    return distribution
+    if distribution.ndim==1:
+        for j in xrange(len(distribution)-1):
+            if not distribution[j] <= distribution[j+1]:
+                distribution[j+1] = distribution[j]
+        distribution = np.clip(distribution, 0.0, 1.0)
+        return distribution
+    else:
+        return np.apply_along_axis(make_monotone_distribution, axis=-1, arr=distribution)
 
 
 def make_monotone_distribution_fast(distributions):

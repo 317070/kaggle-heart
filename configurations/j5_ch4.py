@@ -20,7 +20,7 @@ from preprocess import preprocess, preprocess_with_augmentation, set_upside_up, 
 cached = None
 
 # Save and validation frequency
-validate_every = 10
+validate_every = 1
 validate_train_set = False
 save_every = 10
 restart_from_save = True
@@ -32,7 +32,7 @@ batch_size = 32
 sunny_batch_size = 4
 batches_per_chunk = 16
 AV_SLICE_PER_PAT = 11
-num_epochs_train = 151 * AV_SLICE_PER_PAT
+num_epochs_train = 150 * AV_SLICE_PER_PAT
 
 learning_rate_schedule = {
     0:   0.00010,

@@ -29,7 +29,7 @@ def get_cross_validation_indices(indices, validation_index=0,
     Returns:
         List of indices belonging to the requested split.
     """
-    np.random.seed(_DEFAULT_SEED)
+    np.random.seed(rng_seed)
 
       # 16.6 - 83.3
     samples_per_split = len(indices) // number_of_splits

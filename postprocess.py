@@ -6,11 +6,19 @@ import utils
 
 
 def make_monotone_distribution(distribution):
-    for j in xrange(len(distribution)-1):
-        if not distribution[j] <= distribution[j+1]:
-            distribution[j+1] = distribution[j]
-    distribution = np.clip(distribution, 0.0, 1.0)
-    return distribution
+    if distribution.ndim==1:
+        for j in xrange(len(distribution)-1):
+            if not distribution[j] <= distribution[j+1]:
+                distribution[j+1] = distribution[j]
+        distribution = np.clip(distribution, 0.0, 1.0)
+        return distribution
+    else:
+        return np.apply_along_axis(make_monotone_distribution, axis=-1, arr=distribution)
+
+
+def make_monotone_distribution_fast(distributions):
+    return utils.pdf_to_cdf(np.clip(utils.cdf_to_pdf(distributions), 0.0, 1.0))
+
 
 def test_if_valid_distribution(distribution):
     if not np.isfinite(distribution).all():
@@ -37,7 +45,8 @@ def postprocess(network_outputs_dict):
     if kaggle_systoles is None or kaggle_diastoles is None:
         raise Exception("This is the wrong postprocessing for this model")
 
-    return kaggle_systoles, kaggle_diastoles
+    mmd = make_monotone_distribution_fast
+    return mmd(kaggle_systoles), mmd(kaggle_diastoles)
 
 
 def postprocess_onehot(network_outputs_dict):

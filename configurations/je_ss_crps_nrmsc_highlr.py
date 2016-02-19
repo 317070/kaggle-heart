@@ -41,7 +41,7 @@ AV_SLICE_PER_PAT = 11
 num_epochs_train = 100 * AV_SLICE_PER_PAT
 
 # - learning rate and method
-base_lr = 0.01
+base_lr = 0.001
 learning_rate_schedule = {
     0: base_lr,
     4*num_epochs_train/5: base_lr/10, 

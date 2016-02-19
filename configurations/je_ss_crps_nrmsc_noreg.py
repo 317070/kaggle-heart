@@ -41,11 +41,25 @@ AV_SLICE_PER_PAT = 11
 num_epochs_train = 100 * AV_SLICE_PER_PAT
 
 # - learning rate and method
-base_lr = 0.0003
+base_lr = .03
 learning_rate_schedule = {
-    0: 10*base_lr,
-    21: base_lr,
-    4*num_epochs_train/5: base_lr/10, 
+    0: base_lr,
+    51: base_lr/3,
+    101: base_lr/10,
+    151: base_lr/30,
+    201: base_lr/100,
+    251: base_lr/300,
+    301: base_lr/1000,
+    351: base_lr/3000,
+    401: base_lr/10000,
+    451: base_lr/30000,
+    501: base_lr/100000,
+    551: base_lr/300000,
+    601: base_lr/1000000,
+    651: base_lr/3000000,
+    701: base_lr/10000000,
+    751: base_lr/30000000,
+    801: base_lr/100000000,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -57,10 +71,10 @@ cleaning_processes_post = [
     functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
-    "rotation": (-16, 16),
+    "rotation": (0, 0),
     "shear": (0, 0),
-    "translation": (-8, 8),
-    "flip_vert": (0, 1)
+    "translation": (0, 0),
+    "flip_vert": (0, 0)
 }
 
 preprocess_train = preprocess.preprocess_normscale
@@ -75,7 +89,7 @@ sunny_preprocess_test = preprocess.sunny_preprocess_validation
 create_train_gen = data_loader.generate_train_batch
 create_eval_valid_gen = functools.partial(data_loader.generate_validation_batch, set="validation")
 create_eval_train_gen = functools.partial(data_loader.generate_validation_batch, set="train")
-create_test_gen = functools.partial(data_loader.generate_test_batch, set=None)  # Eval all sets 
+create_test_gen = functools.partial(data_loader.generate_test_batch, set=None)  # Eval all sets
 
 # Input sizes
 image_size = 128
@@ -139,24 +153,24 @@ def build_model():
     # Systole Dense layers
     ldsys1 = nn.layers.DenseLayer(l5, num_units=1024, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
+    ldsys1drop = nn.layers.dropout(ldsys1, p=0.0)
     ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=1024, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
+    ldsys2drop = nn.layers.dropout(ldsys2, p=0.0)
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=600, b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
-    l_systole = layers.CumSumLayer(ldsys3)
+    l_systole = ldsys3
 
     # Diastole Dense layers
     lddia1 = nn.layers.DenseLayer(l5, num_units=1024, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    lddia1drop = nn.layers.dropout(lddia1, p=0.5)
+    lddia1drop = nn.layers.dropout(lddia1, p=0.0)
     lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=1024, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    lddia2drop = nn.layers.dropout(lddia2, p=0.5)
+    lddia2drop = nn.layers.dropout(lddia2, p=0.0)
     lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=600, b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
-    l_diastole = layers.CumSumLayer(lddia3)
+    l_diastole = lddia3
 
 
     return {
@@ -164,8 +178,8 @@ def build_model():
             "sliced:data:singleslice": l0
         },
         "outputs": {
-            "systole": l_systole,
-            "diastole": l_diastole,
+            "systole_onehot": l_systole,
+            "diastole_onehot": l_diastole,
         },
         "regularizable": {
             ldsys1: l2_weight,

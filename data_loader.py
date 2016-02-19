@@ -28,10 +28,11 @@ _TRAIN_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_train")
 _TEST_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_validate")
 _TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 
-ALL_PATIENT_IDS = range(1, 501)
+# TODO: don't make this hardcoded!
+ALL_TRAIN_PATIENT_IDS = range(1, 501)
 
-
-_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1)) 
+_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1))
+_extract_slice_id_from_path = lambda path: int(re.search(r'sax_(\d+).pkl', path).group(1))
 
 
 def _find_patient_folders(root_folder):
@@ -48,9 +49,9 @@ def _split_train_val(patient_folders):
     """
     # Construct train and validation splits using default parameters
     validation_patients_indices = validation_set.get_cross_validation_indices(
-        indices=ALL_PATIENT_IDS, validation_index=0)
+        indices=ALL_TRAIN_PATIENT_IDS, validation_index=0)
     train_patients_indices = [
-        i for i in ALL_PATIENT_IDS if i not in validation_patients_indices]
+        i for i in ALL_TRAIN_PATIENT_IDS if i not in validation_patients_indices]
 
     # Split the folder names accordingly
     # This regex is a big OR-clause if the folder corresponds to any of the
@@ -74,6 +75,22 @@ def _load_file(path):
         data = pickle.load(f)
     return data
 
+
+def _construct_id_to_index_map(patient_folders):
+    res = {}
+    for set in patient_folders:
+        for index in xrange(len(patient_folders[set])):
+            id = _extract_id_from_path(patient_folders[set][index])
+            res[id] = (set, index)
+    return res
+
+
+def _in_folder(folder):
+    wildcard_file_path = os.path.join(folder, "*")
+    files = sorted(glob.glob(wildcard_file_path))
+    return files
+
+
 # Find train patients and split off validation
 train_patient_folders, validation_patient_folders, validation_patients_indices, train_patients_indices=(
     _split_train_val(_find_patient_folders(_TRAIN_DATA_FOLDER)))
@@ -85,6 +102,8 @@ patient_folders = {
     "validation": validation_patient_folders,
     "test": test_patient_folders,
 }
+
+id_to_index_map = _construct_id_to_index_map(patient_folders)
 num_patients = {set:len(patient_folders[set]) for set in patient_folders}
 NUM_TRAIN_PATIENTS = num_patients['train']
 NUM_VALID_PATIENTS = num_patients['validation']
@@ -95,6 +114,23 @@ NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
 regular_labels = _load_file(_TRAIN_LABELS_PATH)
 
 
+def filter_patient_folders():
+    global train_patient_folders, validation_patient_folders, test_patient_folders,\
+            NUM_TRAIN_PATIENTS, NUM_VALID_PATIENTS, NUM_TEST_PATIENTS, NUM_PATIENTS,\
+            num_patients
+    if not hasattr(_config(), 'filter_samples'):
+        return
+
+    for set, key in patient_folders.iteritems():
+        key[:] = _config().filter_samples(key)
+        num_patients[set]=len(key)
+
+    NUM_TRAIN_PATIENTS = num_patients['train']
+    NUM_VALID_PATIENTS = num_patients['validation']
+    NUM_TEST_PATIENTS = num_patients['test']
+    NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
+
+    
 ##############
 # Sunny data #
 ##############
@@ -115,12 +151,43 @@ sunny_validation_images = np.array(_sunny_data["images"])[_validation_sunny_indi
 sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indices]
 
 
+###########################
+# Data form preprocessing #
+###########################
+
+_HOUGH_ROI_PATHS = (
+    '/mnt/storage/users/jburms/data/kaggle_heart/pkl_train_slice2roi.pkl',
+    '/mnt/storage/users/jburms/data/kaggle_heart/pkl_validate_slice2roi.pkl',)
+_hough_rois = utils.merge_dicts(map(_load_file, _HOUGH_ROI_PATHS))
+
+
 ##################################
 # Methods for accessing the data #
 ##################################
 
+_METADATA_ENHANCED_TAG = "META_ENHANCED"
+def _is_enhanced(metadatadict):
+    return metadatadict.get(_METADATA_ENHANCED_TAG, False)
 
-def get_patient_data(indices, wanted_input_tags, wanted_output_tags, 
+
+def _tag_enhanced(metadatadict, is_enhanced=True):
+    metadatadict[_METADATA_ENHANCED_TAG] = is_enhanced
+
+
+def _enhance_metadata(metadata, patient_id, slice_name):
+    if _is_enhanced(metadata):
+        return
+    # Add hough roi metadata using relative coordinates
+    roi_center = list(_hough_rois[str(patient_id)][slice_name]['roi_center'])
+    if not roi_center == (None, None):
+        roi_center[0] = float(roi_center[0]) / metadata['Rows']
+        roi_center[1] = float(roi_center[1]) / metadata['Columns'] 
+    metadata['hough_roi'] = tuple(roi_center)
+    metadata['hough_roi_radii'] = _hough_rois[str(patient_id)][slice_name]['roi_radii']
+    _tag_enhanced(metadata)
+
+
+def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                      set="train", preprocess_function=None):
     """
     return a dict with the desired data matched to the required tags
@@ -150,6 +217,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             "systole:value": (vector_size, "float32"),
             "diastole:value": (vector_size, "float32"),
             "patients": (vector_size, "int32"),
+            "slices": (vector_size, "int32"),
             "area_per_pixel": (no_samples, ),
         }
 
@@ -168,20 +236,24 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
     result = initialise_empty()
 
-    if set not in patient_folders: 
+    if set not in patient_folders:
         raise ValueError("Don't know the dataset %s" % set)
     folders = [
         patient_folders[set][i] for i in indices if 0<=i<num_patients[set]]
 
     # Iterate over folders
     for i, folder in enumerate(folders):
-        wildcard_file_path = os.path.join(folder, "*")
-        files = sorted(glob.glob(wildcard_file_path))  # glob is non-deterministic!
+        files = _in_folder(folder)
         patient_result = dict()
         metadatas_result = dict()
-        # function for loading and cleaning metadata
-        load_clean_metadata = lambda f: (
-            utils.clean_metadata(disk_access.load_metadata_from_file(f)[0]))
+        # function for loading and cleaning metadata. Only use the first frame
+        def load_clean_metadata(f):
+            m = utils.clean_metadata(disk_access.load_metadata_from_file(f)[0])
+            pid = _extract_id_from_path(f)
+            slicename = os.path.basename(f)
+            _enhance_metadata(m, pid, slicename)
+            return m
+
         # Iterate over input tags
         for tag in wanted_input_tags:
             if tag.startswith("sliced:data:singleslice"):
@@ -194,6 +266,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     f = random.choice(l)
                 patient_result[tag] = disk_access.load_data_from_file(f)
                 metadatas_result[tag] = load_clean_metadata(f)
+                slice_id = _extract_slice_id_from_path(f)
                 if "difference" in tag:
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
@@ -227,6 +300,9 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         id = _extract_id_from_path(folder)
         if "patients" in wanted_output_tags:
             result["output"]["patients"][i] = id
+
+        if "slices" in wanted_output_tags:
+            result["output"]["slices"][i] = slice_id
 
         # only read labels, when we actually have them
         if id in regular_labels[:, 0]:
@@ -379,6 +455,8 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
 def generate_test_batch(required_input_keys, required_output_keys, augmentation=False, set=None):
     if set is None:
         sets = ["train", "validation", "test"]
+    elif type(set) == list:
+        sets = set
     else:
         sets=[set]
 
@@ -437,3 +515,9 @@ def get_lenght_of_set(name="sunny", set="validation"):
         elif set=="test":
             return len(test_patient_folders)
 
+
+def get_slice_ids_for_patient(id):
+    set, index = id_to_index_map[id]
+    return [
+        _extract_slice_id_from_path(f)
+        for f in _in_folder(patient_folders[set][index]) if 'sax' in f]

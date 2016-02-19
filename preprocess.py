@@ -27,10 +27,10 @@ def sample_augmentation_parameters():
     return res
 
 
-def put_in_the_middle(target_tensor, data_tensor):
+def put_in_the_middle(target_tensor, data_tensor, pad_better=False):
     """
     put data_sensor with arbitrary number of dimensions in the middle of target tensor.
-    if data_Sensor is bigger, data is cut off
+    if data_tensor is bigger, data is cut off
     if target_sensor is bigger, original values (probably zeros) are kept
     :param target_tensor:
     :param data_tensor:
@@ -53,6 +53,13 @@ def put_in_the_middle(target_tensor, data_tensor):
     t_sh = [get_indices(l1,l2) for l1, l2 in zip(target_shape, data_shape)]
     target_indices, data_indices = zip(*t_sh)
     target_tensor[target_indices] = data_tensor[data_indices]
+    if pad_better:
+        if target_indices[0].start:
+            for i in xrange(0, target_indices[0].start):
+                target_tensor[i] = data_tensor[0]
+        if target_indices[0].stop:        
+            for i in xrange(target_indices[0].stop, len(target_tensor)):
+                target_tensor[i] = data_tensor[-1]             
 
 
 def sunny_preprocess(chunk_x, img, chunk_y, lbl):
@@ -79,13 +86,14 @@ def sunny_preprocess_validation(chunk_x, img, chunk_y, lbl):
 
 
 def preprocess_normscale(patient_data, result, index, augment=True,
-                         metadata=None):
+                         metadata=None,
+                         normscale_resize_and_augment_function=normscale_resize_and_augment):
     """Normalizes scale and augments the data.
 
     Args:
         patient_data: the data to be preprocessed.
         result: dict to store the result in.
-        index: index indicating which in which slot in the result dict the data
+        index: index indicating in which slot the result dict the data
             should go.
         augment: flag indicating wheter augmentation is needed.
         metadata: metadata belonging to the patient data.
@@ -96,7 +104,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
     for tag, data in patient_data.iteritems():
         metadata_tag = metadata[tag]
         desired_shape = result[tag][index].shape
-        
+
         if tag.startswith("sliced:data:singleslice"):
             # Cleaning data before extracting a patch
             cleaning_processes = getattr(config(), 'cleaning_processes', [])
@@ -104,28 +112,31 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             data = clean_images(
                 [patient_data[tag]], metadata=metadata_tag,
                 cleaning_processes=cleaning_processes)
+            
             # Augment and extract patch
-            patient_3d_tensor = normscale_resize_and_augment(
+            # Decide which roi to use.
+            shift_center = (None, None)
+            if getattr(config(), 'use_hough_roi', False):
+                shift_center = metadata_tag["hough_roi"]
+            
+            patient_3d_tensor = normscale_resize_and_augment_function(
                 data, output_shape=desired_shape[-2:],
                 augment=augmentation_params,
-                pixel_spacing=metadata_tag["PixelSpacing"])[0]
+                pixel_spacing=metadata_tag["PixelSpacing"],
+                shift_center=shift_center[::-1])[0]
             # Clean data further
             patient_3d_tensor = clean_images(
                 patient_3d_tensor, metadata=metadata_tag,
                 cleaning_processes=cleaning_processes_post)
-
+            
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
 
-            put_in_the_middle(result[tag][index], patient_3d_tensor)
-            # For now, simply copy the data
-
-#            result[tag+':raw_%d' % index] = data[0]
-#            result[tag+':patch_%d' % index] = patient_4d_tensor
+            put_in_the_middle(result[tag][index], patient_3d_tensor, True)
 
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()
-        
+
         elif tag.startswith("sliced:data"):
             raise NotImplementedError()
 
@@ -148,16 +159,19 @@ def preprocess_with_augmentation(patient_data, result, index, augment=True, meta
         augmentation_parameters = None
 
     for tag, data in patient_data.iteritems():
+        metadata_tag = metadata[tag]
         desired_shape = result[tag][index].shape
         # try to fit data into the desired shape
         if tag.startswith("sliced:data:singleslice"):
-            data = clean_images([patient_data[tag]], metadata=metadata)
-            patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)
-            patient_3d_tensor = patient_4d_tensor[0]
+            cleaning_processes = getattr(config(), 'cleaning_processes', [])
+            data = clean_images(
+                [patient_data[tag]], metadata=metadata_tag,
+                cleaning_processes=cleaning_processes)
+            patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)[0]
             if "area_per_pixel:sax" in result:
                 result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata_tag["PixelSpacing"])
 
-            put_in_the_middle(result[tag][index], patient_3d_tensor)
+            put_in_the_middle(result[tag][index], patient_4d_tensor)
         elif tag.startswith("sliced:data"):
             # put time dimension first, then axis dimension
             data = clean_images(patient_data[tag], metadata=metadata_tag)
@@ -224,7 +238,8 @@ def set_upside_up(data, metadata=None):
     return out_data
 
 
-def set_upside_up_slice(dslice, metadata=None):
+_TAG_ROI_UPSIDEUP = 'ROI_UPSIDEUP'
+def set_upside_up_slice(dslice, metadata=None, do_flip=False):
     # turn upside up
     F = np.array(metadata["ImageOrientationPatient"]).reshape((2, 3))
 
@@ -234,17 +249,26 @@ def set_upside_up_slice(dslice, metadata=None):
     x_e = np.array([1, 0, 0])
     y_e = np.array([0, 1, 0])
 
-    a, b, c = False, False, False
     if abs(np.dot(y_e, f_1)) >= abs(np.dot(y_e, f_2)):
         out_data = np.transpose(dslice, (0, 2, 1))
+        out_roi = list(metadata["hough_roi"][::-1])
         f_1, f_2 = f_2, f_1
     else:
         out_data = dslice
+        out_roi = list(metadata["hough_roi"])
 
-    if np.dot(y_e, f_1) < 0:
+    if np.dot(y_e, f_1) < 0 and do_flip:
+        # Flip vertically
         out_data = out_data[:, ::-1, :]
+        if out_roi[0]: out_roi[0] = 1 - out_roi[0]
 
-    if np.dot(x_e, f_2) < 0:
+    if np.dot(x_e, f_2) < 0 and do_flip:
+        # Flip horizontally
         out_data = out_data[:, :, ::-1]
+        if out_roi[1]: out_roi[1] = 1 - out_roi[1]
+
+    if not _TAG_ROI_UPSIDEUP in metadata:
+        metadata["hough_roi"] = tuple(out_roi)
+        metadata[_TAG_ROI_UPSIDEUP] = True
 
     return out_data

@@ -149,11 +149,14 @@ def linear_weighted(value):
     return normed
 
 
-def CRSP(distribution, value):
+def cumulative_one_hot(value):
     target = np.zeros( (600,) , dtype='float32')
     target[int(np.ceil(value)):] = 1  # don't forget to ceil!
-    return np.mean( (distribution - target)**2 )
+    return target
 
+
+def CRSP(distribution, value):
+    return np.mean( (distribution - cumulative_one_hot(value))**2 )
 
 
 def convert_to_number(value):
@@ -197,3 +200,79 @@ def clean_metadata(metadatadict):
                 metadatadict[key] = convert_to_number(value)
     _tag_clean(metadatadict)
     return metadatadict
+
+
+
+def norm_geometric_average(x, weights=None, eps=1e-7):
+    """Computes the geometric average over the first dimension of a matrix.
+    """
+    # Convert to log domain
+    x_log = np.log(x + eps)
+    # Compute the mean
+    geom_av_log = np.average(x_log, weights=weights, axis=0)
+    # Go back to normal domain and renormalise
+    geom_av_log = geom_av_log - np.max(geom_av_log)
+    geom_av = np.exp(geom_av_log)
+    return geom_av / geom_av.sum()
+
+
+def geometric_average(x, eps=1e-7):
+    """Computes the geometric average over the first dimension of a matrix.
+    """
+    # Convert to log domain
+    x_log = np.log(x+eps)
+    # Compute the mean
+    geom_av_log = np.mean(x_log, axis=0)
+    # Go back to normal domain and renormalise
+    geom_av_log = geom_av_log
+    geom_av = np.exp(geom_av_log)
+    return geom_av
+
+
+def norm_prod(x):
+    """Computes the product and renormalises over the first dimension of a matrix.
+    """
+    # Convert to log domain
+    x_log = np.log(x)
+    # Compute the mean
+    geom_sum_log = np.sum(x_log, axis=0)
+    # Go back to normal domain and renormalise
+    geom_sum_log = geom_sum_log - np.max(geom_sum_log)
+    geom_sum = np.exp(geom_sum_log)
+    return geom_sum / geom_sum.sum()
+
+
+def prod(x):
+    """Computes the product and renormalises over the first dimension of a matrix.
+    """
+    print 'prodding'
+    # Convert to log domain
+    x_log = np.log(x)
+    # Compute the mean
+    geom_sum_log = np.sum(x_log, axis=0)
+    # Go back to normal domain and renormalise
+    geom_sum_log = geom_sum_log
+    geom_sum = np.exp(geom_sum_log)
+    return geom_sum
+
+
+def cdf_to_pdf(x):
+    if x.ndim==1:
+        res = np.diff(x, axis=0)
+        return np.hstack([x[:1], res])
+    elif x.ndim==2:
+        res = np.diff(x, axis=1)
+        return np.hstack([x[:, :1], res])
+    else:
+        return np.apply_along_axis(cdf_to_pdf, axis=-1, arr=x)
+
+
+def pdf_to_cdf(x):
+    return np.cumsum(x, axis=1)
+
+
+def merge_dicts(dicts):
+    res = {}
+    for d in dicts:
+        res.update(d)
+    return res

@@ -1,7 +1,7 @@
 from deep_learning_layers import ConvolutionOver2DAxisLayer, MaxPoolOverAxisLayer, MaxPoolOver2DAxisLayer, \
     MaxPoolOver3DAxisLayer, ConvolutionOver3DAxisLayer, ConvolutionOverAxisLayer
 from default import *
-
+import functools
 import theano.tensor as T
 from layers import MuLogSigmaErfLayer, CumSumLayer
 import layers
@@ -11,6 +11,7 @@ from postprocess import upsample_segmentation
 from volume_estimation_layers import GaussianApproximationVolumeLayer
 import theano_printer
 from updates import build_adam_updates
+import image_transform
 
 caching = None
 
@@ -25,7 +26,7 @@ batch_size = 8
 sunny_batch_size = 4
 num_epochs_train = 60
 
-image_size = 64
+image_size = 128
 
 learning_rate_schedule = {
     0:     0.1,
@@ -38,7 +39,13 @@ learning_rate_schedule = {
 from postprocess import postprocess_onehot, postprocess
 from preprocess import preprocess, preprocess_with_augmentation, set_upside_up, normalize_contrast, preprocess_normscale, normalize_contrast_zmuv
 
-preprocess_train = preprocess_normscale  # with augmentation
+use_hough_roi = True
+preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
+    preprocess_normscale,
+    normscale_resize_and_augment_function=partial(
+        image_transform.normscale_resize_and_augment_2, 
+        normalised_patch_size=(128,128)))
+#preprocess_train = preprocess_normscale
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess_with_augmentation  # no augmentation
 test_time_augmentations = 10
@@ -46,7 +53,7 @@ augmentation_params = {
     "rotation": (0, 0),
     "shear": (0, 0),
     "translation": (0, 0),
-    "flip_vert": (0, 1),
+    "flip_vert": (0, 0),
 }
 
 cleaning_processes = [
@@ -75,7 +82,7 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_key = "sliced:data:ax:noswitch"
+    input_key = "sliced:data:singleslice:middle"
     data_size = data_sizes[input_key]
 
     l0 = InputLayer(data_size)

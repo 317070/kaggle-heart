@@ -1,5 +1,6 @@
 from collections import namedtuple
 import lasagne as nn
+from lasagne.layers.normalization import batch_norm
 from lasagne.layers.dnn import Conv2DDNNLayer, MaxPool2DDNNLayer
 import data_iterators
 import numpy as np
@@ -32,7 +33,7 @@ valid_transformation_params = {
 }
 
 batch_size = 32
-nbatches_chunk = 1
+nbatches_chunk = 16
 chunk_size = batch_size * nbatches_chunk
 
 train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
@@ -53,10 +54,10 @@ test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/da
                                                                   full_batch=False, random=False, infinite=False)
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
-max_nchunks = nchunks_per_epoch * 200
+max_nchunks = nchunks_per_epoch * 100
 learning_rate_schedule = {
-    0: 0.0003,
-    int(max_nchunks * 0.25): 0.0001,
+    0: 0.0001,
+    int(max_nchunks * 0.25): 0.00007,
     int(max_nchunks * 0.5): 0.00003,
     int(max_nchunks * 0.75): 0.00001,
 }
@@ -64,95 +65,79 @@ validate_every = 2 * nchunks_per_epoch
 save_every = 2 * nchunks_per_epoch
 l2_weight = 0.0005
 
-init = nn.init.Orthogonal()
-init_relu = nn.init.Orthogonal()
+conv3 = partial(Conv2DDNNLayer,
+                stride=(1, 1),
+                pad="same",
+                filter_size=(3, 3),
+                nonlinearity=nn.nonlinearities.rectify)
 
-conv_layer = partial(Conv2DDNNLayer,
-    stride=(1, 1),
-    pad="same",
-    untie_biases=False,
-    W=init_relu,
-    b=nn.init.Constant(0.1),
-    nonlinearity=nn.nonlinearities.rectify)
+dense = partial(nn.layers.DenseLayer,
+                nonlinearity=nn.nonlinearities.rectify)
 
-dense_layer = partial(nn.layers.DenseLayer,
-    W=init_relu,
-    b=nn.init.Constant(0.1),
-    nonlinearity=nn.nonlinearities.rectify)
-
-rnn_layer = partial(nn.layers.RecurrentLayer,
-    W_in_to_hid=init,
-    W_hid_to_hid=init,
-    b=nn.init.Constant(0.1),
-    nonlinearity=nn.nonlinearities.rectify,
-    hid_init=nn.init.Constant(0.),
-    backwards=False,
-    learn_init=False,
-    gradient_steps=-1,
-    grad_clipping=False,
-    unroll_scan=False,
-    precompute_input=True,
-    mask_input=None)
-
-init = nn.init.Orthogonal()
-rnn_layer = partial(nn.layers.RecurrentLayer,
-    W_in_to_hid=init,
-    W_hid_to_hid=init,
-    b=nn.init.Constant(0.1),
-    nonlinearity=nn.nonlinearities.rectify,
-    hid_init=nn.init.Constant(0.),
-    backwards=False,
-    learn_init=False,
-    gradient_steps=-1,
-    grad_clipping=False,
-    unroll_scan=False,
-    precompute_input=True,
-    mask_input=None)
+max_pool = partial(MaxPool2DDNNLayer,
+                   pool_size=(2, 2),
+                   stride=(2, 2))
 
 
 def build_model():
     l_in = nn.layers.InputLayer((None, 30) + patch_size)
-    l = l_in
 
-    l = nn.layers.ReshapeLayer(l, (-1,1)+patch_size)
+    l = conv3(l_in, num_filters=64)
+    l = batch_norm(l)
+    l = conv3(l, num_filters=64)
+    l = batch_norm(l)
 
-    # l = conv_layer(l, num_filters=32, filter_size=(3,3))
-    # l = conv_layer(l, num_filters=32, filter_size=(3,3))
-    # l = MaxPool2DDNNLayer(l, pool_size=(2,2))
-    l = conv_layer(l, num_filters=16, filter_size=(5,5), stride=(2,2))
+    l = max_pool(l)
 
-    l = conv_layer(l, num_filters=32, filter_size=(3,3))
-    l = conv_layer(l, num_filters=32, filter_size=(3,3))
-    l = MaxPool2DDNNLayer(l, pool_size=(2,2))
+    l = conv3(l, num_filters=128)
+    l = batch_norm(l)
+    l = conv3(l, num_filters=128)
+    l = batch_norm(l)
 
-    l = conv_layer(l, num_filters=64, filter_size=(3,3))
-    l = conv_layer(l, num_filters=64, filter_size=(3,3))
-    l = conv_layer(l, num_filters=64, filter_size=(3,3))
-    l = MaxPool2DDNNLayer(l, pool_size=(2,2))
+    l = max_pool(l)
 
-    l = conv_layer(l, num_filters=128, filter_size=(3,3))
-    l = conv_layer(l, num_filters=128, filter_size=(3,3))
-    l = conv_layer(l, num_filters=128, filter_size=(3,3))
-    l = MaxPool2DDNNLayer(l, pool_size=(2,2))
+    l = conv3(l, num_filters=256)
+    l = batch_norm(l)
+    l = conv3(l, num_filters=256)
+    l = batch_norm(l)
+    l = conv3(l, num_filters=256)
+    l = batch_norm(l)
 
-    l = conv_layer(l, num_filters=256, filter_size=(3,3))
-    l = conv_layer(l, num_filters=256, filter_size=(3,3))
-    l = conv_layer(l, num_filters=256, filter_size=(3,3))
-    l = MaxPool2DDNNLayer(l, pool_size=(2,2))
+    l = max_pool(l)
 
-    l = nn.layers.dropout(l, p=0.5)
+    l = conv3(l, num_filters=512)
+    l = batch_norm(l)
+    l = conv3(l, num_filters=512)
+    l = batch_norm(l)
+    l = conv3(l, num_filters=512)
+    l = batch_norm(l)
 
-    l = nn.layers.ReshapeLayer(l, (-1, 30,) + l.output_shape[1:])
-    l_rnn = rnn_layer(l, num_units=1024, unroll_scan=False)
-    l = nn.layers.SliceLayer(l_rnn, -1, axis=1)
+    l = max_pool(l)
 
-    l = nn.layers.dropout(l, p=0.5)
+    l = conv3(l, num_filters=512)
+    l = batch_norm(l)
+    l = conv3(l, num_filters=512)
+    l = batch_norm(l)
+    l = conv3(l, num_filters=512)
+    l = batch_norm(l)
 
-    l_d02 = dense_layer(l, num_units=1024)
+    l = max_pool(l)
+
+    l_d01 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
+                                 b=nn.init.Constant(0.1))
+    # l_d01 = batch_norm(l_d01)
+    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
+                                 b=nn.init.Constant(0.1))
+    # l_d02 = batch_norm(l_d02)
     l_mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
     # ---------------------------------------------------------------
 
-    l_d12 = dense_layer(l, num_units=1024)
+    l_d11 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
+                                 b=nn.init.Constant(0.1))
+    # l_d11 = batch_norm(l_d11)
+    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=1024, W=nn.init.Orthogonal("relu"),
+                                 b=nn.init.Constant(0.1))
+    # l_d12 = batch_norm(l_d12)
     l_mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, nonlinearity=nn.nonlinearities.identity)
 
     l_outs = [l_mu0, l_mu1]
@@ -164,7 +149,7 @@ def build_model():
 
     return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'regularizable_layers'])([l_in], l_outs,
                                                                                                   l_targets, l_top,
-                                                                                                  [l_rnn, l_d02,
+                                                                                                  [l_d01, l_d02, l_d11,
                                                                                                    l_d12])
 
 
@@ -188,7 +173,7 @@ def build_objective(model, deterministic=False):
 
 
 def build_updates(train_loss, model, learning_rate):
-    updates = nn.updates.adam(train_loss, nn.layers.get_all_params(model.l_top), learning_rate)
+    updates = nn.updates.adam(train_loss, nn.layers.get_all_params(model.l_top, trainable=True), learning_rate)
     return updates
 
 

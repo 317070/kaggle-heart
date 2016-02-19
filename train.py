@@ -158,7 +158,7 @@ for chunk_idx, (xs_chunk, ys_chunk, _) in izip(chunk_idxs,
         losses_eval_valid.append(valid_loss)
 
         valid_crps = config().get_mean_crps_loss(batch_valid_predictions, batch_valid_targets, batch_valid_ids)
-        print 'Validation CRPS: ', valid_crps
+        print 'Validation CRPS: ', valid_crps, np.mean(valid_crps)
         crps_eval_valid.append(valid_crps)
 
         now = time.time()

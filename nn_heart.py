@@ -244,3 +244,18 @@ class CumSumLayer(nn.layers.Layer):
     def get_output_for(self, input, **kwargs):
         result = T.extra_ops.cumsum(input, axis=self.axis)
         return result
+
+
+class NormalisationLayer(nn.layers.Layer):
+    def __init__(self, incoming, norm_sum=1.0, allow_negative=False, **kwargs):
+        super(NormalisationLayer, self).__init__(incoming, **kwargs)
+        self.norm_sum = norm_sum
+        self.allow_negative = allow_negative
+
+    def get_output_for(self, input, **kwargs):
+        # take the minimal working slice size, and use that one.
+        if self.allow_negative:
+            inp_low_zero = input - T.min(input, axis=1).dimshuffle(0, 'x')
+        else:
+            inp_low_zero = input
+        return inp_low_zero / T.sum(inp_low_zero, axis=1).dimshuffle(0, 'x') * self.norm_sum

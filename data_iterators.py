@@ -128,7 +128,8 @@ class SliceNormRescaleDataGenerator(SliceDataGenerator):
 
 
 class PatientsDataGenerator(object):
-    def __init__(self, data_path, batch_size, transform_params, labels_path=None, full_batch=False, random=True,
+    def __init__(self, data_path, batch_size, transform_params, labels_path=None, slice2roi_path=None, full_batch=False,
+                 random=True,
                  infinite=True, **kwargs):
         patient_paths = glob.glob(data_path + '/*/study/')
 
@@ -157,6 +158,13 @@ class PatientsDataGenerator(object):
         self.batch_size = batch_size
         self.infinite = infinite
         self.transformation_params = transform_params
+        if slice2roi_path:
+            if not os.path.isfile(slice2roi_path):
+                print 'Generating ROI'
+                self.slice2roi = slice2roi.get_slice2roi(data_path)
+            self.slice2roi = utils.load_pkl(slice2roi_path)
+        else:
+            self.slice2roi = None
 
     def generate(self):
         while True:
@@ -189,9 +197,12 @@ class PatientsDataGenerator(object):
                     slicepath2location = data.slice_location_finder(slicepath2metadata)
 
                     for j, sp in enumerate(slice_paths):
+                        slice_roi = self.slice2roi[str(pid)][
+                            utils.get_slice_id(sp)] if self.slice2roi else None
+
                         slice_data = data.read_slice(sp)
                         x_batch[i, j] = data.transform_norm_rescale(slice_data, slicepath2metadata[sp],
-                                                                    self.transformation_params)
+                                                                    self.transformation_params, roi=slice_roi)
                         slice_location_batch[i, j] = slicepath2location[sp]
                         slice_mask_batch[i, j] = 1.
                     if self.id2labels:

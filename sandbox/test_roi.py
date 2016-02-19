@@ -87,7 +87,7 @@ def plot_roi(slice, roi_center, roi_radii):
 
 
 def plot_patient_roi(data_path, slice2roi_valid, slice2roi_train):
-    patient_paths = sorted(glob.glob(data_path + '/501/study'))
+    patient_paths = sorted(glob.glob(data_path + '/517/study'))
     for p in patient_paths:
         patient_data = get_patient_data(p)
         sd = patient_data[len(patient_data) / 2]

@@ -67,8 +67,8 @@ def sample_augmentation_parameters(transformation):
     random_params = None
 
     if not all(v is None for k, v in transformation.items() if k != 'patch_size'):
-        shift_x = rng.uniform(*transformation['translation_range'])
-        shift_y = rng.uniform(*transformation['translation_range'])
+        shift_x = rng.uniform(*transformation['translation_range_x'])
+        shift_y = rng.uniform(*transformation['translation_range_y'])
         translation = (shift_x, shift_y)
         rotation = rng.uniform(*transformation['rotation_range'])
         shear = rng.uniform(*transformation['shear_range'])
@@ -78,11 +78,12 @@ def sample_augmentation_parameters(transformation):
         random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'roi_scale',
                                               'flip', 'sequence_shift'])(translation, rotation, shear, roi_scale, flip,
                                                                          sequence_shift)
+        print random_params
     return random_params
 
 
 def transform_norm_rescale(data, metadata, transformation, roi=None, random_augmentation_params=None,
-                           normalised_center_location=(.5, .4), normalised_patch_size=(200, 200)):
+                           mm_center_location=(.5, .4), mm_patch_size=(128, 128)):
     patch_size = transformation['patch_size']
     out_shape = (30,) + patch_size
     out_data = np.zeros(out_shape, dtype='float32')
@@ -104,25 +105,22 @@ def transform_norm_rescale(data, metadata, transformation, roi=None, random_augm
     current_shape = data.shape[-2:]
 
     # scale ROI radii and find ROI center in normalized patch
-    if roi_center and roi_radii:
-        normalised_center_location = tuple(int(r * ps) for r, ps in zip(roi_center, pixel_spacing))
-        roi_scale = random_augmentation_params.roi_scale if random_augmentation_params else 1  # augmentation
-        normalised_patch_size = tuple(int(2 * r * ps * roi_scale) for r, ps in zip(roi_radii, pixel_spacing))
-        print normalised_patch_size
+    if roi_center:
+        mm_center_location = tuple(int(r * ps) for r, ps in zip(roi_center, pixel_spacing))
 
     # scale the images such that they all have the same scale
     norm_rescaling = 1. / pixel_spacing[0]
-    normalised_shape = tuple(int(float(d) * ps) for d, ps in zip(current_shape, pixel_spacing))
+    mm_shape = tuple(int(float(d) * ps) for d, ps in zip(current_shape, pixel_spacing))
 
     tform_normscale = build_rescale_transform(downscale_factor=norm_rescaling,
-                                              image_shape=current_shape, target_shape=normalised_shape)
-    tform_shift_center, tform_shift_uncenter = build_shift_center_transform(image_shape=normalised_shape,
-                                                                            center_location=normalised_center_location,
-                                                                            patch_size=normalised_patch_size)
+                                              image_shape=current_shape, target_shape=mm_shape)
+    tform_shift_center, tform_shift_uncenter = build_shift_center_transform(image_shape=mm_shape,
+                                                                            center_location=mm_center_location,
+                                                                            patch_size=mm_patch_size)
 
-    patch_scale = max(1. * normalised_patch_size[0] / patch_size[0],
-                      1. * normalised_patch_size[1] / patch_size[1])
-    tform_patch_scale = build_rescale_transform(patch_scale, normalised_patch_size, target_shape=patch_size)
+    patch_scale = max(1. * mm_patch_size[0] / patch_size[0],
+                      1. * mm_patch_size[1] / patch_size[1])
+    tform_patch_scale = build_rescale_transform(patch_scale, mm_patch_size, target_shape=patch_size)
 
     total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale
 
@@ -140,6 +138,15 @@ def transform_norm_rescale(data, metadata, transformation, roi=None, random_augm
 
     normalize_contrast_zmuv(out_data)
 
+    # apply transformation to ROI and mask the images
+    if roi_center and roi_radii:
+        roi_scale = random_augmentation_params.roi_scale if random_augmentation_params else 1  # augmentation
+        rescaled_roi_radii = (roi_scale * roi_radii[0], roi_scale * roi_radii[1])
+        out_roi_radii = (int(rescaled_roi_radii[0] * pixel_spacing[0] / patch_scale),
+                         int(rescaled_roi_radii[1] * pixel_spacing[1] / patch_scale))
+        roi_mask = make_roi_mask(patch_size, (patch_size[0] / 2, patch_size[1] / 2), out_roi_radii)
+        out_data = out_data * roi_mask
+
     # if the sequence is < 30 timesteps, copy last image
     if data.shape[0] < out_shape[0]:
         for j in xrange(data.shape[0], out_shape[0]):
@@ -156,17 +163,16 @@ def transform_norm_rescale(data, metadata, transformation, roi=None, random_augm
     return out_data
 
 
-def make_roi_mask(data, roi_center, roi_radii):
+def make_roi_mask(img_shape, roi_center, roi_radii):
     """
     Makes 2D ROI mask for one slice
     :param data:
     :param roi:
     :return:
     """
-    img_shape = data.shape[-2:]
     mask = np.zeros(img_shape)
-    mask[roi_center[0] - roi_radii[0]:roi_center[0] + roi_radii[0],
-    roi_center[1] - roi_radii[1]:roi_center[1] + roi_radii[1]] = 1
+    mask[max(0, roi_center[0] - roi_radii[0]):min(roi_center[0] + roi_radii[0], img_shape[0]),
+        max(0, roi_center[1] - roi_radii[1]):min(roi_center[1] + roi_radii[1], img_shape[1])] = 1
     return mask
 
 

@@ -1,10 +1,14 @@
 import numpy as np
-from matplotlib import animation
-import matplotlib.pyplot as plt
 import glob
 import re
 import data
 import utils
+
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib import animation
+except:
+    print 'matplotlib not imported'
 
 
 def get_patient_data(patient_data_path):

@@ -44,7 +44,8 @@ def optimize_expert_weights(expert_predictions,
                             average_distribution,
                             num_cross_validation_masks,
                             num_folds=1,
-                            eps=1e-5,
+                            eps=1e-6,
+                            cutoff=0.1,
                             *args, **kwargs):
     """
     :param expert_predictions: experts x validation_samples x 600 x
@@ -143,6 +144,8 @@ def optimize_expert_weights(expert_predictions,
     #optimal_weights = utils.geometric_average(final_weights)
     #optimal_weights = np.percentile(final_weights, axis=0)
     optimal_weights = np.mean(final_weights, axis=0)
+    optimal_weights = [w if w>=cutoff else 0.0 for w in optimal_weights]
+
     optimal_weights = optimal_weights / np.sum(optimal_weights)
     average_loss    = np.mean(final_losses)
     return optimal_weights, average_loss  # (NUM_EXPERTS,)
@@ -152,7 +155,7 @@ def optimize_expert_weights(expert_predictions,
 
 
 
-def weighted_average_method(prediction_matrix, average, eps=1e-5, expert_weights=None, *args, **kwargs):
+def weighted_average_method(prediction_matrix, average, eps=1e-6, expert_weights=None, *args, **kwargs):
     pdf = utils.cdf_to_pdf(prediction_matrix)
     average_pdf = utils.cdf_to_pdf(average)
     average_pdf[average_pdf==0] = eps

@@ -30,7 +30,7 @@ caching = None
 validate_every = 10
 validate_train_set = True
 save_every = 10
-restart_from_save = False
+restart_from_save = True
 
 # Training (schedule) parameters
 # - batch sizes
@@ -38,7 +38,7 @@ batch_size = 32
 sunny_batch_size = 4
 batches_per_chunk = 16
 AV_SLICE_PER_PAT = 11
-num_epochs_train = 50 * AV_SLICE_PER_PAT
+num_epochs_train = 80 * AV_SLICE_PER_PAT
 
 # - learning rate and method
 base_lr = .0001

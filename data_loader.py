@@ -130,7 +130,7 @@ def filter_patient_folders():
     NUM_TEST_PATIENTS = num_patients['test']
     NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
 
-    
+
 ##############
 # Sunny data #
 ##############
@@ -271,6 +271,13 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
+
+            elif tag.startswith("sliced:data:randomslices"):
+                l = [sax for sax in files if "sax" in sax]
+                nr_slices = result["input"][tag].shape[1]
+                chosen_files = utils.pick_random(l, nr_slices)
+                patient_result[tag] = [disk_access.load_data_from_file(f) for f in chosen_files]
+                metadatas_result[tag] = [load_clean_metadata(f) for f in chosen_files]
 
             elif tag.startswith("sliced:data:ax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]

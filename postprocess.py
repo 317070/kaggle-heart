@@ -22,7 +22,7 @@ def make_monotone_distribution_fast(distributions):
 
 def test_if_valid_distribution(distribution):
     if not np.isfinite(distribution).all():
-        raise Exception("There is a non-finite numer in there")
+        raise Exception("There is a non-finite number in there")
 
     for j in xrange(len(distribution)):
         if not 0.0<=distribution[j]<=1.0:

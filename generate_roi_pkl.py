@@ -322,14 +322,14 @@ def get_slice2roi(data_path, plot=False):
             ch4_result_center = np.mean(centers, axis=0)
             ch4_result_radius = np.max(np.sqrt((centers - ch4_result_center)**2))
             sid = ch4['slice_id']
-            slice2roi[pid][sid] = {'roi_center': ch4_result_center, 'roi_radii': (ch4_result_radius, ch4_result_radius)}
+            slice2roi[pid][sid] = {'roi_center': tuple(ch4_result_center), 'roi_radii': (ch4_result_radius, ch4_result_radius)}
 
         if ch2 is not None:
             centers = np.array(ch2_centers)
             ch2_result_center = np.mean(centers, axis=0)
             ch2_result_radius = np.max(np.sqrt((centers - ch2_result_center)**2))
             sid = ch2['slice_id']
-            slice2roi[pid][sid] = {'roi_center': ch2_result_center, 'roi_radii': (ch2_result_radius, ch2_result_radius)}
+            slice2roi[pid][sid] = {'roi_center': tuple(ch2_result_center), 'roi_radii': (ch2_result_radius, ch2_result_radius)}
 
 
     filename = data_path.split('/')[-1] + '_slice2roi.pkl'

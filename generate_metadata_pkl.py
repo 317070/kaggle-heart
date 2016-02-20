@@ -54,10 +54,11 @@ def get_patient_data(patient_data_path):
                     key=lambda x: int(re.search(r'/*_(\d+)\.pkl$', x).group(1)))
     pid = re.search(r'/(\d+)/study$', patient_data_path).group(1)
     for s in spaths:
-        slice_id = re.search(r'/(.*_\d+\.pkl)$', s).group(1)
+        slice_id = re.search(r'/(((4ch)|(2ch)|(sax))_\d+\.pkl)$', s).group(1)
         metadata = read_metadata(s)
         patient_data.append({'metadata': metadata,
                              'slice_id': slice_id})
+        print slice_id
     return patient_data, pid
 
 

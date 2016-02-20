@@ -191,6 +191,8 @@ def clean_metadata(metadatadict):
         value = metadatadict[key]
         if key == 'PatientAge':
             metadatadict[key] = int(value[:-1])
+        if key == 'PatientSex':
+            metadatadict[key] = 1 if value == 'F' else -1
         else:
             if isinstance(value, Sequence):
                 #convert to list

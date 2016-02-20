@@ -31,8 +31,11 @@ _TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 # TODO: don't make this hardcoded!
 ALL_TRAIN_PATIENT_IDS = range(1, 501)
 
-_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1))
-_extract_slice_id_from_path = lambda path: int(re.search(r'sax_(\d+).pkl', path).group(1))
+def _extract_id_from_path(path):
+    return int(re.search(r'/(\d+)/', path).group(1))
+
+def _extract_slice_id_from_path(path):
+    return int(re.search(r'_(\d+).pkl', path).group(1))
 
 
 def _find_patient_folders(root_folder):
@@ -156,8 +159,8 @@ sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indi
 ###########################
 
 _HOUGH_ROI_PATHS = (
-    '/mnt/storage/users/jburms/data/kaggle_heart/pkl_train_slice2roi.pkl',
-    '/mnt/storage/users/jburms/data/kaggle_heart/pkl_validate_slice2roi.pkl',)
+    '/data/dsb15_pkl/pkl_train_slice2roi.pkl',
+    '/data/dsb15_pkl/pkl_validate_slice2roi.pkl',)
 _hough_rois = utils.merge_dicts(map(_load_file, _HOUGH_ROI_PATHS))
 
 
@@ -257,7 +260,12 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         # Iterate over input tags
         for tag in wanted_input_tags:
             if tag.startswith("sliced:data:singleslice"):
-                l = [sax for sax in files if "sax" in sax]
+                if "4ch" in tag:
+                    l = [sax for sax in files if "4ch" in sax]
+                elif  "2ch" in tag:
+                    l = [sax for sax in files if "2ch" in sax]
+                else:
+                    l = [sax for sax in files if "sax" in sax]
                 if "middle" in tag:
                     # Sort sax files, based on the integer in their name
                     l.sort(key=lambda f: int(re.findall("\d+", os.path.basename(f))[0]))

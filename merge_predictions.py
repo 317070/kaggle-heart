@@ -39,13 +39,44 @@ def softmax(z):
     return res
 
 
+def generate_information_weight_matrix(expert_predictions,
+                                       average_distribution,
+                                       eps=1e-14,
+                                       KL_weight = 1.0,
+                                       cross_entropy_weight=1.0,
+                                       expert_weights=None):
+
+    pdf = utils.cdf_to_pdf(expert_predictions)
+    average_pdf = utils.cdf_to_pdf(average_distribution)
+    average_pdf[average_pdf==0] = np.min(average_pdf[average_pdf>0])/2  # KL is not defined when Q=0 and P is not
+    inside = pdf * (np.log(pdf) - np.log(average_pdf[None,None,:]))
+    inside[pdf==0] = 0  # (xlog(x) of zero is zero)
+    KL_distance_from_average = np.sum(inside, axis=2)  # (NUM_EXPERTS, NUM_VALIDATIONS)
+
+    clipped_predictions = np.clip(expert_predictions, 0.0, 1.0)
+    cross_entropy_per_sample = - (    average_distribution[None,None,:]  * np.log(   clipped_predictions+eps) +\
+                                  (1.-average_distribution[None,None,:]) * np.log(1.-clipped_predictions+eps) )
+
+    cross_entropy_per_sample[cross_entropy_per_sample<0] = 0  # (NUM_EXPERTS, NUM_VALIDATIONS, 600)
+
+    if expert_weights is None:
+        weights = cross_entropy_weight*cross_entropy_per_sample + KL_weight*KL_distance_from_average[:,:,None]  #+  # <- is too big?
+    else:
+        weights = (cross_entropy_weight*cross_entropy_per_sample + KL_weight*KL_distance_from_average[:,:,None]) * expert_weights[:,None,None]  #+  # <- is too big?
+
+    #make sure the ones without predictions don't get weight, unless absolutely necessary
+    weights[np.where((expert_predictions == average_distribution[None,None,:]).all(axis=2))] = 1e-14
+    return weights
+
+
+
 def optimize_expert_weights(expert_predictions,
                             targets,
                             average_distribution,
                             num_cross_validation_masks,
                             num_folds=1,
                             eps=1e-6,
-                            cutoff=0.1,
+                            cutoff=0.0,
                             *args, **kwargs):
     """
     :param expert_predictions: experts x validation_samples x 600 x
@@ -63,25 +94,12 @@ def optimize_expert_weights(expert_predictions,
     W = T.vector('W', dtype='float32')  # expert weights = (NUM_EXPERTS,)
 
     # calculate the weighted average for each of these experts
-    pdf = utils.cdf_to_pdf(expert_predictions)
-    average_pdf = utils.cdf_to_pdf(average_distribution)
-    average_pdf[average_pdf==0] = eps  # KL is not defined when Q=0 and P is not
-    inside = pdf * (np.log(pdf) - np.log(average_pdf[None,None,:]))
-    inside[pdf==0] = 0  # (xlog(x) of zero is zero)
-    KL_distance_from_average = np.sum(inside, axis=2)  # (NUM_EXPERTS, NUM_VALIDATIONS)
-    #print "a:", KL_distance_from_average.shape
-
-    #print KL_distance_from_average
-    cross_entropy_per_sample = - (    average_distribution[None,None,:]  * np.log(   expert_predictions+eps) +\
-                                  (1.-average_distribution[None,None,:]) * np.log(1.-expert_predictions+eps) )
-    cross_entropy_per_sample[cross_entropy_per_sample<0] = 0  # (NUM_EXPERTS, NUM_VALIDATIONS, 600)
-    #print "b:", cross_entropy_per_sample.shape
-    #print "t:", targets.shape
-    weights = cross_entropy_per_sample + KL_distance_from_average[:,:,None]  # (NUM_EXPERTS, NUM_VALIDATIONS, 600)
+    weights = generate_information_weight_matrix(expert_predictions, average_distribution)
 
     weight_matrix = theano.shared(weights.astype('float32'))
 
     # generate a bunch of cross validation masks
+    pdf = utils.cdf_to_pdf(expert_predictions)
     x_log = np.log(pdf)
     x_log[pdf==0] = np.log(eps)
     # Compute the mean
@@ -155,23 +173,9 @@ def optimize_expert_weights(expert_predictions,
 
 
 
-def weighted_average_method(prediction_matrix, average, eps=1e-6, expert_weights=None, *args, **kwargs):
+def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
+    weights = generate_information_weight_matrix(prediction_matrix[None,:,:], average, expert_weights=expert_weights)[0]
     pdf = utils.cdf_to_pdf(prediction_matrix)
-    average_pdf = utils.cdf_to_pdf(average)
-    average_pdf[average_pdf==0] = eps
-    inside = pdf * (np.log(pdf) - np.log(average_pdf[None,:]))
-    inside[pdf==0] = 0
-    KL_distance_from_average = np.sum(inside,axis=1)
-
-    #print KL_distance_from_average
-    cross_entropy_per_sample = - ( average[None,:] * np.log(prediction_matrix+eps) + (1.-average[None,:]) * np.log(1.-prediction_matrix+eps))
-    cross_entropy_per_sample[cross_entropy_per_sample<0] = 0  # numerical stability
-
-    # geometric mean
-    if expert_weights is None:
-        weights = cross_entropy_per_sample + KL_distance_from_average[:,None]  #+  # <- is too big?
-    else:
-        weights = (cross_entropy_per_sample + KL_distance_from_average[:,None]) * expert_weights[:,None]  #+  # <- is too big?
     if True:
         x_log = np.log(pdf)
         x_log[pdf==0] = np.log(eps)
@@ -202,11 +206,12 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
     # creating new expert opinions from the tta's generated by the experts
     expert_pkl_files = sorted(
         glob.glob(prediction_file_location+"je_ss_jonisc64small_360.pkl")
-        +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropnorm*.pkl")
+        +glob.glob(prediction_file_location+"j6*.pkl")
+        +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropnorm.pkl")
         +glob.glob(prediction_file_location+"je_ss_normscale_patchcontrast.pkl")
         +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropoutput")
         +glob.glob(prediction_file_location+"je_ss_smcrps_jonisc128_500_dropnorm.pkl")
-        +glob.glob(prediction_file_location+"j5_normscale.pkl")
+        #+glob.glob(prediction_file_location+"j5_normscale.pkl")
     )
 
     # filter expert_pkl_files

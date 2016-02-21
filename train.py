@@ -36,27 +36,17 @@ def train_model(expid):
     print "Build model"
     interface_layers = config().build_model()
 
-
     output_layers = interface_layers["outputs"]
     input_layers = interface_layers["inputs"]
     top_layer = lasagne.layers.MergeLayer(
         incomings=output_layers.values()
     )
     all_layers = lasagne.layers.get_all_layers(top_layer)
-    num_params = lasagne.layers.count_params(top_layer)
-    print "  number of parameters: %d" % num_params
-    print string.ljust("  layer output shapes:",36),
-    print string.ljust("#params:",10),
-    print string.ljust("#data:",10),
-    print "output shape:"
-    for layer in all_layers[:-1]:
-        name = string.ljust(layer.__class__.__name__, 32)
-        num_param = sum([np.prod(p.get_value().shape[1:]) for p in layer.get_params()])
-        num_param = string.ljust(int(num_param).__str__(), 10)
-        num_size = string.ljust(np.prod(layer.output_shape[1:]).__str__(), 10)
-        print "    %s %s %s %s" % (name,  num_param, num_size, layer.output_shape)
 
-    obj = config().build_objective(interface_layers)
+    all_params = lasagne.layers.get_all_params(top_layer, trainable=True)
+    if "cutoff_gradients" in interface_layers:
+        submodel_params = [param for value in interface_layers["cutoff_gradients"] for param in lasagne.layers.get_all_params(value)]
+        all_params = [p for p in all_params if p not in submodel_params]
 
     if "pretrained" in interface_layers:
         for config_name, layers_dict in interface_layers["pretrained"].iteritems():
@@ -67,6 +57,22 @@ def train_model(expid):
             )
             lasagne.layers.set_all_param_values(pretrained_top_layer, pretrained_resume_metadata['param_values'])
 
+    num_params = sum([np.prod(p.get_value().shape) for p in all_params])
+
+    print string.ljust("  layer output shapes:",36),
+    print string.ljust("#params:",10),
+    print string.ljust("#data:",10),
+    print "output shape:"
+    for layer in all_layers[:-1]:
+        name = string.ljust(layer.__class__.__name__, 32)
+        num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
+        num_param = string.ljust(int(num_param).__str__(), 10)
+        num_size = string.ljust(np.prod(layer.output_shape[1:]).__str__(), 10)
+        print "    %s %s %s %s" % (name,  num_param, num_size, layer.output_shape)
+    print "  number of parameters: %d" % num_params
+
+    obj = config().build_objective(interface_layers)
+
     train_loss_theano = obj.get_loss()
     kaggle_loss_theano = obj.get_kaggle_loss()
     segmentation_loss_theano = obj.get_segmentation_loss()
@@ -76,7 +82,6 @@ def train_model(expid):
     validation_kaggle_loss = obj.get_kaggle_loss(average=False, deterministic=True, validation=True)
     validation_segmentation_loss = obj.get_segmentation_loss(average=False, deterministic=True, validation=True)
 
-    all_params = lasagne.layers.get_all_params(top_layer, trainable=True)
 
     xs_shared = {
         key: lasagne.utils.shared_empty(dim=len(l_in.output_shape), dtype='float32') for (key, l_in) in input_layers.iteritems()

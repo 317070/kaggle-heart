@@ -182,6 +182,9 @@ def build_model():
         "pretrained":{
             j6_2ch_128mm.__name__: meta_2ch["outputs"],
             j6_4ch.__name__: meta_4ch["outputs"],
-        }
+        },
+        "cutoff_gradients": [
+        ] + [ v for d in [model["meta_outputs"] for model in submodels if "meta_outputs" in model]
+               for v in d.values() ]
     }
 

@@ -130,11 +130,15 @@ def build_model():
 
     meta_sax = je_ss_jonisc64small_360.build_model(input_layer = sax_slices)
 
-    l_sax_systole = nn.layers.ReshapeLayer(meta_sax["meta_outputs"]["systole"], (-1, nr_slices, [1]))
-    l_sax_diastole = nn.layers.ReshapeLayer(meta_sax["meta_outputs"]["diastole"], (-1, nr_slices, [1]))
+    #reduce the number of parameters BEFORE reshaping! Keep 16 numbers per slice.
+    meta_sax_systole_reduced = nn.layers.DenseLayer(meta_sax["meta_outputs"]["systole"], num_units=16, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    meta_sax_diastole_reduced = nn.layers.DenseLayer(meta_sax["meta_outputs"]["diastole"], num_units=16, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    l_sax_systole_flat = nn.layers.DenseLayer(l_sax_systole, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
-    l_sax_diastole_flat = nn.layers.DenseLayer(l_sax_diastole, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l_sax_systole = nn.layers.ReshapeLayer(meta_sax_systole_reduced, (-1, nr_slices, [1]))
+    l_sax_diastole = nn.layers.ReshapeLayer(meta_sax_diastole_reduced, (-1, nr_slices, [1]))
+
+    l_sax_systole_flat = nn.layers.DenseLayer(l_sax_systole, num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l_sax_diastole_flat = nn.layers.DenseLayer(l_sax_diastole, num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     meta_2ch = j6_2ch_128mm.build_model()
     meta_4ch = j6_4ch.build_model()
@@ -142,11 +146,11 @@ def build_model():
     l_age = nn.layers.InputLayer(data_sizes["sliced:meta:PatientAge"])
     l_sex = nn.layers.InputLayer(data_sizes["sliced:meta:PatientSex"])
 
-    l_meta_2ch_systole = meta_2ch["meta_outputs"]["systole"]
-    l_meta_2ch_diastole = meta_2ch["meta_outputs"]["diastole"]
+    l_meta_2ch_systole = nn.layers.DenseLayer(meta_2ch["meta_outputs"]["systole"], num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l_meta_2ch_diastole = nn.layers.DenseLayer(meta_2ch["meta_outputs"]["diastole"], num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    l_meta_4ch_systole = meta_4ch["meta_outputs"]["systole"]
-    l_meta_4ch_diastole = meta_4ch["meta_outputs"]["diastole"]
+    l_meta_4ch_systole = nn.layers.DenseLayer(meta_4ch["meta_outputs"]["systole"], num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l_meta_4ch_diastole = nn.layers.DenseLayer(meta_4ch["meta_outputs"]["diastole"], num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     l_meta_systole = nn.layers.ConcatLayer([l_age, l_sex, l_meta_2ch_systole, l_meta_4ch_systole, l_sax_systole_flat])
     l_meta_diastole = nn.layers.ConcatLayer([l_age, l_sex, l_meta_2ch_diastole, l_meta_4ch_diastole, l_sax_diastole_flat])
@@ -197,6 +201,9 @@ def build_model():
             j6_2ch_128mm.__name__: meta_2ch["outputs"],
             j6_4ch.__name__: meta_4ch["outputs"],
             je_ss_jonisc64small_360.__name__: meta_sax["outputs"],
-        }
+        },
+        "cutoff_gradients": [
+        ] + [ v for d in [model["meta_outputs"] for model in submodels if "meta_outputs" in model]
+               for v in d.values() ]
     }
 

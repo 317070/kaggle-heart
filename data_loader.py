@@ -31,8 +31,11 @@ _TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
 # TODO: don't make this hardcoded!
 ALL_TRAIN_PATIENT_IDS = range(1, 501)
 
-_extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1))
-_extract_slice_id_from_path = lambda path: int(re.search(r'sax_(\d+).pkl', path).group(1))
+def _extract_id_from_path(path):
+    return int(re.search(r'/(\d+)/', path).group(1))
+
+def _extract_slice_id_from_path(path):
+    return int(re.search(r'_(\d+).pkl', path).group(1))
 
 
 def _find_patient_folders(root_folder):
@@ -125,12 +128,19 @@ def filter_patient_folders():
         key[:] = _config().filter_samples(key)
         num_patients[set]=len(key)
 
+    if NUM_TRAIN_PATIENTS != num_patients['train']:
+        print "WARNING: keeping only %d of %d train patients!" % (num_patients['train'], NUM_TRAIN_PATIENTS)
+    if NUM_VALID_PATIENTS != num_patients['validation']:
+        print "WARNING: keeping only %d of %d validation patients!" % (num_patients['validation'], NUM_VALID_PATIENTS)
+    if NUM_TEST_PATIENTS != num_patients['test']:
+        print "WARNING: keeping only %d of %d test patients!" % (num_patients['test'], NUM_TEST_PATIENTS)
+
     NUM_TRAIN_PATIENTS = num_patients['train']
     NUM_VALID_PATIENTS = num_patients['validation']
     NUM_TEST_PATIENTS = num_patients['test']
     NUM_PATIENTS = NUM_TRAIN_PATIENTS + NUM_VALID_PATIENTS + NUM_TEST_PATIENTS
 
-    
+
 ##############
 # Sunny data #
 ##############
@@ -156,8 +166,8 @@ sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indi
 ###########################
 
 _HOUGH_ROI_PATHS = (
-    '/mnt/storage/users/jburms/data/kaggle_heart/pkl_train_slice2roi.pkl',
-    '/mnt/storage/users/jburms/data/kaggle_heart/pkl_validate_slice2roi.pkl',)
+    '/data/dsb15_pkl/pkl_train_slice2roi.pkl',
+    '/data/dsb15_pkl/pkl_validate_slice2roi.pkl',)
 _hough_rois = utils.merge_dicts(map(_load_file, _HOUGH_ROI_PATHS))
 
 
@@ -243,6 +253,9 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
     # Iterate over folders
     for i, folder in enumerate(folders):
+        # find the id of the current patient in the folder name (=safer)
+        id = _extract_id_from_path(folder)
+
         files = _in_folder(folder)
         patient_result = dict()
         metadatas_result = dict()
@@ -257,7 +270,15 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         # Iterate over input tags
         for tag in wanted_input_tags:
             if tag.startswith("sliced:data:singleslice"):
-                l = [sax for sax in files if "sax" in sax]
+                if "4ch" in tag:
+                    l = [sax for sax in files if "4ch" in sax]
+                elif  "2ch" in tag:
+                    l = [sax for sax in files if "2ch" in sax]
+                else:
+                    l = [sax for sax in files if "sax" in sax]
+                if not l:
+                    print "Warning: patient %d has no images of this type" % id
+                    continue
                 if "middle" in tag:
                     # Sort sax files, based on the integer in their name
                     l.sort(key=lambda f: int(re.findall("\d+", os.path.basename(f))[0]))
@@ -271,6 +292,13 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
+
+            elif tag.startswith("sliced:data:randomslices"):
+                l = [sax for sax in files if "sax" in sax]
+                nr_slices = result["input"][tag].shape[1]
+                chosen_files = utils.pick_random(l, nr_slices)
+                patient_result[tag] = [disk_access.load_data_from_file(f) for f in chosen_files]
+                metadatas_result[tag] = [load_clean_metadata(f) for f in chosen_files]
 
             elif tag.startswith("sliced:data:ax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
@@ -287,17 +315,19 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             elif tag.startswith("area_per_pixel"):
                 patient_result[tag] = None  # they are filled in in preprocessing
 
+            elif tag.startswith("sliced:meta:all"):
+                # get the key used in the pickle
+                key = tag[len("slided:meta:all:"):]
+                patient_result[tag] = [disk_access.load_metadata_from_file(f)[0][key] for f in files]
             elif tag.startswith("sliced:meta"):
                 # get the key used in the pickle
-                key = tag[len("slided:meta"):]
-                patient_result[tag] = [disk_access.load_metadata_from_file(f)[key] for f in files]
+                key = tag[len("slided:meta:"):]
+                patient_result[tag] = disk_access.load_metadata_from_file(files[0])[0][key]
             # add others when needed
 
         preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
 
         # load the labels
-        # find the id of the current patient in the folder name (=safer)
-        id = _extract_id_from_path(folder)
         if "patients" in wanted_output_tags:
             result["output"]["patients"][i] = id
 

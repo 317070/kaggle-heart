@@ -7,6 +7,7 @@ from scipy.special import erf
 import theano
 import theano.tensor as T
 from compressed_cache import simple_memoized
+import random
 
 def hms(seconds):
     seconds = np.floor(seconds)
@@ -190,6 +191,8 @@ def clean_metadata(metadatadict):
         value = metadatadict[key]
         if key == 'PatientAge':
             metadatadict[key] = int(value[:-1])
+        if key == 'PatientSex':
+            metadatadict[key] = 1 if value == 'F' else -1
         else:
             if isinstance(value, Sequence):
                 #convert to list
@@ -276,3 +279,17 @@ def merge_dicts(dicts):
     for d in dicts:
         res.update(d)
     return res
+
+
+def pick_random(arr, no_picks):
+    """Randomly selects elements.
+
+    If there are not enough elements, repetition is allowed.
+    """
+    # Expand untill there is enough repetition
+    arr_to_pick_from = arr
+    while len(arr_to_pick_from) < no_picks:
+        arr_to_pick_from += arr
+    # Pick
+    random.shuffle(arr_to_pick_from)
+    return arr_to_pick_from[:no_picks]

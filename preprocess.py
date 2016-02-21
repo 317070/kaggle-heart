@@ -102,13 +102,15 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
     # Iterate over different sorts of data
     for tag, data in patient_data.iteritems():
-        metadata_tag = metadata[tag]
+        if tag in metadata:
+            metadata_tag = metadata[tag]
         desired_shape = result[tag][index].shape
+
+        cleaning_processes = getattr(config(), 'cleaning_processes', [])
+        cleaning_processes_post = getattr(config(), 'cleaning_processes_post', [])
 
         if tag.startswith("sliced:data:singleslice"):
             # Cleaning data before extracting a patch
-            cleaning_processes = getattr(config(), 'cleaning_processes', [])
-            cleaning_processes_post = getattr(config(), 'cleaning_processes_post', [])
             data = clean_images(
                 [patient_data[tag]], metadata=metadata_tag,
                 cleaning_processes=cleaning_processes)
@@ -118,12 +120,13 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             shift_center = (None, None)
             if getattr(config(), 'use_hough_roi', False):
                 shift_center = metadata_tag["hough_roi"]
-            
+
             patient_3d_tensor = normscale_resize_and_augment_function(
                 data, output_shape=desired_shape[-2:],
                 augment=augmentation_params,
                 pixel_spacing=metadata_tag["PixelSpacing"],
                 shift_center=shift_center[::-1])[0]
+
             # Clean data further
             patient_3d_tensor = clean_images(
                 patient_3d_tensor, metadata=metadata_tag,
@@ -134,15 +137,62 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             put_in_the_middle(result[tag][index], patient_3d_tensor, True)
 
+
+        elif tag.startswith("sliced:data:randomslices"):
+            # Clean each slice separately
+            data = [
+                clean_images([slicedata], metadata=metadata, cleaning_processes=cleaning_processes)[0]
+                for slicedata, metadata in zip(data, metadata_tag)]
+
+            # Augment and extract patches
+            shift_centers = [(None, None)] * len(data)
+            if getattr(config(), 'use_hough_roi', False):
+                shift_centers = [m["hough_roi"] for m in metadata_tag]
+
+            patient_3d_tensors = [
+                normscale_resize_and_augment_function(
+                    [slicedata], output_shape=desired_shape[-2:],
+                    augment=augmentation_params,
+                    pixel_spacing=metadata["PixelSpacing"],
+                    shift_center=shift_center[::-1])[0]
+                for slicedata, metadata, shift_center in zip(data, metadata_tag, shift_centers)]
+            
+            # Clean data further
+            patient_3d_tensors = [
+                clean_images([patient_3d_tensor], metadata=metadata, cleaning_processes=cleaning_processes_post)[0]
+                for patient_3d_tensor, metadata in zip(patient_3d_tensors, metadata_tag)]
+
+            patient_4d_tensor = np.array(patient_3d_tensors)
+
+            if "area_per_pixel:sax" in result:
+                raise NotImplementedError()
+
+            put_in_the_middle(result[tag][index], patient_4d_tensor, True)
+
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()
 
         elif tag.startswith("sliced:data"):
-            raise NotImplementedError()
+            # put time dimension first, then axis dimension
+            data = clean_images(patient_data[tag], metadata=metadata_tag)
+            patient_4d_tensor, zoom_ratios = resize_and_augment(data, output_shape=desired_shape[-2:], augment=augmentation_parameters)
+            if "area_per_pixel:sax" in result:
+                result["area_per_pixel:sax"][index] = zoom_ratios[0] * np.prod(metadata_tag[0]["PixelSpacing"])
 
-        elif tag.startswith("sliced:meta:"):
+            if "noswitch" not in tag:
+                patient_4d_tensor = np.swapaxes(patient_4d_tensor,1,0)
+
+            put_in_the_middle(result[tag][index], patient_4d_tensor)
+
+        elif tag.startswith("sliced:meta:all"):
             # TODO: this probably doesn't work very well yet
             result[tag][index] = patient_data[tag]
+
+        elif tag.startswith("sliced:meta:PatientSex"):
+            result[tag][index][0] = -1. if patient_data[tag]=='M' else 1.
+
+        elif tag.startswith("sliced:meta:PatientAge"):
+            result[tag][index][0] = float(patient_data[tag][:3])
 
 
 def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):

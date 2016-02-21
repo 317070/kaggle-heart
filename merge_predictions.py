@@ -75,8 +75,8 @@ def optimize_expert_weights(expert_predictions,
                             average_distribution,
                             num_cross_validation_masks,
                             num_folds=1,
-                            eps=1e-6,
-                            cutoff=0.0,
+                            eps=1e-14,
+                            cutoff=0.01,
                             *args, **kwargs):
     """
     :param expert_predictions: experts x validation_samples x 600 x
@@ -151,7 +151,7 @@ def optimize_expert_weights(expert_predictions,
             w_init = np.ones((NUM_EXPERTS,), dtype='float32')
             #out, crps, d = scipy.optimize.fmin_l_bfgs_b(f, w_init, fprime=g, pgtol=1e-09, epsilon=1e-08, maxfun=10000)
             ind.set_value(indices)
-            result = scipy.optimize.fmin_bfgs(f, w_init, fprime=g, epsilon=1e-08, maxiter=10000)
+            result = scipy.optimize.fmin_bfgs(f, w_init, fprime=g, epsilon=eps, maxiter=10000)
             final_weights.append(softmax(result))
 
             ind.set_value(val_indices)
@@ -172,21 +172,88 @@ def optimize_expert_weights(expert_predictions,
 
 
 
+def optimize_expert_weights_second_pass(expert_weights,
+                                        expert_predictions,
+                                        targets,
+                                        average_distribution,
+                                        cutoff=0.01,
+                                        eps=1e-14,
+                                        *args, **kwargs):
+    """
+    :param expert_predictions: experts x validation_samples x 600 x
+    :param targets: validation_samples x 600 x
+    :param average_distribution: 600 x
+    :param eps:
+    :return:
+    """
+
+    expert_predictions = expert_predictions[expert_weights>cutoff,:,:]  # remove
+    NUM_VALIDATIONS = targets.shape[0]
+    NUM_EXPERTS = expert_predictions.shape[0]
+    # optimizing weights
+    t = theano.shared(targets.astype('float32'))  # targets = (NUM_VALIDATIONS, 600)
+    W = T.vector('W', dtype='float32')  # expert weights = (NUM_EXPERTS,)
+
+    # calculate the weighted average for each of these experts
+    weights = generate_information_weight_matrix(expert_predictions, average_distribution)
+
+    weight_matrix = theano.shared(weights.astype('float32'))
+
+    # generate a bunch of cross validation masks
+    pdf = utils.cdf_to_pdf(expert_predictions)
+    x_log = np.log(pdf)
+    x_log[pdf==0] = np.log(eps)
+    # Compute the mean
+    X_log = theano.shared(x_log)  # source predictions = (NUM_EXPERTS, NUM_VALIDATIONS, 600)
+    weight_matrix = weight_matrix * T.nnet.softmax(W.dimshuffle('x',0)).dimshuffle(1, 0, 'x')
+
+    #the different predictions, are the experts
+    geom_av_log = T.sum(X_log * weight_matrix, axis=0) / (T.sum(weight_matrix, axis=0) + eps)
+    geom_av_log = geom_av_log - T.max(geom_av_log,axis=-1).dimshuffle(0,'x')  # stabilizes rounding errors?
+
+    geom_av = T.exp(geom_av_log)
+    res = T.cumsum(geom_av/T.sum(geom_av,axis=-1).dimshuffle(0,'x'),axis=-1)
+
+    CRPS = T.mean((res - t)**2)
+    grad = T.grad(CRPS, W)
+
+    print "compiling the Theano functions"
+    f = theano.function([W], CRPS, allow_input_downcast=True)
+    g = theano.function([W], grad, allow_input_downcast=True)
+
+    print "starting optimization"
+    w_init = np.ones((NUM_EXPERTS,), dtype='float32')
+    result = scipy.optimize.fmin_bfgs(f, w_init, fprime=g, epsilon=eps, maxiter=10000)
+    optimal_weights = softmax(result)
+
+    validation_score = f(result)
+    print "         Current validation value: %.6f" % validation_score
+    optimal_weights = optimal_weights / np.sum(optimal_weights)
+
+    final_weights = np.zeros(expert_weights.shape)
+    final_weights[np.where(expert_weights>cutoff)] = optimal_weights
+
+    return final_weights, validation_score
+
+
+
+
+
 
 def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
-    weights = generate_information_weight_matrix(prediction_matrix[None,:,:], average, expert_weights=expert_weights)[0]
+    weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights)
     pdf = utils.cdf_to_pdf(prediction_matrix)
     if True:
         x_log = np.log(pdf)
         x_log[pdf==0] = np.log(eps)
         # Compute the mean
-        geom_av_log = np.sum(x_log * weights, axis=0) / (np.sum(weights, axis=0) + eps)
+        geom_av_log = np.sum(x_log * weights, axis=(0,1)) / (np.sum(weights, axis=(0,1)) + eps)
         geom_av_log = geom_av_log - np.max(geom_av_log)  # stabilizes rounding errors?
 
         geom_av = np.exp(geom_av_log)
         res = np.cumsum(geom_av/np.sum(geom_av))
     else:
-        res = np.cumsum(np.sum(pdf * weights, axis=0) / np.sum(weights, axis=0))
+        res = np.cumsum(np.sum(pdf * weights, axis=(0,1)) / np.sum(weights, axis=(0,1)))
     return res
 
 
@@ -196,6 +263,8 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
                                redo_tta = True):
 
     submission_path = "/mnt/storage/metadata/kaggle-heart/submissions/final_submission-%s.csv" % time.time()
+
+    average_method = weighted_average_method
 
     # calculate the average distribution
     regular_labels = _load_file(_TRAIN_LABELS_PATH)
@@ -246,9 +315,8 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
             already_printed = False
             for prediction in predictions:
                 if prediction["systole"].size>0 and prediction["diastole"].size>0:
-                    average_method = weighted_average_method
-                    prediction["systole_average"] = average_method(prediction["systole"], average=average_systole)
-                    prediction["diastole_average"] = average_method(prediction["diastole"], average=average_diastole)
+                    prediction["systole_average"] = average_method(prediction["systole"][None,:,:], average=average_systole)
+                    prediction["diastole_average"] = average_method(prediction["diastole"][None,:,:], average=average_diastole)
                     try:
                         test_if_valid_distribution(prediction["systole_average"])
                         test_if_valid_distribution(prediction["diastole_average"])
@@ -261,7 +329,7 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
                         test_if_valid_distribution(prediction["systole_average"])
                         test_if_valid_distribution(prediction["diastole_average"])
                 else:
-                    #TODO: is this smart to do? Are they really filtered out?
+                    # average distributions get zero weight later on
                     prediction["systole_average"] = average_systole
                     prediction["diastole_average"] = average_diastole
                     #prediction["systole_average"] = None
@@ -290,43 +358,70 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
 
         for j,patient in enumerate(validation_patients_indices):
             prediction = predictions[patient-1]
-            systole_expert_predictions_matrix[i,j,:] = prediction["systole_average"]
-            diastole_expert_predictions_matrix[i,j,:] = prediction["diastole_average"]
+            # average distributions get zero weight later on
+            systole_expert_predictions_matrix[i,j,:] = prediction["systole_average"] if "systole_average" in prediction else average_systole
+            diastole_expert_predictions_matrix[i,j,:] = prediction["diastole_average"] if "diastole_average" in prediction else average_diastole
 
-        average_systole_predictions_per_file[i] = [prediction["systole_average"] for prediction in predictions]
-        average_diastole_predictions_per_file[i] = [prediction["diastole_average"] for prediction in predictions]
+        # average distributions get zero weight later on
+        average_systole_predictions_per_file[i] = [prediction["systole_average"] if "systole_average" in prediction else average_systole for prediction in predictions]
+        average_diastole_predictions_per_file[i] = [prediction["diastole_average"] if "diastole_average" in prediction else average_diastole for prediction in predictions]
         del predictions  # can be LOADS of data
 
-    cv = [id-1 for id in validation_patients_indices]
-    systole_valid_labels = np.array([utils.cumulative_one_hot(v) for v in regular_labels[cv,1].flatten()])
 
-    systole_expert_weight, sys_loss = optimize_expert_weights(systole_expert_predictions_matrix,
-                                                    systole_valid_labels,
-                                                    average_systole,
-                                                    num_cross_validation_masks=NUM_VALIDATIONS,
-                                                    fold=1,
-                                                    )
+    for pass_index in xrange(1,11):
+        print
+        print "  PASS %d " % pass_index
+        print "==========="
 
-    diastole_valid_labels = np.array([utils.cumulative_one_hot(v) for v in regular_labels[cv,2].flatten()])
-    diastole_expert_weight, dia_loss = optimize_expert_weights(diastole_expert_predictions_matrix,
-                                                    diastole_valid_labels,
-                                                    average_diastole,
-                                                    num_cross_validation_masks=NUM_VALIDATIONS,
-                                                    fold=1,
-                                                    )
-    print
-    print "   Final systole loss: %.6f" % sys_loss
-    print "  Final diastole loss: %.6f" % dia_loss
-    print "                     + --------------"
-    print "                       %.6f" % ((sys_loss + dia_loss) / 2)
-    print
+        cv = [id-1 for id in validation_patients_indices]
 
-    # print the final weight of every expert
-    print "  Systole:  Diastole: Name:"
-    for expert_name, systole_weight, diastole_weight in zip(expert_pkl_files, systole_expert_weight, diastole_expert_weight):
-        print string.rjust("%.3f%%" % (100*systole_weight), 10),
-        print string.rjust("%.3f%%" % (100*diastole_weight), 10),
-        print expert_name.split('/')[-1]
+        systole_valid_labels = np.array([utils.cumulative_one_hot(v) for v in regular_labels[cv,1].flatten()])
+        if pass_index==1:
+            systole_expert_weight, sys_loss = optimize_expert_weights(systole_expert_predictions_matrix,
+                                                            systole_valid_labels,
+                                                            average_systole,
+                                                            num_cross_validation_masks=NUM_VALIDATIONS,
+                                                            fold=1,
+                                                            )
+            first_pass_sys_loss = sys_loss
+        else:
+            systole_expert_weight, sys_loss = optimize_expert_weights_second_pass(
+                                                        systole_expert_weight,
+                                                        systole_expert_predictions_matrix,
+                                                        systole_valid_labels,
+                                                        average_systole,
+                                                        )
+
+        diastole_valid_labels = np.array([utils.cumulative_one_hot(v) for v in regular_labels[cv,2].flatten()])
+        if pass_index==1:
+            diastole_expert_weight, dia_loss = optimize_expert_weights(diastole_expert_predictions_matrix,
+                                                            diastole_valid_labels,
+                                                            average_diastole,
+                                                            num_cross_validation_masks=NUM_VALIDATIONS,
+                                                            fold=1,
+                                                            )
+            first_pass_dia_loss = dia_loss
+        else:
+            diastole_expert_weight, dia_loss = optimize_expert_weights_second_pass(
+                                                        diastole_expert_weight,
+                                                        diastole_expert_predictions_matrix,
+                                                        diastole_valid_labels,
+                                                        average_diastole,
+                                                        )
+        print
+        print "   Final systole loss: %.6f" % sys_loss
+        print "  Final diastole loss: %.6f" % dia_loss
+        print "                     + --------------"
+        print "                       %.6f" % ((sys_loss + dia_loss) / 2)
+        print
+
+        # print the final weight of every expert
+        print "  Systole:  Diastole: Name:"
+        for expert_name, systole_weight, diastole_weight in zip(expert_pkl_files, systole_expert_weight, diastole_expert_weight):
+            print string.rjust("%.3f%%" % (100*systole_weight), 10),
+            print string.rjust("%.3f%%" % (100*diastole_weight), 10),
+            print expert_name.split('/')[-1]
+
 
     print
     print "Average the experts according to these weights to find the final distribution"
@@ -340,10 +435,10 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
     for final_prediction in final_predictions:
         patient_id = final_prediction['patient']
         systole_prediction_matrix = np.array([average_systole_predictions_per_file[i][patient_id-1] for i in xrange(NUM_EXPERTS)])
-        diastole_prediction_matrix = np.array([average_diastole_predictions_per_file[i][patient_id-1] for i in xrange(NUM_EXPERTS)])
-        final_prediction["final_systole"] = average_method(systole_prediction_matrix, average=average_systole, expert_weights=systole_expert_weight)
-        final_prediction["final_diastole"] = average_method(diastole_prediction_matrix, average=average_diastole, expert_weights=diastole_expert_weight)
 
+        diastole_prediction_matrix = np.array([average_diastole_predictions_per_file[i][patient_id-1] for i in xrange(NUM_EXPERTS)])
+        final_prediction["final_systole"] = average_method(systole_prediction_matrix[:,None,:], average=average_systole, expert_weights=systole_expert_weight)
+        final_prediction["final_diastole"] = average_method(diastole_prediction_matrix[:,None,:], average=average_diastole, expert_weights=diastole_expert_weight)
         try:
             test_if_valid_distribution(final_prediction["final_systole"])
             test_if_valid_distribution(final_prediction["final_diastole"])
@@ -356,7 +451,7 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
 
     print
     print "Calculating training and validation set scores for reference"
-    print "WARNING: both of the following are overfitted!"
+
 
     validation_dict = {}
     for patient_ids, set_name in [(validation_patients_indices, "validation"),
@@ -364,6 +459,7 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         errors = []
         for patient in patient_ids:
             prediction = final_predictions[patient-1]
+
             if "final_systole" in prediction:
                 assert patient == regular_labels[patient-1, 0]
                 error = utils.CRSP(prediction["final_systole"], regular_labels[patient-1, 1])
@@ -377,8 +473,10 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
             validation_dict[set_name] = estimated_CRSP
         else:
             print "  %s kaggle loss: not calculated" % (string.rjust(set_name, 12))
-
-
+    print "WARNING: both of the previous are overfitted!"
+    print
+    print "estimated leaderboard loss: %f" % ((first_pass_sys_loss + first_pass_dia_loss)/2)
+    print
 
 
     print "dumping submission file to %s" % submission_path

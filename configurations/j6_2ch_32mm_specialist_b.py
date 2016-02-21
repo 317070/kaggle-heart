@@ -66,7 +66,7 @@ augmentation_params = {
 
 
 def filter_samples(folders):
-    # don't use patients who don't have 4ch
+    # don't use patients who don't have 2ch
     import glob
     import os
     import cPickle as pickle
@@ -75,18 +75,17 @@ def filter_samples(folders):
 
     c = pickle.load(open("/data/dsb15_pkl/pkl_train_metadata.pkl"))
     c.update(pickle.load(open("/data/dsb15_pkl/pkl_validate_metadata.pkl")))
-    def has_4ch(f):
-        ch_slices = glob.glob(f+"/4ch_*.pkl")
+    def has_2ch(f):
+        ch_slices = glob.glob(f+"/2ch_*.pkl")
         if len(ch_slices) > 0:
             patient_id = str(data_loader._extract_id_from_path(ch_slices[0]))
             slice_name = os.path.basename(ch_slices[0])
             heart_size = max(float(d[patient_id][slice_name]['roi_radii'][0]) / c[patient_id][slice_name]['PixelSpacing'][0],
                              float(d[patient_id][slice_name]['roi_radii'][1]) / c[patient_id][slice_name]['PixelSpacing'][1])
-            return (heart_size>=32)
+            return (heart_size<32)
         else:
             return False
-    return [folder for folder in folders if has_4ch(folder)]
-
+    return [folder for folder in folders if has_2ch(folder)]
 
 
 use_hough_roi = True  # use roi to center patches
@@ -94,7 +93,7 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(256,256)))
+        normalised_patch_size=(64,64)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -145,7 +144,7 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_size = data_sizes["sliced:data:singleslice:4ch"]
+    input_size = data_sizes["sliced:data:singleslice:2ch"]
 
     l0 = nn.layers.InputLayer(input_size)
 
@@ -201,7 +200,7 @@ def build_model():
 
     return {
         "inputs":{
-            "sliced:data:singleslice:4ch": l0
+            "sliced:data:singleslice:2ch": l0
         },
         "outputs": {
             "systole": l_systole,

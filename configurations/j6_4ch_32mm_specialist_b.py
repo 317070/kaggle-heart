@@ -82,11 +82,10 @@ def filter_samples(folders):
             slice_name = os.path.basename(ch_slices[0])
             heart_size = max(float(d[patient_id][slice_name]['roi_radii'][0]) / c[patient_id][slice_name]['PixelSpacing'][0],
                              float(d[patient_id][slice_name]['roi_radii'][1]) / c[patient_id][slice_name]['PixelSpacing'][1])
-            return (heart_size>=32)
+            return (heart_size<32)
         else:
             return False
     return [folder for folder in folders if has_4ch(folder)]
-
 
 
 use_hough_roi = True  # use roi to center patches
@@ -94,7 +93,7 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(256,256)))
+        normalised_patch_size=(64,64)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 

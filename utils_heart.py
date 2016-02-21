@@ -4,6 +4,14 @@ import numpy as np
 import scipy.stats
 
 
+def make_monotone_cdf(cdf):
+    for j in xrange(len(cdf) - 1):
+        if not cdf[j] <= cdf[j + 1]:
+            cdf[j + 1] = cdf[j]
+    cdf = np.clip(cdf, 0.0, 1.0)
+    return cdf
+
+
 def rmse(predictions, targets):
     """
     :param predictions: (batch_size, 1)
@@ -108,8 +116,69 @@ def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, me
             if mean == 'geometric':
                 avg_prediction_cdf = scipy.stats.gmean(prediction_cdfs, axis=0)
             else:
-                # arithmetic mean
                 avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
+
+            avg_prediction_cdf = make_monotone_cdf(avg_prediction_cdf)
+            patient2cdf[patient_id].append(avg_prediction_cdf)
+
+    return patient2cdf
+
+
+def get_avg_patient_predictions_h(batch_predictions, batch_patient_ids):
+    nbatches = len(batch_predictions)
+    npredictions = len(batch_predictions[0])
+
+    patient_ids = []
+    for i in xrange(nbatches):
+        patient_ids += batch_patient_ids[i]
+
+    patient2idxs = defaultdict(list)
+    for i, pid in enumerate(patient_ids):
+        patient2idxs[pid].append(i)
+
+    patient2cdf = defaultdict(list)  # list[0] -systole cdf, list[1] - diastole cdf
+    for i in xrange(npredictions):
+        # collect predictions over batches
+        p = []
+        for j in xrange(nbatches):
+            p.append(batch_predictions[j][i])
+        p = np.vstack(p)
+
+        # average predictions over patient's predictions
+        for patient_id, patient_idxs in patient2idxs.iteritems():
+            # print patient_id, p[patient_idxs]
+            prediction_cdfs = heaviside_function(p[patient_idxs])
+            avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
+            patient2cdf[patient_id].append(avg_prediction_cdf)
+
+    return patient2cdf
+
+
+def get_avg_patient_predictions_c(batch_predictions, batch_patient_ids):
+    nbatches = len(batch_predictions)
+    npredictions = len(batch_predictions[0])
+
+    patient_ids = []
+    for i in xrange(nbatches):
+        patient_ids += batch_patient_ids[i]
+
+    patient2idxs = defaultdict(list)
+    for i, pid in enumerate(patient_ids):
+        patient2idxs[pid].append(i)
+
+    patient2cdf = defaultdict(list)  # list[0] -systole cdf, list[1] - diastole cdf
+    for i in xrange(npredictions):
+        # collect predictions over batches
+        p = []
+        for j in xrange(nbatches):
+            p.append(batch_predictions[j][i])
+        p = np.vstack(p)
+
+        # average predictions over patient's predictions
+        for patient_id, patient_idxs in patient2idxs.iteritems():
+            # print patient_id, p[patient_idxs]
+            prediction_cdfs = p[patient_idxs]
+            avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
             patient2cdf[patient_id].append(avg_prediction_cdf)
 
     return patient2cdf

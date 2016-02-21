@@ -155,10 +155,6 @@ for chunk_idx, (xs_chunk, ys_chunk, patient_idx) in izip(chunk_idxs,
             batch_valid_ids.append(ids_batch)
 
         # calculate validation loss across validation set
-        valid_loss = config().get_mean_validation_loss(batch_valid_predictions, batch_valid_targets)
-        print 'Validation loss: ', valid_loss
-        losses_eval_valid.append(valid_loss)
-
         valid_crps = config().get_mean_crps_loss(batch_valid_predictions, batch_valid_targets, batch_valid_ids)
         print 'Validation CRPS: ', valid_crps, np.mean(valid_crps)
         crps_eval_valid.append(valid_crps)

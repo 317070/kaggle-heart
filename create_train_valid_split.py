@@ -1,0 +1,69 @@
+# NOT TESTED!!!!!!!!!!!!!
+
+
+import numpy as np
+import glob
+import re
+import os
+import utils
+
+_DEFAULT_SEED = 317070
+
+
+def get_cross_validation_indices(indices, validation_index=0,
+                                 number_of_splits=6, rng_seed=_DEFAULT_SEED):
+    """Splits the indices randomly into a given number of folds.
+    The data is randomly split into the chosen number of folds. The indices
+    belonging to the requested fold are returned.
+    IMPORTANT: As a side effect, this function changes the numpy RNG seed.
+    Args:
+        indices: The list of indices to be split.
+        validation_index: Index of the split to return. (default = 0)
+        number_of_splits: Number of splits to make. (default = 6)
+        rng_seed: RNG seed to use.
+    Returns:
+        List of indices belonging to the requested split.
+    """
+    np.random.seed(rng_seed)
+    samples_per_split = len(indices) // number_of_splits
+
+    cross_validations = []
+
+    for _ in xrange(number_of_splits):
+        if len(indices) > samples_per_split:
+            validation_patients_indices = list(np.random.choice(indices, samples_per_split, replace=False))
+        else:
+            validation_patients_indices = indices
+        indices = [index for index in indices if index not in validation_patients_indices]
+        cross_validations.append(validation_patients_indices)
+
+    return cross_validations[validation_index]
+
+
+def split_train_validation(global_data_path, train_data_path, valid_data_path):
+    print "Loading data"
+
+    patient_dirs = sorted(glob.glob(global_data_path + "/*/study/"),
+                          key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))
+
+    validation_patients_indices = get_cross_validation_indices(indices=range(1, 501), validation_index=0)
+
+    VALIDATION_REGEX = "|".join(["(/%d/)" % i for i in validation_patients_indices])
+
+    train_patient_dirs = [folder for folder in patient_dirs if re.search(VALIDATION_REGEX, folder) is None]
+    validation_patient_dirs = [folder for folder in patient_dirs if folder not in train_patient_dirs]
+
+    for folder in train_patient_dirs:
+        f = os.path.dirname(os.path.abspath(folder))
+        utils.copy(f, train_data_path)
+
+    for folder in validation_patient_dirs:
+        f = os.path.dirname(os.path.abspath(folder))
+        utils.copy(f, valid_data_path)
+
+
+if __name__ == '__main__':
+    global_data_path = '/data/dsb15_pkl/pkl_train'
+    train_data_path = '/data/dsb15_pkl/pkl_splitted/train'
+    valid_data_path = '/data/dsb15_pkl/pkl_splitted/valid'
+    split_train_validation(global_data_path, train_data_path, valid_data_path)

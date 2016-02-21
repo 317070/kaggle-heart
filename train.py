@@ -35,6 +35,7 @@ metadata_path = metadata_dir + '/%s.pkl' % expid
 # logs
 logs_dir = utils.get_dir_path('logs')
 sys.stdout = logger.Logger(logs_dir + '/%s.log' % expid)
+sys.stderr = sys.stdout
 
 print 'Build model'
 model = config().build_model()

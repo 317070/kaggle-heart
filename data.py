@@ -11,7 +11,6 @@ import compressed_cache
 from configuration import config
 
 
-
 def read_labels(file_path):
     id2labels = {}
     train_csv = open(file_path)
@@ -50,7 +49,7 @@ def read_metadata(path):
 def sample_augmentation_parameters(transformation):
     random_params = None
 
-    if not all(v is None for k, v in transformation.items() if k not in ['patch_size', 'mm_patch_size']):
+    if not all(v is None for k, v in transformation.items() if k not in ['patch_size', 'mm_patch_size', 'mask_roi']):
         shift_x = config().rng.uniform(*transformation['translation_range_x'])
         shift_y = config().rng.uniform(*transformation['translation_range_y'])
         translation = (shift_x, shift_y)
@@ -66,9 +65,10 @@ def sample_augmentation_parameters(transformation):
 
 
 def transform_norm_rescale(data, metadata, transformation, roi=None, random_augmentation_params=None,
-                           mm_center_location=(.5, .4), mm_patch_size=(128, 128)):
+                           mm_center_location=(.5, .4), mm_patch_size=(128, 128), mask_roi=True):
     patch_size = transformation['patch_size']
     mm_patch_size = transformation['mm_patch_size'] if 'mm_patch_size' in transformation else mm_patch_size
+    mask_roi = transformation['mask_roi'] if 'mask_roi' in transformation else mask_roi
     out_shape = (30,) + patch_size
     out_data = np.zeros(out_shape, dtype='float32')
 
@@ -123,7 +123,7 @@ def transform_norm_rescale(data, metadata, transformation, roi=None, random_augm
     normalize_contrast_zmuv(out_data)
 
     # apply transformation to ROI and mask the images
-    if roi_center and roi_radii:
+    if roi_center and roi_radii and mask_roi:
         roi_scale = random_augmentation_params.roi_scale if random_augmentation_params else 1  # augmentation
         rescaled_roi_radii = (roi_scale * roi_radii[0], roi_scale * roi_radii[1])
         out_roi_radii = (int(rescaled_roi_radii[0] * pixel_spacing[0] / patch_scale),

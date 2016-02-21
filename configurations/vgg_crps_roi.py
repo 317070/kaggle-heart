@@ -184,4 +184,4 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
 
 
 def get_avg_patient_predictions(batch_predictions, batch_patient_ids, mean):
-    return utils_heart.get_patient_average_heaviside_predictions(batch_predictions, batch_patient_ids, mean)
+    return utils_heart.get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean)

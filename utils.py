@@ -57,6 +57,12 @@ def load_pkl(path):
     return obj
 
 
+def copy(from_folder, to_folder):
+    command = "cp -r %s %s/." % (from_folder, to_folder)
+    print command
+    os.system(command)
+
+
 def get_patient_id(path):
     return re.search(r'/(\d+)/study', path).group(1)
 

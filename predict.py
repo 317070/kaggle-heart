@@ -25,8 +25,7 @@ metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 if 'subconfiguration' in metadata:
     set_subconfiguration(metadata['subconfiguration'])
-else:
-    set_subconfiguration('vgg_rms_sd_norm_rescale')
+    
 set_configuration(config_name)
 
 # predictions paths
@@ -43,15 +42,6 @@ all_layers = nn.layers.get_all_layers(model.l_top)
 all_params = nn.layers.get_all_params(model.l_top)
 num_params = nn.layers.count_params(model.l_top)
 print '  number of parameters: %d' % num_params
-# print string.ljust('  layer output shapes:', 36),
-# print string.ljust('#params:', 10),
-# print 'output shape:'
-# for layer in all_layers[:-1]:
-#     name = string.ljust(layer.__class__.__name__, 32)
-#     num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
-#     num_param = string.ljust(num_param.__str__(), 10)
-#     print '    %s %s %s' % (name, num_param, layer.output_shape)
-
 nn.layers.set_all_param_values(model.l_top, metadata['param_values'])
 
 xs_shared = [nn.utils.shared_empty(dim=len(l.shape)) for l in model.l_ins]
@@ -77,9 +67,12 @@ if set == 'valid':
                 valid_data_iterator.generate()):
             for x_shared, x in zip(xs_shared, xs_batch_valid):
                 x_shared.set_value(x)
+
             batch_targets.append(ys_batch_valid)
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)
+
+    print 'Validation CRPS:', config().get_mean_crps_loss(batch_predictions, batch_targets, batch_ids)
 
     avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
     patient_targets = utils_heart.get_patient_average_heaviside_predictions(batch_targets, batch_ids, mean=mean)
@@ -90,8 +83,9 @@ if set == 'valid':
         crpss_sys.append(utils_heart.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
         crpss_dst.append(utils_heart.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
 
-    print 'Validation Systole CRPS: ', np.mean(crpss_sys)
-    print 'Validation Diastole CRPS: ', np.mean(crpss_dst)
+    crps0, crps1 = np.mean(crpss_sys), np.mean(crpss_dst)
+
+    print 'Patient CRPS0, CPRS1, average: ', crps0, crps1, 0.5 * (crps0 + crps1)
 
     utils.save_pkl(avg_patient_predictions, prediction_path)
     print ' predictions saved to %s' % prediction_path
@@ -114,7 +108,6 @@ if set == 'test':
             batch_ids.append(ids_batch)
 
     avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
-
     utils.save_pkl(avg_patient_predictions, prediction_path)
     print ' predictions saved to %s' % prediction_path
 

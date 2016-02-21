@@ -56,13 +56,11 @@ test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/da
                                                                   full_batch=False, random=False, infinite=False)
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
-max_nchunks = nchunks_per_epoch * 100
+max_nchunks = nchunks_per_epoch * 150
 learning_rate_schedule = {
-    0: 0.0001,
-    int(max_nchunks * 0.6): 0.00008,
-    int(max_nchunks * 0.7): 0.00004,
-    int(max_nchunks * 0.8): 0.00002,
-    int(max_nchunks * 0.9): 0.00001
+    0: 0.003,
+    int(max_nchunks * 0.8): 0.0003,
+    int(max_nchunks * 0.9): 0.00003,
 }
 validate_every = 2 * nchunks_per_epoch
 save_every = 2 * nchunks_per_epoch
@@ -187,4 +185,4 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
 
 
 def get_avg_patient_predictions(batch_predictions, batch_patient_ids, mean):
-    return utils_heart.get_patient_average_heaviside_predictions(batch_predictions, batch_patient_ids, mean)
+    return utils_heart.get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean)

@@ -30,15 +30,15 @@ caching = None
 validate_every = 10
 validate_train_set = True
 save_every = 10
-restart_from_save = True
+restart_from_save = False
 
 # Training (schedule) parameters
 # - batch sizes
 batch_size = 32
 sunny_batch_size = 4
 batches_per_chunk = 16
-AV_SLICE_PER_PAT = 11
-num_epochs_train = 80 * AV_SLICE_PER_PAT
+AV_SLICE_PER_PAT = 1
+num_epochs_train = 175 * AV_SLICE_PER_PAT
 
 # - learning rate and method
 base_lr = .0001
@@ -63,6 +63,7 @@ augmentation_params = {
     "roll_time": (0, 0),
     "flip_time": (0, 0),
 }
+
 
 use_hough_roi = True  # use roi to center patches
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
@@ -89,11 +90,17 @@ data_sizes = {
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:singleslice:2ch": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:singleslice:4ch": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
+    "sliced:meta:PatientAge": (batch_size, 1),
+    "sliced:meta:PatientSex": (batch_size, 1),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
 }
+
+
 
 # Objective
 l2_weight = 0.000
@@ -107,50 +114,34 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+test_time_augmentations = 200  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture
-def build_model(input_layer = None):
+def build_model():
 
-    #################
-    # Regular model #
-    #################
-    input_size = data_sizes["sliced:data:singleslice"]
+    #import here, such that our global variables are not overridden!
+    import j6_2ch_128mm, j6_4ch
 
-    if input_layer:
-        l0 = input_layer
-    else:
-        l0 = nn.layers.InputLayer(input_size)
+    meta_2ch = j6_2ch_128mm.build_model()
+    meta_4ch = j6_4ch.build_model()
 
-    l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l1 = nn.layers.dnn.MaxPool2DDNNLayer(l1b, pool_size=(2,2), stride=(2,2))
+    l_age = nn.layers.InputLayer(data_sizes["sliced:meta:PatientAge"])
+    l_sex = nn.layers.InputLayer(data_sizes["sliced:meta:PatientSex"])
 
-    l2a = nn.layers.dnn.Conv2DDNNLayer(l1,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l2b = nn.layers.dnn.Conv2DDNNLayer(l2a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l2 = nn.layers.dnn.MaxPool2DDNNLayer(l2b, pool_size=(2,2), stride=(2,2))
+    l_meta_2ch_systole = meta_2ch["meta_outputs"]["systole"]
+    l_meta_2ch_diastole = meta_2ch["meta_outputs"]["diastole"]
 
-    l3a = nn.layers.dnn.Conv2DDNNLayer(l2,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l3b = nn.layers.dnn.Conv2DDNNLayer(l3a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l3c = nn.layers.dnn.Conv2DDNNLayer(l3b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l3 = nn.layers.dnn.MaxPool2DDNNLayer(l3c, pool_size=(2,2), stride=(2,2))
+    l_meta_4ch_systole = meta_4ch["meta_outputs"]["systole"]
+    l_meta_4ch_diastole = meta_4ch["meta_outputs"]["diastole"]
 
-    l4a = nn.layers.dnn.Conv2DDNNLayer(l3,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l4b = nn.layers.dnn.Conv2DDNNLayer(l4a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l4c = nn.layers.dnn.Conv2DDNNLayer(l4b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l4 = nn.layers.dnn.MaxPool2DDNNLayer(l4c, pool_size=(2,2), stride=(2,2))
+    l_meta_systole = nn.layers.ConcatLayer([l_age, l_sex, l_meta_2ch_systole, l_meta_4ch_systole])
+    l_meta_diastole = nn.layers.ConcatLayer([l_age, l_sex, l_meta_2ch_diastole, l_meta_4ch_diastole])
 
-    l5a = nn.layers.dnn.Conv2DDNNLayer(l4,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l5b = nn.layers.dnn.Conv2DDNNLayer(l5a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l5c = nn.layers.dnn.Conv2DDNNLayer(l5b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l5 = nn.layers.dnn.MaxPool2DDNNLayer(l5c, pool_size=(2,2), stride=(2,2))
-
-    # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ldsys1 = nn.layers.DenseLayer(l_meta_systole, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
-    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
@@ -159,11 +150,11 @@ def build_model(input_layer = None):
     ldsys3dropnorm = layers.NormalisationLayer(ldsys3drop)
     l_systole = layers.CumSumLayer(ldsys3dropnorm)
 
-    # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+
+    lddia1 = nn.layers.DenseLayer(l_meta_diastole, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia1drop = nn.layers.dropout(lddia1, p=0.5)
-    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
     lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
@@ -172,26 +163,25 @@ def build_model(input_layer = None):
     lddia3dropnorm = layers.NormalisationLayer(lddia3drop)
     l_diastole = layers.CumSumLayer(lddia3dropnorm)
 
-
+    submodels = [meta_2ch, meta_4ch]
     return {
-        "inputs":{
-            "sliced:data:singleslice": l0
-        },
+        "inputs": dict({
+            "sliced:meta:PatientAge": l_age,
+            "sliced:meta:PatientSex": l_sex,
+        }, **{ k: v for d in [model["inputs"] for model in submodels]
+               for k, v in d.items() }
+        ),
         "outputs": {
             "systole": l_systole,
             "diastole": l_diastole,
         },
-        "regularizable": {
-            ldsys1: l2_weight,
-            ldsys2: l2_weight,
-            ldsys3: l2_weight_out,
-            lddia1: l2_weight,
-            lddia2: l2_weight,
-            lddia3: l2_weight_out,
-        },
-        "meta_outputs": {
-            "systole": ldsys2,
-            "diastole": lddia2,
+        "regularizable": dict({
+        }, **{ k: v for d in [model["regularizable"] for model in submodels if "regularizable" in model]
+               for k, v in d.items() }
+        ),
+        "pretrained":{
+            j6_2ch_128mm.__name__: meta_2ch["outputs"],
+            j6_4ch.__name__: meta_4ch["outputs"],
         }
     }
 

@@ -28,10 +28,7 @@ def _load_file(path):
     with open(path, "r") as f:
         data = pickle.load(f)
     return data
-"""
-            average_method = partial(np.mean, axis=0)
-            average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
-"""
+
 
 def softmax(z):
     z = z-np.max(z)

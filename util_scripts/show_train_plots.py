@@ -43,7 +43,7 @@ for file in files:
         print filename
         print "min kaggle loss:", min(valid_losses)
         print "end kaggle loss:", valid_losses[-1]
-        plt.show()
+plt.show()
 #    except:
  #       print "%s is corrupt. Skipping" % file
 

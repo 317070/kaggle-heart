@@ -253,6 +253,9 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
     # Iterate over folders
     for i, folder in enumerate(folders):
+        # find the id of the current patient in the folder name (=safer)
+        id = _extract_id_from_path(folder)
+
         files = _in_folder(folder)
         patient_result = dict()
         metadatas_result = dict()
@@ -273,6 +276,9 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     l = [sax for sax in files if "2ch" in sax]
                 else:
                     l = [sax for sax in files if "sax" in sax]
+                if not l:
+                    print "Warning: patient %d has no images of this type" % id
+                    continue
                 if "middle" in tag:
                     # Sort sax files, based on the integer in their name
                     l.sort(key=lambda f: int(re.findall("\d+", os.path.basename(f))[0]))
@@ -309,17 +315,19 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             elif tag.startswith("area_per_pixel"):
                 patient_result[tag] = None  # they are filled in in preprocessing
 
+            elif tag.startswith("sliced:meta:all"):
+                # get the key used in the pickle
+                key = tag[len("slided:meta:all:"):]
+                patient_result[tag] = [disk_access.load_metadata_from_file(f)[0][key] for f in files]
             elif tag.startswith("sliced:meta"):
                 # get the key used in the pickle
-                key = tag[len("slided:meta"):]
-                patient_result[tag] = [disk_access.load_metadata_from_file(f)[key] for f in files]
+                key = tag[len("slided:meta:"):]
+                patient_result[tag] = disk_access.load_metadata_from_file(files[0])[0][key]
             # add others when needed
 
         preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
 
         # load the labels
-        # find the id of the current patient in the folder name (=safer)
-        id = _extract_id_from_path(folder)
         if "patients" in wanted_output_tags:
             result["output"]["patients"][i] = id
 

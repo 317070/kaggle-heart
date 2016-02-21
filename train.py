@@ -51,12 +51,22 @@ def train_model(expid):
     print "output shape:"
     for layer in all_layers[:-1]:
         name = string.ljust(layer.__class__.__name__, 32)
-        num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
-        num_param = string.ljust(num_param.__str__(), 10)
-        num_size = string.ljust(np.prod(layer.output_shape).__str__(), 10)
+        num_param = sum([np.prod(p.get_value().shape[1:]) for p in layer.get_params()])
+        num_param = string.ljust(int(num_param).__str__(), 10)
+        num_size = string.ljust(np.prod(layer.output_shape[1:]).__str__(), 10)
         print "    %s %s %s %s" % (name,  num_param, num_size, layer.output_shape)
 
     obj = config().build_objective(interface_layers)
+
+    if "pretrained" in interface_layers:
+        for config_name, layers_dict in interface_layers["pretrained"].iteritems():
+            pretrained_metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % config_name.split('.')[1]
+            pretrained_resume_metadata = np.load(pretrained_metadata_path)
+            pretrained_top_layer = lasagne.layers.MergeLayer(
+                incomings = layers_dict.values()
+            )
+            lasagne.layers.set_all_param_values(pretrained_top_layer, pretrained_resume_metadata['param_values'])
+
     train_loss_theano = obj.get_loss()
     kaggle_loss_theano = obj.get_kaggle_loss()
     segmentation_loss_theano = obj.get_segmentation_loss()

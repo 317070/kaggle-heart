@@ -129,9 +129,9 @@ def build_model():
     #################
     # Regular model #
     #################
-    input_size = data_sizes["sliced:data:singleslice:4ch"]
+    input_size = list(data_sizes["sliced:data:singleslice:4ch"])
 
-    l0 = nn.layers.InputLayer(input_size)
+    l0 = nn.layers.InputLayer( [None] + input_size[1:])
 
     l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
@@ -199,5 +199,9 @@ def build_model():
             lddia2: l2_weight,
             lddia3: l2_weight_out,
         },
+        "meta_outputs": {
+            "systole": ldsys2,
+            "diastole": lddia2,
+        }
     }
 

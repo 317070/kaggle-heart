@@ -128,6 +128,13 @@ def filter_patient_folders():
         key[:] = _config().filter_samples(key)
         num_patients[set]=len(key)
 
+    if NUM_TRAIN_PATIENTS != num_patients['train']:
+        print "WARNING: keeping only %d of %d train patients!" % (num_patients['train'], NUM_TRAIN_PATIENTS)
+    if NUM_VALID_PATIENTS != num_patients['validation']:
+        print "WARNING: keeping only %d of %d validation patients!" % (num_patients['validation'], NUM_VALID_PATIENTS)
+    if NUM_TEST_PATIENTS != num_patients['test']:
+        print "WARNING: keeping only %d of %d test patients!" % (num_patients['test'], NUM_TEST_PATIENTS)
+
     NUM_TRAIN_PATIENTS = num_patients['train']
     NUM_VALID_PATIENTS = num_patients['validation']
     NUM_TEST_PATIENTS = num_patients['test']

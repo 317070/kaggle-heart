@@ -30,8 +30,12 @@ def train_model(expid):
 
     if theano.config.optimizer != "fast_run":
         print "WARNING: not running in fast mode!"
+
+    data_loader.filter_patient_folders()
+
     print "Build model"
     interface_layers = config().build_model()
+
 
     output_layers = interface_layers["outputs"]
     input_layers = interface_layers["inputs"]
@@ -132,7 +136,6 @@ def train_model(expid):
         losses_eval_valid_kaggle = []
         losses_eval_train_kaggle = []
 
-    data_loader.filter_patient_folders()
 
     create_train_gen = partial(config().create_train_gen,
                                required_input_keys = xs_shared.keys(),

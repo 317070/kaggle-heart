@@ -93,8 +93,9 @@ data_sizes = {
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice:2ch": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice:4ch": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
-    "sliced:data:ax": (batch_size, 30, nr_slices, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
+    "sliced:data:sax:locations": (batch_size, nr_slices),
+    "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:shape": (batch_size, 2,),
     "sliced:meta:PatientAge": (batch_size, 1),
     "sliced:meta:PatientSex": (batch_size, 1),
@@ -125,7 +126,7 @@ def build_model():
     #import here, such that our global variables are not overridden!
     import j6_2ch_128mm, j6_4ch, je_ss_jonisc64small_360
 
-    sax_input = nn.layers.InputLayer(data_sizes["sliced:data:randomslices"])
+    sax_input = nn.layers.InputLayer(data_sizes["sliced:data:sax"])
     sax_slices = nn.layers.ReshapeLayer(sax_input, (-1, [2], [3], [4]))
 
     meta_sax = je_ss_jonisc64small_360.build_model(input_layer = sax_slices)
@@ -145,6 +146,7 @@ def build_model():
 
     l_age = nn.layers.InputLayer(data_sizes["sliced:meta:PatientAge"])
     l_sex = nn.layers.InputLayer(data_sizes["sliced:meta:PatientSex"])
+    l_locations = nn.layers.InputLayer(data_sizes["sliced:data:sax:locations"])
 
     l_meta_2ch_systole = nn.layers.DenseLayer(meta_2ch["meta_outputs"]["systole"], num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
     l_meta_2ch_diastole = nn.layers.DenseLayer(meta_2ch["meta_outputs"]["diastole"], num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
@@ -152,8 +154,8 @@ def build_model():
     l_meta_4ch_systole = nn.layers.DenseLayer(meta_4ch["meta_outputs"]["systole"], num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
     l_meta_4ch_diastole = nn.layers.DenseLayer(meta_4ch["meta_outputs"]["diastole"], num_units=64, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    l_meta_systole = nn.layers.ConcatLayer([l_age, l_sex, l_meta_2ch_systole, l_meta_4ch_systole, l_sax_systole_flat])
-    l_meta_diastole = nn.layers.ConcatLayer([l_age, l_sex, l_meta_2ch_diastole, l_meta_4ch_diastole, l_sax_diastole_flat])
+    l_meta_systole = nn.layers.ConcatLayer([l_age, l_sex, l_meta_2ch_systole, l_meta_4ch_systole, l_locations, l_sax_systole_flat])
+    l_meta_diastole = nn.layers.ConcatLayer([l_age, l_sex, l_meta_2ch_diastole, l_meta_4ch_diastole, l_locations, l_sax_diastole_flat])
 
     ldsys1 = nn.layers.DenseLayer(l_meta_systole, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
@@ -183,9 +185,10 @@ def build_model():
     submodels = [meta_2ch, meta_4ch, meta_sax]
     return {
         "inputs": dict({
+            "sliced:data:sax": sax_input,
             "sliced:meta:PatientAge": l_age,
             "sliced:meta:PatientSex": l_sex,
-            "sliced:data:randomslices": sax_input,
+            "sliced:data:sax:locations": l_locations,
         }, **{ k: v for d in [model["inputs"] for model in [meta_2ch, meta_4ch]]
                for k, v in d.items() }
         ),

@@ -85,6 +85,25 @@ def sunny_preprocess_validation(chunk_x, img, chunk_y, lbl):
     chunk_y[:] = resize_to_make_sunny_fit(segmentation, output_shape=chunk_y.shape[-2:])
 
 
+def _make_4d_tensor(tensors):
+    """
+    Input: list of 3d tensors with a different first dimension.
+    Output: 4d tensor
+    """
+    max_frames = max([t.shape[0] for t in tensors])
+    min_frames = min([t.shape[0] for t in tensors])
+    # If all dimensions are equal, just make an array out of it
+    if min_frames == max_frames:
+        return np.array(tensors)
+    # Otherwise, we need to do it manually
+    else:
+        res = np.zeros((len(tensors), max_frames, tensors[0].shape[1], tensors[0].shape[2]))
+        for i, t in enumerate(tensors):
+            nr_padding_frames = max_frames - len(t)
+            res[i] = np.vstack([t] + [t[:1]]*nr_padding_frames)
+        return res
+
+
 def preprocess_normscale(patient_data, result, index, augment=True,
                          metadata=None,
                          normscale_resize_and_augment_function=normscale_resize_and_augment):
@@ -162,7 +181,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 clean_images([patient_3d_tensor], metadata=metadata, cleaning_processes=cleaning_processes_post)[0]
                 for patient_3d_tensor, metadata in zip(patient_3d_tensors, metadata_tag)]
 
-            patient_4d_tensor = np.array(patient_3d_tensors)
+            patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
 
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()

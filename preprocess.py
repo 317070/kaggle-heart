@@ -18,9 +18,15 @@ def sample_augmentation_parameters():
     augmentation_params = config().augmentation_params
     if quasi_random_generator is None:
         quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
-                                                                     permutation='Braaten-Weller')
+                                                                                  permutation='Braaten-Weller')
     res = dict()
-    sample = quasi_random_generator.next()
+    try:
+        sample = quasi_random_generator.next()
+    except ValueError:
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
+                                                                                  permutation='Braaten-Weller')
+        sample = quasi_random_generator.next()
+
     for rand, (key, (a, b)) in izip(sample, augmentation_params.iteritems()):
         #res[key] = config().rng.uniform(a,b)
         res[key] = a + rand*(b-a)

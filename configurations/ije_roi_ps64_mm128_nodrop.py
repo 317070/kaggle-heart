@@ -118,8 +118,7 @@ def build_model(l_in=None):
 
     l_sm0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=600, b=nn.init.Constant(0.1),
                                  nonlinearity=nn.nonlinearities.softmax)
-    l_sm0_norm = nn_heart.NormalisationLayer(nn.layers.dropout(l_sm0, p=0.5))
-    l_cdf0 = nn_heart.CumSumLayer(l_sm0_norm)
+    l_cdf0 = nn_heart.CumSumLayer(l_sm0)
 
     # ---------------------------------------------------------------
 
@@ -130,8 +129,7 @@ def build_model(l_in=None):
 
     l_sm1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=600, b=nn.init.Constant(0.1),
                                  nonlinearity=nn.nonlinearities.softmax)
-    l_sm1_norm = nn_heart.NormalisationLayer(nn.layers.dropout(l_sm1, p=0.5))
-    l_cdf1 = nn_heart.CumSumLayer(l_sm1_norm)
+    l_cdf1 = nn_heart.CumSumLayer(l_sm1)
 
     l_outs = [l_cdf0, l_cdf1]
     l_top = nn.layers.MergeLayer(l_outs)

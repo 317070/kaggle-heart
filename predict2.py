@@ -100,19 +100,29 @@ if set == 'test':
     print 'n test: %d' % test_data_iterator.nsamples
     print 'tta iteration:',
 
-    batch_predictions, batch_ids = [], []
+    batch_predictions, batch_targets, batch_ids = [], [], []
     for i in xrange(n_tta_iterations):
         print i,
         sys.stdout.flush()
-        for xs_batch_test, _, ids_batch in buffering.buffered_gen_threaded(test_data_iterator.generate()):
+        for xs_batch_test, ys_batch_valid, ids_batch in buffering.buffered_gen_threaded(test_data_iterator.generate()):
             for x_shared, x in zip(xs_shared, xs_batch_test):
                 x_shared.set_value(x)
+
+            batch_targets.append(ys_batch_valid)
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)
 
-    avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
-    utils.save_pkl(avg_patient_predictions, prediction_path)
-    print ' predictions saved to %s' % prediction_path
+    print 'Validation CRPS:', config().get_mean_crps_loss(batch_predictions, batch_targets, batch_ids)
 
-    utils.save_submission(avg_patient_predictions, submission_path)
-    print ' submission saved to %s' % submission_path
+    avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
+    patient_targets = utils_heart.get_patient_average_heaviside_predictions(batch_targets, batch_ids)
+
+    assert avg_patient_predictions.viewkeys() == patient_targets.viewkeys()
+    crpss_sys, crpss_dst = [], []
+    for id in avg_patient_predictions.iterkeys():
+        crpss_sys.append(utils_heart.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
+        crpss_dst.append(utils_heart.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
+
+    crps0, crps1 = np.mean(crpss_sys), np.mean(crpss_dst)
+
+    print 'Patient CRPS0, CPRS1, average: ', crps0, crps1, 0.5 * (crps0 + crps1)

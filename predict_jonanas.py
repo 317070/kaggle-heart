@@ -25,17 +25,15 @@ metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 if 'subconfiguration' in metadata:
     set_subconfiguration(metadata['subconfiguration'])
-else:
-    set_subconfiguration('vgg_rms_sd_norm_rescale')
 set_configuration(config_name)
 
 # predictions paths
 prediction_dir = utils.get_dir_path('predictions')
-prediction_path = prediction_dir + "/%s-%s-%s.pkl" % (metadata['experiment_id'], "both", mean)
+prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'both', n_tta_iterations, mean)
 
 # submissions paths
 submission_dir = utils.get_dir_path('submissions')
-submission_path = submission_dir + "/%s-%s-%s.csv" % (metadata['experiment_id'], "both", mean)
+submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], 'both', n_tta_iterations, mean)
 
 print "Build model"
 model = config().build_model()
@@ -43,14 +41,6 @@ all_layers = nn.layers.get_all_layers(model.l_top)
 all_params = nn.layers.get_all_params(model.l_top)
 num_params = nn.layers.count_params(model.l_top)
 print '  number of parameters: %d' % num_params
-# print string.ljust('  layer output shapes:', 36),
-# print string.ljust('#params:', 10),
-# print 'output shape:'
-# for layer in all_layers[:-1]:
-#     name = string.ljust(layer.__class__.__name__, 32)
-#     num_param = sum([np.prod(p.get_value().shape) for p in layer.get_params()])
-#     num_param = string.ljust(num_param.__str__(), 10)
-#     print '    %s %s %s' % (name, num_param, layer.output_shape)
 
 nn.layers.set_all_param_values(model.l_top, metadata['param_values'])
 
@@ -62,12 +52,10 @@ for l_in, x in izip(model.l_ins, xs_shared):
 iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
                                 givens=givens_in)
 
-predictions = [{"patient": i+1,
-                "systole": np.zeros((0,600)),
-                "diastole": np.zeros((0,600))
+predictions = [{"patient": i + 1,
+                "systole": np.zeros((0, 600)),
+                "diastole": np.zeros((0, 600))
                 } for i in xrange(NUM_PATIENTS)]
-
-
 
 if True:  # set == 'valid':
     valid_data_iterator = config().valid_data_iterator
@@ -89,11 +77,12 @@ if True:  # set == 'valid':
             batch_ids.append(ids_batch)
 
     for (systole_predictions, diastole_predictions), patient_ids in zip(batch_predictions, batch_ids):
-        for systole_prediction, diastole_prediction, patient_id in zip(systole_predictions, diastole_predictions, patient_ids):
-            patient_data = predictions[patient_id-1]
-            assert patient_data['patient']==patient_id
-            patient_data["systole"] = np.concatenate((patient_data["systole"], systole_prediction[None,:]),axis=0)
-            patient_data["diastole"] = np.concatenate((patient_data["diastole"], diastole_prediction[None,:]),axis=0)
+        for systole_prediction, diastole_prediction, patient_id in zip(systole_predictions, diastole_predictions,
+                                                                       patient_ids):
+            patient_data = predictions[patient_id - 1]
+            assert patient_data['patient'] == patient_id
+            patient_data["systole"] = np.concatenate((patient_data["systole"], systole_prediction[None, :]), axis=0)
+            patient_data["diastole"] = np.concatenate((patient_data["diastole"], diastole_prediction[None, :]), axis=0)
 
     avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
     patient_targets = utils_heart.get_patient_average_heaviside_predictions(batch_targets, batch_ids, mean=mean)
@@ -128,30 +117,31 @@ if True:  # set == 'test':
             batch_ids.append(ids_batch)
 
     for (systole_predictions, diastole_predictions), patient_ids in zip(batch_predictions, batch_ids):
-        for systole_prediction, diastole_prediction, patient_id in zip(systole_predictions, diastole_predictions, patient_ids):
-            patient_data = predictions[patient_id-1]
-            assert patient_data['patient']==patient_id
-            patient_data["systole"] = np.concatenate((patient_data["systole"], systole_prediction[None,:]),axis=0)
-            patient_data["diastole"] = np.concatenate((patient_data["diastole"], diastole_prediction[None,:]),axis=0)
+        for systole_prediction, diastole_prediction, patient_id in zip(systole_predictions, diastole_predictions,
+                                                                       patient_ids):
+            patient_data = predictions[patient_id - 1]
+            assert patient_data['patient'] == patient_id
+            patient_data["systole"] = np.concatenate((patient_data["systole"], systole_prediction[None, :]), axis=0)
+            patient_data["diastole"] = np.concatenate((patient_data["diastole"], diastole_prediction[None, :]), axis=0)
 
     avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
 
     utils.save_pkl(avg_patient_predictions, prediction_path)
     print ' predictions saved to %s' % prediction_path
 
-
     utils.save_submisssion(avg_patient_predictions, submission_path)
     print ' submission saved to %s' % submission_path
 
 import cPickle as pickle
+
 jonas_prediction_path = "/mnt/storage/metadata/kaggle-heart/predictions/ira_%s.pkl" % config().__name__
 
 with open(jonas_prediction_path, 'w') as f:
     pickle.dump({
-                    'metadata_path': metadata_path,
-                    'prediction_path': prediction_path,
-                    'submission_path': submission_path,
-                    'configuration_file': config().__name__,
-                    'git_revision_hash': utils.get_git_revision_hash(),
-                    'predictions': predictions
-                }, f, pickle.HIGHEST_PROTOCOL)
+        'metadata_path': metadata_path,
+        'prediction_path': prediction_path,
+        'submission_path': submission_path,
+        'configuration_file': config().__name__,
+        'git_revision_hash': utils.get_git_revision_hash(),
+        'predictions': predictions
+    }, f, pickle.HIGHEST_PROTOCOL)

@@ -45,14 +45,14 @@ def split_train_validation(global_data_path, train_data_path, valid_data_path, n
 
     patient_dirs = sorted(glob.glob(global_data_path + "/*/study/"),
                           key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))
+    dirs_indices = range(0, len(patient_dirs))
 
-    validation_patients_indices = get_cross_validation_indices(indices=range(1, len(patient_dirs) + 1),
-                                                               validation_index=0, number_of_splits=number_of_splits)
+    valid_dirs_indices = get_cross_validation_indices(indices=dirs_indices, validation_index=0,
+                                                      number_of_splits=number_of_splits)
+    train_patient_indices = list(set(dirs_indices) - set(valid_dirs_indices))
 
-    VALIDATION_REGEX = "|".join(["(/%d/)" % i for i in validation_patients_indices])
-
-    train_patient_dirs = [folder for folder in patient_dirs if re.search(VALIDATION_REGEX, folder) is None]
-    validation_patient_dirs = [folder for folder in patient_dirs if folder not in train_patient_dirs]
+    train_patient_dirs = [patient_dirs[idx] for idx in train_patient_indices]
+    validation_patient_dirs = [patient_dirs[idx] for idx in valid_dirs_indices]
 
     for folder in train_patient_dirs:
         f = os.path.dirname(os.path.abspath(folder))

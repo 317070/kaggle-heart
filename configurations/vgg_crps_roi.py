@@ -16,8 +16,8 @@ patch_size = (128, 128)
 train_transformation_params = {
     'patch_size': patch_size,
     'rotation_range': (-90, 90),
-    'translation_range_x': (-5, 10),
-    'translation_range_y': (-10, 5),
+    'translation_range_x': (-10, 10),
+    'translation_range_y': (-10, 10),
     'shear_range': (0, 0),
     'roi_scale_range': (0.9, 1.3),
     'do_flip': False,
@@ -167,6 +167,10 @@ def get_mean_validation_loss(batch_predictions, batch_targets):
     return [0, 0]
 
 
+def heaviside_function(x):
+    return np.float32((np.linspace(0, 599, 600) - x) >= 0)
+
+
 def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
     nbatches = len(batch_predictions)
     npredictions = len(batch_predictions[0])
@@ -178,10 +182,10 @@ def get_mean_crps_loss(batch_predictions, batch_targets, batch_ids):
             p.append(batch_predictions[j][i])
             t.append(batch_targets[j][i])
         p, t = np.vstack(p), np.vstack(t)
-        target_cdf = utils_heart.heaviside_function(t)
+        target_cdf = heaviside_function(t)
         crpss.append(np.mean((p - target_cdf) ** 2))
     return crpss
 
 
 def get_avg_patient_predictions(batch_predictions, batch_patient_ids, mean):
-    return utils_heart.get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean)
+    return utils_heart.get_patient_average_heaviside_predictions(batch_predictions, batch_patient_ids, mean)

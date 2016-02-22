@@ -9,7 +9,7 @@ import cPickle as pickle
 import utils
 
 print utils.get_dir_path('train')
-filenames = glob.glob(utils.get_dir_path('train') + '/*rescale*.pkl')
+filenames = glob.glob(utils.get_dir_path('train') + '/*vgg_crps_roi-geit*.pkl')
 
 for f in filenames:
     metadata = pickle.load(open(f))

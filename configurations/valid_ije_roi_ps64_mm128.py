@@ -42,21 +42,22 @@ train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/d
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
                                                                    full_batch=True, random=True, infinite=True)
 
-valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
+valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid2',
                                                                    batch_size=chunk_size,
                                                                    transform_params=valid_transformation_params,
                                                                    labels_path='/data/dsb15_pkl/train.csv',
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
                                                                    full_batch=False, random=False, infinite=False)
 
-test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
+test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid1',
                                                                   batch_size=chunk_size,
                                                                   transform_params=train_transformation_params,
-                                                                  slice2roi_path='pkl_validate_slice2roi.pkl',
+                                                                  labels_path='/data/dsb15_pkl/train.csv',
+                                                                  slice2roi_path='pkl_train_slice2roi.pkl',
                                                                   full_batch=False, random=False, infinite=False)
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
-max_nchunks = nchunks_per_epoch * 150
+max_nchunks = nchunks_per_epoch * 50
 learning_rate_schedule = {
     0: 0.0001,
     int(max_nchunks * 0.6): 0.00008,
@@ -118,8 +119,8 @@ def build_model(l_in=None):
 
     l_sm0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=600, b=nn.init.Constant(0.1),
                                  nonlinearity=nn.nonlinearities.softmax)
-    l_sm0_norm = nn_heart.NormalisationLayer(nn.layers.dropout(l_sm0, p=0.5))
-    l_cdf0 = nn_heart.CumSumLayer(l_sm0_norm)
+    l_sm0 = nn_heart.NormalisationLayer(nn.layers.dropout(l_sm0, p=0.5))
+    l_cdf0 = nn_heart.CumSumLayer(l_sm0)
 
     # ---------------------------------------------------------------
 
@@ -130,8 +131,8 @@ def build_model(l_in=None):
 
     l_sm1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=600, b=nn.init.Constant(0.1),
                                  nonlinearity=nn.nonlinearities.softmax)
-    l_sm1_norm = nn_heart.NormalisationLayer(nn.layers.dropout(l_sm1, p=0.5))
-    l_cdf1 = nn_heart.CumSumLayer(l_sm1_norm)
+    l_sm1 = nn_heart.NormalisationLayer(nn.layers.dropout(l_sm1, p=0.5))
+    l_cdf1 = nn_heart.CumSumLayer(l_sm1)
 
     l_outs = [l_cdf0, l_cdf1]
     l_top = nn.layers.MergeLayer(l_outs)
@@ -139,7 +140,8 @@ def build_model(l_in=None):
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
-    dense_layers = [l_d01, l_d02, l_d11, l_d12, l_sm0, l_sm1]
+    regularizable_layers = [l_d01, l_d02, l_d11, l_d12]
+    dense_layers = [l_d01, l_d02, l_d11, l_d12]
 
     return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'dense_layers'])([l_in], l_outs, l_targets,
                                                                                           l_top, dense_layers)

@@ -7,15 +7,9 @@ import scipy.stats
 def make_monotone_cdf(cdf):
     cdf_out = np.copy(cdf)
     for j in xrange(len(cdf_out) - 1):
-        if cdf_out[j] < 0.01:
-            cdf_out[j] = 0.
-
-        if cdf_out[j] > 0.99:
-            cdf_out[j] = 1.
-
         if cdf_out[j] > cdf_out[j + 1]:
             cdf_out[j + 1] = cdf_out[j]
-
+    cdf_out = np.clip(cdf_out, 0., 1.)
     return cdf_out
 
 
@@ -90,7 +84,7 @@ def get_patient_average_heaviside_predictions(batch_predictions, batch_patient_i
     return patient2cdf
 
 
-def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean='arithmetic'):
+def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean='geometric'):
     """
 
     :param batch_predictions: cdf predictions per slice
@@ -122,8 +116,10 @@ def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, me
             prediction_cdfs = p[patient_idxs]
             if mean == 'geometric':
                 avg_prediction_cdf = scipy.stats.gmean(prediction_cdfs, axis=0)
-            else:
+            elif mean == 'arithmetic':
                 avg_prediction_cdf = np.mean(prediction_cdfs, axis=0)
+            else:
+                raise ValueError('No averaging method is given')
 
             avg_prediction_cdf = make_monotone_cdf(avg_prediction_cdf)
             patient2cdf[patient_id].append(avg_prediction_cdf)

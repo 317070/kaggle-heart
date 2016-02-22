@@ -188,6 +188,8 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 
+        elif tag.startswith("sliced:data:sax:locations"):
+            pass  # will be filled in by the next one
         elif tag.startswith("sliced:data:sax"):
             # step 1: sort (data, metadata_tag) with slice_location_finder
             slice_locations = slice_location_finder({i: metadata for i,metadata in enumerate(metadata_tag)})

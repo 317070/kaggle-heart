@@ -34,9 +34,9 @@ restart_from_save = False
 
 # Training (schedule) parameters
 # - batch sizes
-batch_size = 2
+batch_size = 32
 sunny_batch_size = 4
-batches_per_chunk = 16
+batches_per_chunk = 4
 AV_SLICE_PER_PAT = 1
 num_epochs_train = 175 * AV_SLICE_PER_PAT
 

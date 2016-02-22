@@ -43,7 +43,7 @@ num_epochs_train = 175 * AV_SLICE_PER_PAT
 # - learning rate and method
 base_lr = .0001
 learning_rate_schedule = {
-    0: base_lr,
+    0: base_lr/10,
     num_epochs_train*9/10: base_lr/10,
 }
 momentum = 0.9

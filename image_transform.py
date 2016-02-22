@@ -1,13 +1,10 @@
 """
 take in a numpy tensor, and reshape last 2 dimensions as images to fit the desired shape
 """
-import glob
-import os
 import multiprocessing as mp
 import numpy as np
 import skimage.io
 import skimage.transform
-import utils
 
 
 
@@ -81,6 +78,8 @@ def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
             zoom=(1.0, 1.0),    # No zooming to preserve scale!
             rotation=augment["rotation"],
             shear=augment["shear"],
+            skew_x = augment["skew_x"],
+            skew_y = augment["skew_y"],
             translation=augment["translation"],
             flip_vert=augment["flip_vert"]>.5,
         )
@@ -313,7 +312,7 @@ def build_shift_center_transform(image_shape, center_location, patch_size):
         skimage.transform.SimilarityTransform(translation=translation_uncenter))
 
 
-def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translation=(0, 0), flip=False, flip_vert=False):
+def build_augmentation_transform(zoom=(1.0, 1.0), skew_x=0, skew_y=0, rotation=0, shear=0, translation=(0, 0), flip=False, flip_vert=False):
     if flip:
         shear += 180
         rotation += 180
@@ -324,16 +323,24 @@ def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translati
         shear += 180
 
     tform_augment = skimage.transform.AffineTransform(scale=(1/zoom[0], 1/zoom[1]), rotation=np.deg2rad(rotation), shear=np.deg2rad(shear), translation=translation)
-    return tform_augment
+    skew_x = np.deg2rad(skew_x)
+    skew_y = np.deg2rad(skew_y)
+    tform_skew = skimage.transform.ProjectiveTransform(matrix=np.array([[np.tan(skew_x)*np.tan(skew_y) + 1, np.tan(skew_x), 0],
+                                                                        [np.tan(skew_y), 1, 0],
+                                                                        [0, 0, 1]]))
+    return tform_skew + tform_augment
 
 
-def random_perturbation_transform(zoom_range, rotation_range, shear_range, translation_range, do_flip=True, allow_stretch=False, rng=np.random):
+def random_perturbation_transform(zoom_range=[1.0, 1.0], rotation_range=[0.0, 0.0], skew_x_range=[0.0, 0.0], skew_y_range=[0.0, 0.0], shear_range=[0.0, 0.0], translation_range=[0.0, 0.0], do_flip=True, allow_stretch=False, rng=np.random):
     shift_x = rng.uniform(*translation_range)
     shift_y = rng.uniform(*translation_range)
     translation = (shift_x, shift_y)
 
     rotation = rng.uniform(*rotation_range)
     shear = rng.uniform(*shear_range)
+
+    skew_x = rng.uniform(*skew_x_range)
+    skew_y = rng.uniform(*skew_y_range)
 
     if do_flip:
         flip = (rng.randint(2) > 0) # flip half of the time
@@ -356,7 +363,7 @@ def random_perturbation_transform(zoom_range, rotation_range, shear_range, trans
         zoom_x = zoom_y = np.exp(rng.uniform(*log_zoom_range))
     # the range should be multiplicatively symmetric, so [1/1.1, 1.1] instead of [0.9, 1.1] makes more sense.
 
-    return build_augmentation_transform((zoom_x, zoom_y), rotation, shear, translation, flip)
+    return build_augmentation_transform((zoom_x, zoom_y), skew_x, skew_y, rotation, shear, translation, flip)
 
 
 def perturb(img, augmentation_params, target_shape=(50, 50), rng=np.random):

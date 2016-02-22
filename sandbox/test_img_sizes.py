@@ -3,8 +3,7 @@ import re
 import data_test
 import utils
 
-# data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
-data_path = '/data/dsb15_pkl/pkl_train'
+data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
 
 
 def test_1():
@@ -28,6 +27,22 @@ def test_1():
 
     print max_norm_shape_0
     print max_norm_shape_1
+
+
+def test_3():
+    patient_path = sorted(glob.glob(data_path + '/*/study'))
+    for p in patient_path:
+        px = []
+        spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
+        for s in spaths:
+            data = data_test.read_slice(s)
+            metadata = data_test.read_metadata(s)
+            px.append(metadata['PixelSpacing'][0])
+
+        px = set(px)
+        if len(px) != 1:
+            print p
+            print px
 
 
 def test_2():
@@ -64,4 +79,4 @@ def test_2():
 
 
 if __name__ == '__main__':
-    test_2()
+    test_3()

@@ -68,7 +68,7 @@ def get_patient_id(path):
 
 
 def get_slice_id(path):
-    return re.search(r'/(sax_\d+\.pkl)$', path).group(1)
+    return re.search(r'/((sax|2ch|4ch)_\d+\.pkl)$', path).group(1)
 
 
 def current_learning_rate(schedule, idx):
@@ -82,7 +82,7 @@ def current_learning_rate(schedule, idx):
     return current_lr
 
 
-def save_submisssion(patient_predictions, submission_path):
+def save_submission(patient_predictions, submission_path):
     """
     :param patient_predictions: dict of {patient_id: [systole_cdf, diastole_cdf]}
     :param submission_path:

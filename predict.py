@@ -3,7 +3,6 @@ import numpy as np
 import theano
 from itertools import izip
 import lasagne as nn
-import string
 import utils
 import buffering
 import utils_heart
@@ -25,16 +24,16 @@ metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 if 'subconfiguration' in metadata:
     set_subconfiguration(metadata['subconfiguration'])
-    
+
 set_configuration(config_name)
 
 # predictions paths
 prediction_dir = utils.get_dir_path('predictions')
-prediction_path = prediction_dir + "/%s-%s-%s.pkl" % (metadata['experiment_id'], set, mean)
+prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], set, n_tta_iterations, mean)
 
 # submissions paths
 submission_dir = utils.get_dir_path('submissions')
-submission_path = submission_dir + "/%s-%s-%s.csv" % (metadata['experiment_id'], set, mean)
+submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], set, n_tta_iterations, mean)
 
 print "Build model"
 model = config().build_model()
@@ -59,10 +58,12 @@ if set == 'valid':
 
     print
     print 'n valid: %d' % valid_data_iterator.nsamples
+    print 'tta iteration:',
 
     batch_predictions, batch_targets, batch_ids = [], [], []
     for i in xrange(n_tta_iterations):
-        # print 'tta iteration %d' % i
+        print i,
+        sys.stdout.flush()
         for xs_batch_valid, ys_batch_valid, ids_batch in buffering.buffered_gen_threaded(
                 valid_data_iterator.generate()):
             for x_shared, x in zip(xs_shared, xs_batch_valid):
@@ -93,16 +94,17 @@ if set == 'valid':
 
 if set == 'test':
     test_data_iterator = config().test_data_iterator
-    if n_tta_iterations > 1:
-        test_data_iterator.transformation_params = config().train_transformation_params
+    test_data_iterator.transformation_params = config().train_transformation_params
 
     print 'n test: %d' % test_data_iterator.nsamples
+    print 'tta iteration:',
 
     batch_predictions, batch_ids = [], []
     for i in xrange(n_tta_iterations):
-        print 'tta iteration %d' % i
-        for xs_batch_valid, _, ids_batch in buffering.buffered_gen_threaded(test_data_iterator.generate()):
-            for x_shared, x in zip(xs_shared, xs_batch_valid):
+        print i,
+        sys.stdout.flush()
+        for xs_batch_test, _, ids_batch in buffering.buffered_gen_threaded(test_data_iterator.generate()):
+            for x_shared, x in zip(xs_shared, xs_batch_test):
                 x_shared.set_value(x)
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)
@@ -111,5 +113,5 @@ if set == 'test':
     utils.save_pkl(avg_patient_predictions, prediction_path)
     print ' predictions saved to %s' % prediction_path
 
-    utils.save_submisssion(avg_patient_predictions, submission_path)
+    utils.save_submission(avg_patient_predictions, submission_path)
     print ' submission saved to %s' % submission_path

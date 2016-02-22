@@ -11,13 +11,60 @@ except:
     print 'matplotlib not imported'
 
 
+def orthogonal_projection_on_slice(percentual_coordinate, source_metadata, target_metadata):
+    point = np.array([[percentual_coordinate[0]],
+                      [percentual_coordinate[1]],
+                      [0],
+                      [1]])
+    image_size = [source_metadata["Rows"], source_metadata["Columns"]]
+    point = np.dot(np.array([[image_size[0], 0, 0, 0],
+                             [0, image_size[1], 0, 0],
+                             [0, 0, 0, 0],
+                             [0, 0, 0, 1]]), point)
+    pixel_spacing = source_metadata["PixelSpacing"]
+    point = np.dot(np.array([[pixel_spacing[0], 0, 0, 0],
+                             [0, pixel_spacing[1], 0, 0],
+                             [0, 0, 0, 0],
+                             [0, 0, 0, 1]]), point)
+    Fa = np.array(source_metadata["ImageOrientationPatient"]).reshape((2, 3))[::-1, :]
+    posa = source_metadata["ImagePositionPatient"]
+    point = np.dot(np.array([[Fa[0, 0], Fa[1, 0], 0, posa[0]],
+                             [Fa[0, 1], Fa[1, 1], 0, posa[1]],
+                             [Fa[0, 2], Fa[1, 2], 0, posa[2]],
+                             [0, 0, 0, 1]]), point)
+    posb = target_metadata["ImagePositionPatient"]
+    point = np.dot(np.array([[1, 0, 0, -posb[0]],
+                             [0, 1, 0, -posb[1]],
+                             [0, 0, 1, -posb[2]],
+                             [0, 0, 0, 1]]), point)
+    Fb = np.array(target_metadata["ImageOrientationPatient"]).reshape((2, 3))[::-1, :]
+    ff0 = np.sqrt(np.sum(Fb[0, :] * Fb[0, :]))
+    ff1 = np.sqrt(np.sum(Fb[1, :] * Fb[1, :]))
+
+    point = np.dot(np.array([[Fb[0, 0] / ff0, Fb[0, 1] / ff0, Fb[0, 2] / ff0, 0],
+                             [Fb[1, 0] / ff1, Fb[1, 1] / ff1, Fb[1, 2] / ff1, 0],
+                             [0, 0, 0, 0],
+                             [0, 0, 0, 1]]), point)
+    pixel_spacing = target_metadata["PixelSpacing"]
+    point = np.dot(np.array([[1. / pixel_spacing[0], 0, 0, 0],
+                             [0, 1. / pixel_spacing[1], 0, 0],
+                             [0, 0, 0, 0],
+                             [0, 0, 0, 1]]), point)
+    image_size = [target_metadata["Rows"], target_metadata["Columns"]]
+    point = np.dot(np.array([[1. / image_size[0], 0, 0, 0],
+                             [0, 1. / image_size[1], 0, 0],
+                             [0, 0, 0, 0],
+                             [0, 0, 0, 1]]), point)
+    return point[:2, 0]  # percentual coordinate as well
+
+
 def get_patient_data(patient_data_path):
     patient_data = []
-    spaths = sorted(glob.glob(patient_data_path + '/sax_*.pkl'),
+    spaths = sorted(glob.glob(patient_data_path + '/*.pkl'),
                     key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
-    pid = re.search(r'/(\d+)/study$', patient_data_path).group(1)
+    pid = utils.get_patient_id(patient_data_path)
     for s in spaths:
-        slice_id = re.search(r'/(sax_\d+\.pkl)$', s).group(1)
+        slice_id = utils.get_slice_id(s)
         metadata = data.read_metadata(s)
         d = data.read_slice(s)
         patient_data.append({'data': d, 'metadata': metadata,
@@ -25,7 +72,7 @@ def get_patient_data(patient_data_path):
     return patient_data
 
 
-def sort_slices(slices):
+def sort_sax_slices(slices):
     nslices = len(slices)
     positions = np.zeros((nslices,))
     for i in xrange(nslices):
@@ -35,7 +82,7 @@ def sort_slices(slices):
     return sorted_slices
 
 
-def group_slices(slice_stack):
+def group_sax_slices(slice_stack):
     """
     Groups slices into stacks with the same image orientation
     :param slice_stack:
@@ -96,40 +143,93 @@ def get_slice2roi(data_path, plot=False):
     slice2roi = {}
     for p in patient_paths:
         patient_data = get_patient_data(p)
-        sorted_slices = sort_slices(patient_data)
-        grouped_slices = group_slices(sorted_slices)
+
+        # sax slices
+        sax_slice_stack = []
+        ch4, ch2 = None, None
+        for s in patient_data:
+            if 'sax' in s['slice_id']:
+                sax_slice_stack.append(s)
+            elif '4ch' in s['slice_id']:
+                ch4 = s
+            elif '2ch' in s['slice_id']:
+                ch2 = s
+
+        sorted_sax_slices = sort_sax_slices(sax_slice_stack)
+        grouped_sax_slices = group_sax_slices(sorted_sax_slices)
 
         # init patient dict
-        pid = sorted_slices[0]['patient_id']
+        pid = sorted_sax_slices[0]['patient_id']
         # print pid
         slice2roi[pid] = {}
 
-        # pixel spacing doesn't change within one patient
-        pixel_spacing = sorted_slices[0]['metadata']['PixelSpacing'][0]
+        for slice_group in grouped_sax_slices:
+            # pixel spacing changes within one patient but not too much
+            pixel_spacing = slice_group[0]['metadata']['PixelSpacing'][0]
+            roi_center, roi_radii = data.extract_roi(slice_group, pixel_spacing)
 
-        for slice_group in grouped_slices:
-            try:
-                roi_center, roi_radii = data.extract_roi(slice_group, pixel_spacing)
-            except:
-                print 'Could not find ROI'
-                roi_center, roi_radii = None, None
-            print roi_center, roi_radii
-
-            if plot and roi_center and roi_radii:
+            if plot:
                 plot_roi(slice_group, roi_center, roi_radii)
 
             for s in slice_group:
                 sid = s['slice_id']
                 slice2roi[pid][sid] = {'roi_center': roi_center, 'roi_radii': roi_radii}
 
-    filename = data_path.split('/')[-1] + '_slice2roi.pkl'
+        # project found roi_centers on the 4ch and 2ch slice
+        ch4_centers = []
+        ch2_centers = []
+        for slice in sorted_sax_slices:
+            sid = slice['slice_id']
+            roi_center = slice2roi[pid][sid]['roi_center']
+
+            metadata_source = slice['metadata']
+            hough_roi_center = (float(roi_center[0]) / metadata_source['Rows'],
+                                float(roi_center[1]) / metadata_source['Columns'])
+            if ch4 is not None:
+                metadata_target = ch4['metadata']
+                result = orthogonal_projection_on_slice(hough_roi_center, metadata_source, metadata_target)
+                ch_roi_center = [float(result[0]) * metadata_target['Rows'],
+                                 float(result[1]) * metadata_target['Columns']]
+                ch4_centers.append(ch_roi_center)
+
+            if ch2 is not None:
+                metadata_target = ch2['metadata']
+                result = orthogonal_projection_on_slice(hough_roi_center, metadata_source, metadata_target)
+                ch_roi_center = [float(result[0]) * metadata_target['Rows'],
+                                 float(result[1]) * metadata_target['Columns']]
+                ch2_centers.append(ch_roi_center)
+
+        if ch4 is not None:
+            centers = np.array(ch4_centers)
+            ch4_result_center = tuple(np.mean(centers, axis=0))
+            ch4_result_radius = np.max(np.sqrt((centers - ch4_result_center) ** 2))
+            ch4_result_radius = (ch4_result_radius, ch4_result_radius)
+            sid = ch4['slice_id']
+            slice2roi[pid][sid] = {'roi_center': ch4_result_center,
+                                   'roi_radii': ch4_result_radius}
+            if plot:
+                plot_roi([ch4], ch4_result_center, ch4_result_radius)
+
+        if ch2 is not None:
+            centers = np.array(ch2_centers)
+            ch2_result_center = tuple(np.mean(centers, axis=0))
+            ch2_result_radius = np.max(np.sqrt((centers - ch2_result_center) ** 2))
+            ch2_result_radius = (ch2_result_radius, ch2_result_radius)
+            sid = ch2['slice_id']
+            slice2roi[pid][sid] = {'roi_center': ch2_result_center,
+                                   'roi_radii': ch2_result_radius}
+
+            if plot:
+                plot_roi([ch2], ch2_result_center, ch2_result_radius)
+
+    filename = data_path.split('/')[-1] + '_slice2roi_koe.pkl'
     utils.save_pkl(slice2roi, filename)
     print 'saved to ', filename
     return slice2roi
 
 
 if __name__ == '__main__':
-    # data_paths = ['/data/dsb15_pkl/pkl_train', '/data/dsb15_pkl/pkl_validate']
-    data_paths = ['/mnt/sda3/data/kaggle-heart/pkl_validate']
+    data_paths = ['/data/dsb15_pkl/pkl_train', '/data/dsb15_pkl/pkl_validate']
+    # data_paths = ['/mnt/sda3/data/kaggle-heart/pkl_validate']
     for d in data_paths:
-        get_slice2roi(d, plot=True)
+        get_slice2roi(d, plot=False)

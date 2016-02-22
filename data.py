@@ -39,7 +39,7 @@ def read_metadata(path):
     metadata['ImageOrientationPatient'] = np.float32(metadata['ImageOrientationPatient'])
     metadata['SliceLocation'] = np.float32(metadata['SliceLocation'])
     metadata['ImagePositionPatient'] = np.float32(metadata['ImagePositionPatient'])
-    metadata['PatientSex'] = 1 if metadata['PatientSex'] == 'F' else 0
+    metadata['PatientSex'] = 1 if metadata['PatientSex'] == 'F' else -1
     metadata['PatientAge'] = int(metadata['PatientAge'][1:3])
     metadata['Rows'] = int(metadata['Rows'])
     metadata['Columns'] = int(metadata['Columns'])
@@ -294,26 +294,32 @@ def normalize_contrast_zmuv(data, z=2):
 def slice_location_finder(slicepath2metadata):
     """
     :param slicepath2metadata: dict with arbitrary keys, and metadata values
-    :return: dict with "relative_position" and "middle_pixel_position" (and others)
+    :return:
     """
+
     slicepath2midpix = {}
     slicepath2position = {}
 
     for sp, metadata in slicepath2metadata.iteritems():
-        image_orientation = metadata["ImageOrientationPatient"]
-        image_position = metadata["ImagePositionPatient"]
-        pixel_spacing = metadata["PixelSpacing"]
-        rows = metadata['Rows']
-        columns = metadata['Columns']
+        if 'sax' in sp:
+            image_orientation = metadata["ImageOrientationPatient"]
+            image_position = metadata["ImagePositionPatient"]
+            pixel_spacing = metadata["PixelSpacing"]
+            rows = metadata['Rows']
+            columns = metadata['Columns']
 
-        # calculate value of middle pixel
-        F = np.array(image_orientation).reshape((2, 3))
-        # reversed order, as per http://nipy.org/nibabel/dicom/dicom_orientation.html
-        i, j = columns / 2.0, rows / 2.0
-        im_pos = np.array([[i * pixel_spacing[0], j * pixel_spacing[1]]], dtype='float32')
-        pos = np.array(image_position).reshape((1, 3))
-        position = np.dot(im_pos, F) + pos
-        slicepath2midpix[sp] = position[0, :]
+            # calculate value of middle pixel
+            F = np.array(image_orientation).reshape((2, 3))
+            # reversed order, as per http://nipy.org/nibabel/dicom/dicom_orientation.html
+            i, j = columns / 2.0, rows / 2.0
+            im_pos = np.array([[i * pixel_spacing[0], j * pixel_spacing[1]]], dtype='float32')
+            pos = np.array(image_position).reshape((1, 3))
+            position = np.dot(im_pos, F) + pos
+            slicepath2midpix[sp] = position[0, :]
+        if '2ch' in sp:
+            slicepath2position[sp] = -10
+        if '4ch' in sp:
+            slicepath2position[sp] = -50
 
     if len(slicepath2midpix) == 1:
         for sp, midpix in slicepath2midpix.iteritems():

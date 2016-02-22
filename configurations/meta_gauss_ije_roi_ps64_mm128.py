@@ -8,7 +8,7 @@ from configuration import subconfig
 import utils_heart
 
 caching = 'memory'
-restart_from_save = '/home/ikorshun/metadata/train/ikorshun-geit/meta_vgg_crps_roi-geit-20160219-110636.pkl'
+restart_from_save = None
 
 rng = subconfig().rng
 patch_size = subconfig().patch_size
@@ -50,7 +50,7 @@ valid_data_iterator.nslices = nslices
 test_data_iterator.nslices = nslices
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
-max_nchunks = nchunks_per_epoch * 100
+max_nchunks = nchunks_per_epoch * 200
 learning_rate_schedule = {
     0: 0.0001,
     int(max_nchunks * 0.25): 0.00007,
@@ -65,7 +65,8 @@ def build_model():
     l_in = nn.layers.InputLayer((None, nslices, 30) + patch_size)
     l_in_slice_mask = nn.layers.InputLayer((None, nslices))
     l_in_slice_location = nn.layers.InputLayer((None, nslices, 1))
-    l_ins = [l_in, l_in_slice_mask, l_in_slice_location]
+    l_in_sex_age = nn.layers.InputLayer((None, 2))
+    l_ins = [l_in, l_in_slice_mask, l_in_slice_location, l_in_sex_age]
 
     l_in_rshp = nn.layers.ReshapeLayer(l_in, (-1, 30) + patch_size)  # (batch_size*nslices, 30, h,w)
     submodel = subconfig().build_model(l_in_rshp)
@@ -81,16 +82,20 @@ def build_model():
     cell = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None,
                           nonlinearity=nn.nonlinearities.tanh)
 
-    l_lstm0 = nn.layers.LSTMLayer(l_sys_concat, num_units=1024,
+    l_lstm0 = nn.layers.LSTMLayer(l_sys_concat, num_units=512,
                                   ingate=input_gate, forgetgate=forget_gate,
                                   cell=cell, outgate=output_gate,
                                   mask_input=l_in_slice_mask,
                                   peepholes=False, precompute_input=False,
                                   grad_clipping=5, only_return_final=True)
 
-    l_sm0 = nn.layers.DenseLayer(nn.layers.dropout(l_lstm0, p=0.5), num_units=600, b=nn.init.Constant(0.1),
-                                 nonlinearity=nn.nonlinearities.softmax)
-    l_cdf0 = nn_heart.CumSumLayer(l_sm0)
+    l_lstm0 = nn.layers.ConcatLayer([l_lstm0, l_in_sex_age], axis=1)
+
+    mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_lstm0, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                               b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
+    sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_lstm0, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                                  b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
+    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0, log=True)
 
     # ------------------ diastole
     l_sub_dst_out = submodel.l_outs[1]
@@ -103,16 +108,19 @@ def build_model():
     cell = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None,
                           nonlinearity=nn.nonlinearities.tanh)
 
-    l_lstm1 = nn.layers.LSTMLayer(l_dst_concat, num_units=1024,
+    l_lstm1 = nn.layers.LSTMLayer(l_dst_concat, num_units=512,
                                   ingate=input_gate, forgetgate=forget_gate,
                                   cell=cell, outgate=output_gate,
                                   mask_input=l_in_slice_mask,
                                   peepholes=False, precompute_input=False,
                                   grad_clipping=5, only_return_final=True)
 
-    l_sm1 = nn.layers.DenseLayer(nn.layers.dropout(l_lstm1, p=0.5), num_units=600, b=nn.init.Constant(0.1),
-                                 nonlinearity=nn.nonlinearities.softmax)
-    l_cdf1 = nn_heart.CumSumLayer(l_sm1)
+    l_lstm1 = nn.layers.ConcatLayer([l_lstm1, l_in_sex_age], axis=1)
+    mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_lstm1, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                               b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
+    sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_lstm1, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                                  b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
+    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1, log=True)
 
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))

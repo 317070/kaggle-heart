@@ -223,7 +223,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 clean_images([patient_3d_tensor], metadata=metadata, cleaning_processes=cleaning_processes_post)[0]
                 for patient_3d_tensor, metadata in zip(patient_3d_tensors, metadata_tag)]
 
-            patient_4d_tensor = np.array(patient_3d_tensors)
+            patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
 
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 

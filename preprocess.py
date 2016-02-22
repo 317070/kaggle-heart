@@ -188,6 +188,47 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 
+        elif tag.startswith("sliced:data:sax:locations"):
+            pass  # will be filled in by the next one
+        elif tag.startswith("sliced:data:sax"):
+            # step 1: sort (data, metadata_tag) with slice_location_finder
+            slice_locations = slice_location_finder({i: metadata for i,metadata in enumerate(metadata_tag)})
+            sorted_indices = [key for key in sorted(slice_locations.iterkeys(), key=lambda x: slice_locations[x]["relative_position"])]
+
+            data = [data[idx] for idx in sorted_indices]
+            metadata_tag = [metadata_tag[idx] for idx in sorted_indices]
+
+            slice_locations = np.array([slice_locations[idx]["relative_position"] for idx in sorted_indices])
+
+            if "sliced:data:sax:locations" in result:
+                put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations, True)
+
+            data = [
+                clean_images([slicedata], metadata=metadata, cleaning_processes=cleaning_processes)[0]
+                for slicedata, metadata in zip(data, metadata_tag)]
+
+            # Augment and extract patches
+            shift_centers = [(None, None)] * len(data)
+            if getattr(config(), 'use_hough_roi', False):
+                shift_centers = [m["hough_roi"] for m in metadata_tag]
+
+            patient_3d_tensors = [
+                normscale_resize_and_augment_function(
+                    [slicedata], output_shape=desired_shape[-2:],
+                    augment=augmentation_params,
+                    pixel_spacing=metadata["PixelSpacing"],
+                    shift_center=shift_center[::-1])[0]
+                for slicedata, metadata, shift_center in zip(data, metadata_tag, shift_centers)]
+
+            # Clean data further
+            patient_3d_tensors = [
+                clean_images([patient_3d_tensor], metadata=metadata, cleaning_processes=cleaning_processes_post)[0]
+                for patient_3d_tensor, metadata in zip(patient_3d_tensors, metadata_tag)]
+
+            patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
+
+            put_in_the_middle(result[tag][index], patient_4d_tensor, True)
+
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()
 
@@ -341,3 +382,66 @@ def set_upside_up_slice(dslice, metadata=None, do_flip=False):
         metadata[_TAG_ROI_UPSIDEUP] = True
 
     return out_data
+
+
+def slice_location_finder(metadata_dict):
+    """
+    :param metadata_dict: dict with arbitrary keys, and metadata values
+    :return: dict with "relative_position" and "middle_pixel_position" (and others)
+    """
+    datadict = dict()
+
+    for key, metadata in metadata_dict.iteritems():
+        #d1 = all_data['data']
+        d2 = metadata
+        image_orientation = [float(i) for i in metadata["ImageOrientationPatient"]]
+        image_position = [float(i) for i in metadata["ImagePositionPatient"]]
+        pixel_spacing = [float(i) for i in metadata["PixelSpacing"]]
+        datadict[key] = {
+            "orientation": image_orientation,
+            "position": image_position,
+            "pixel_spacing": pixel_spacing,
+            "rows": int(d2["Rows"]),
+            "columns": int(d2["Columns"]),
+        }
+
+    for key, data in datadict.iteritems():
+        # calculate value of middle pixel
+        F = np.array(data["orientation"]).reshape( (2,3) )
+        pixel_spacing = data["pixel_spacing"]
+        i,j = data["columns"] / 2.0, data["rows"] / 2.0  # reversed order, as per http://nipy.org/nibabel/dicom/dicom_orientation.html
+        im_pos = np.array([[i*pixel_spacing[0],j*pixel_spacing[1]]],dtype='float32')
+        pos = np.array(data["position"]).reshape((1,3))
+        position = np.dot(im_pos, F) + pos
+        data["middle_pixel_position"] = position[0,:]
+
+    # find the keys of the 2 points furthest away from each other
+    if len(datadict)<=1:
+        for key, data in datadict.iteritems():
+            data["relative_position"] = 0.0
+    else:
+        max_dist = -1.0
+        max_dist_keys = []
+        for key1, data1 in datadict.iteritems():
+            for key2, data2 in datadict.iteritems():
+                if key1==key2:
+                    continue
+                p1 = data1["middle_pixel_position"]
+                p2 = data2["middle_pixel_position"]
+                distance = np.sqrt(np.sum((p1-p2)**2))
+                if distance>max_dist:
+                    max_dist_keys = [key1, key2]
+                    max_dist = distance
+        # project the others on the line between these 2 points
+        # sort the keys, so the order is more or less the same as they were
+        max_dist_keys.sort()
+        p_ref1 = datadict[max_dist_keys[0]]["middle_pixel_position"]
+        p_ref2 = datadict[max_dist_keys[1]]["middle_pixel_position"]
+        v1 = p_ref2-p_ref1
+        v1 = v1 / np.linalg.norm(v1)
+        for key, data in datadict.iteritems():
+            v2 = data["middle_pixel_position"]-p_ref1
+            scalar = np.inner(v1, v2)
+            data["relative_position"] = scalar
+
+    return datadict

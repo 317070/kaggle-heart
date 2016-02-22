@@ -155,6 +155,7 @@ def normscale_resize_and_augment_2(slices, output_shape=(50, 50), augment=None,
         patch_scale = max(
             float(normalised_patch_size[0])/output_shape[0],
             float(normalised_patch_size[1])/output_shape[1])
+
         tform_patch_scale = build_rescale_transform(
             patch_scale, normalised_patch_size, target_shape=output_shape)
 

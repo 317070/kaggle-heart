@@ -10,12 +10,43 @@ from functools import partial
 def uint_to_float(img):
     return img / np.float32(255.0)
 
+DEFAULT_AUGMENTATION_PARAMETERS = {
+    "zoom_x":[1, 1],
+    "zoom_y":[1, 1],
+    "rotate":[0, 0],
+    "shear":[0, 0],
+    "skew_x":[0, 0],
+    "skew_y":[0, 0],
+    "translate_x":[0, 0],
+    "translate_y":[0, 0],
+    "flip_vert": [0, 0],
+    "roll_time": [0, 0],
+    "flip_time": [0, 0],
+}
 
 quasi_random_generator = None
 
 def sample_augmentation_parameters():
     global quasi_random_generator
-    augmentation_params = config().augmentation_params
+
+    augm = config().augmentation_params
+    if "translation" in augm:
+        newdict = dict()
+        if "translation" in augm:
+            newdict["translate_x"] = augm["translation"]
+            newdict["translate_y"] = augm["translation"]
+        if "shear" in augm:
+            newdict["shear"] = augm["shear"]
+        if "flip_vert" in augm:
+            newdict["flip_vert"] = augm["flip_vert"]
+        if "roll_time" in augm:
+            newdict["roll_time"] = augm["roll_time"]
+        if "flip_time" in augm:
+            newdict["flip_time"] = augm["flip_time"]
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **newdict)
+    else:
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **config().augmentation_params)
+
     if quasi_random_generator is None:
         quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
                                                                                   permutation='Braaten-Weller')

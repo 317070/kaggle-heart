@@ -56,12 +56,12 @@ cleaning_processes_post = [
     functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
-    "rotation": (-180, 180),
-    "skew": (-10, 10),
-    "translation": (-8, 8),
-    "flip_vert": (0, 1),
-    "roll_time": (0, 0),
-    "flip_time": (0, 0),
+    "rotate": (-180, 180),
+    "skew_x": (-10, 10),
+    "skew_y": (-10, 10),
+    "translate_x": (-8, 8),
+    "translate_y": (-8, 8),
+    "flip_vert": (0, 1)
 }
 
 

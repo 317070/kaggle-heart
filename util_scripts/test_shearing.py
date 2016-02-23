@@ -34,7 +34,8 @@ def init():
 
 def animate(i):
     result = perturb(image, target_shape=(500, 500),
-                     augmentation_params={"zoom_range":[0.5, 0.5],
+                     augmentation_params={"rotation_range":[float(i), float(i)],
+                                          "zoom_range":[0.5, 0.5],
                                           "skew_x_range":[-20, 20],
                                           "skew_y_range":[-20, 20],
                                           "do_flip":False,

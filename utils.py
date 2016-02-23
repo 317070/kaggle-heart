@@ -4,10 +4,13 @@ from dicom.sequence import Sequence
 import numpy as np
 import gzip
 from scipy.special import erf
-import theano
-import theano.tensor as T
 from compressed_cache import simple_memoized
 import random
+
+# TODO: remove this import, it is annoying for a utils file
+import theano
+import theano.tensor as T
+
 
 def hms(seconds):
     seconds = np.floor(seconds)

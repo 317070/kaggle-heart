@@ -30,7 +30,7 @@ caching = None
 validate_every = 10
 validate_train_set = True
 save_every = 10
-restart_from_save = False
+restart_from_save = True
 
 # Training (schedule) parameters
 # - batch sizes
@@ -56,11 +56,11 @@ cleaning_processes_post = [
     functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
-    "rotation": (-180, 180),
+    "rotate": (-180, 180),
     "shear": (0, 0),
     "skew_x": (-10, 10),
     "skew_y": (-10, 10),
-    "translation": (-8, 8),
+    "translate": (-8, 8),
     "flip_vert": (0, 1),
     "roll_time": (0, 0),
     "flip_time": (0, 0)

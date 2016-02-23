@@ -39,10 +39,10 @@ dump_network_loaded_data = False
 batch_size = 8
 sunny_batch_size = 4
 batches_per_chunk = 16
-num_epochs_train = 300 
+num_epochs_train = 100 
 
 # - learning rate and method
-base_lr = 0.001
+base_lr = 0.01
 learning_rate_schedule = {
     0: base_lr,
     9*num_epochs_train/10: base_lr/10,
@@ -57,7 +57,7 @@ cleaning_processes_post = [
     functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
-    "rotation": (-16, 16),
+    "rotation": (-180, 180),
     "shear": (0, 0),
     "translation": (-8, 8),
     "flip_vert": (0, 1),
@@ -130,43 +130,16 @@ def build_model():
     l0 = nn.layers.InputLayer(input_size)
 
     # PREPROCESS SLICES SEPERATELY
-    # Convolutional layers
-    batch_norm = nn.layers.normalization.batch_norm
+    # Convolutional layers and some dense layers are defined in a submodel
     l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
-    l1a = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l0_slices,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l1b = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l1 = nn.layers.dnn.MaxPool2DDNNLayer(l1b, pool_size=(2,2), stride=(2,2))
 
-    l2a = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l1,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l2b = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l2a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l2 = nn.layers.dnn.MaxPool2DDNNLayer(l2b, pool_size=(2,2), stride=(2,2))
-
-    l3a = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l2,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l3b = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l3a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l3c = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l3b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l3 = nn.layers.dnn.MaxPool2DDNNLayer(l3c, pool_size=(2,2), stride=(2,2))
-
-    l4a = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l3,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l4b = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l4a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l4c = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l4b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l4 = nn.layers.dnn.MaxPool2DDNNLayer(l4c, pool_size=(2,2), stride=(2,2))
-
-    l5a = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l4,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l5b = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l5a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l5c = batch_norm(nn.layers.dnn.Conv2DDNNLayer(l5b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify))
-    l5 = nn.layers.dnn.MaxPool2DDNNLayer(l5c, pool_size=(2,2), stride=(2,2))
+    import je_ss_jonisc64small_360
+    submodel = je_ss_jonisc64small_360.build_model(l0_slices)
 
     # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
-
-    ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
-    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=256, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
-
+    ldsys2 = submodel["meta_outputs"]["systole"]
     # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
-
-    lddia1drop = nn.layers.dropout(lddia1, p=0.5)
-    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=256, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia2 = submodel["meta_outputs"]["diastole"]
 
     # AGGREGATE SLICES PER PATIENT
     # Systole
@@ -215,6 +188,7 @@ def build_model():
 
     l_diastole = layers.MuSigmaErfLayer(lddia3musigma)
 
+    submodels = [submodel]
     return {
         "inputs":{
             "sliced:data:randomslices": l0
@@ -223,15 +197,19 @@ def build_model():
             "systole": l_systole,
             "diastole": l_diastole,
         },
-        "regularizable": {
-            ldsys1: l2_weight,
-            ldsys2: l2_weight,
+        "regularizable": dict(
+            {
             ldsys3mu: l2_weight_out,
             ldsys3sigma: l2_weight_out,
-            lddia1: l2_weight,
-            lddia2: l2_weight,
             lddia3mu: l2_weight_out,
-            lddia3sigma: l2_weight_out,
-        },
+            lddia3sigma: l2_weight_out,},
+            **{
+                k: v
+                for d in [model["regularizable"] for model in submodels if "regularizable" in model]
+                for k, v in d.items() }
+        ),
+        "pretrained":{
+            je_ss_jonisc64small_360.__name__: submodel["outputs"],
+        }
     }
 

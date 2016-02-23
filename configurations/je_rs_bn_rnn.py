@@ -118,6 +118,21 @@ tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_
 def lb_softplus(lb):
     return lambda x: nn.nonlinearities.softplus(x) + lb
 
+init = nn.init.Orthogonal()
+
+rnn_layer = functools.partial(nn.layers.RecurrentLayer,
+    W_in_to_hid=init,
+    W_hid_to_hid=init,
+    b=nn.init.Constant(0.1),
+    nonlinearity=nn.nonlinearities.rectify,
+    hid_init=nn.init.Constant(0.),
+    backwards=False,
+    learn_init=True,
+    gradient_steps=-1,
+    grad_clipping=False,
+    unroll_scan=False,
+    precompute_input=False,
+    mask_input=None)
 
 # Architecture
 def build_model():
@@ -172,17 +187,7 @@ def build_model():
     # Systole
     ldsys_pat_in = nn.layers.ReshapeLayer(ldsys2, (-1, nr_slices, [1]))
 
-    input_gate_sys = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
-    forget_gate_sys = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), b=nn.init.Constant(5.0))
-    output_gate_sys = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
-    cell_sys = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None, nonlinearity=nn.nonlinearities.tanh)
-
-    ldsys_lstm = nn.layers.LSTMLayer(ldsys_pat_in, num_units=256,
-                                     ingate=input_gate_sys, forgetgate=forget_gate_sys,
-                                     cell=cell_sys, outgate=output_gate_sys,
-                                     peepholes=False, precompute_input=False,
-                                     grad_clipping=5, only_return_final=True,
-                                     learn_init=True,)
+    ldsys_lstm = rnn_layer(ldsys_pat_in, num_units=256)
  
     ldsys_lstm_drop = nn.layers.dropout(ldsys_lstm, p=0.5)
 
@@ -194,18 +199,8 @@ def build_model():
 
     # Diastole
     lddia_pat_in = nn.layers.ReshapeLayer(lddia2, (-1, nr_slices, [1]))
-
-    input_gate_dia = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
-    forget_gate_dia = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), b=nn.init.Constant(5.0))
-    output_gate_dia = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal())
-    cell_dia = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None, nonlinearity=nn.nonlinearities.tanh)
-
-    lddia_lstm = nn.layers.LSTMLayer(lddia_pat_in, num_units=256,
-                                     ingate=input_gate_dia, forgetgate=forget_gate_dia,
-                                     cell=cell_dia, outgate=output_gate_dia,
-                                     peepholes=False, precompute_input=False,
-                                     grad_clipping=5, only_return_final=True,
-                                     learn_init=True,)
+   
+    lddia_lstm = rnn_layer(lddia_pat_in, num_units=256)
  
     lddia_lstm_drop = nn.layers.dropout(lddia_lstm, p=0.5)
 

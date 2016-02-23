@@ -30,7 +30,7 @@ caching = None
 validate_every = 20
 validate_train_set = True
 save_every = 20
-restart_from_save = False
+restart_from_save = True
 
 dump_network_loaded_data = False
 
@@ -39,7 +39,7 @@ dump_network_loaded_data = False
 batch_size = 8
 sunny_batch_size = 4
 batches_per_chunk = 16
-num_epochs_train = 100 
+num_epochs_train = 300 
 
 # - learning rate and method
 base_lr = 0.0001

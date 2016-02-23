@@ -30,7 +30,7 @@ caching = None
 validate_every = 20
 validate_train_set = True
 save_every = 20
-restart_from_save = False
+restart_from_save = True
 
 dump_network_loaded_data = False
 
@@ -39,7 +39,7 @@ dump_network_loaded_data = False
 batch_size = 8
 sunny_batch_size = 4
 batches_per_chunk = 16
-num_epochs_train = 100 
+num_epochs_train = 300 
 
 # - learning rate and method
 base_lr = 0.0001
@@ -161,34 +161,36 @@ def build_model():
     submodel = je_ss_jonisc64small_360.build_model(l0_slices)
 
     # Systole Dense layers
-    ldsysout = submodel["outputs"]["systole"]
+    ldsys2 = submodel["meta_outputs"]["systole"]
     # Diastole Dense layers
-    lddiaout = submodel["outputs"]["diastole"]
+    lddia2 = submodel["meta_outputs"]["diastole"]
 
     # AGGREGATE SLICES PER PATIENT
     # Systole
-    ldsys_pat_in = nn.layers.ReshapeLayer(ldsysout, (-1, nr_slices, [1]))
+    ldsys_pat_in = nn.layers.ReshapeLayer(ldsys2, (-1, nr_slices, [1]))
 
     ldsys_rnn = rnn_layer(ldsys_pat_in, num_units=256, mask_input=lin_slice_mask)
  
 #    ldsys_rnn_drop = nn.layers.dropout(ldsys_rnn, p=0.5)
 
-    ldsys3 = nn.layers.DenseLayer(ldsys_rnn, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
-    ldsys3drop = nn.layers.dropout(ldsys3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    ldsys3dropnorm = layers.NormalisationLayer(ldsys3drop)
-    l_systole = layers.CumSumLayer(ldsys3dropnorm)
+    ldsys3mu = nn.layers.DenseLayer(ldsys_rnn, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
+    ldsys3sigma = nn.layers.DenseLayer(ldsys_rnn, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
+    ldsys3musigma = nn.layers.ConcatLayer([ldsys3mu, ldsys3sigma], axis=1)
+
+    l_systole = layers.MuSigmaErfLayer(ldsys3musigma)
 
     # Diastole
-    lddia_pat_in = nn.layers.ReshapeLayer(lddiaout, (-1, nr_slices, [1]))
+    lddia_pat_in = nn.layers.ReshapeLayer(lddia2, (-1, nr_slices, [1]))
 
     lddia_rnn = rnn_layer(lddia_pat_in, num_units=256, mask_input=lin_slice_mask)
  
 #    lddia_rnn_drop = nn.layers.dropout(lddia_rnn, p=0.5)
-    lddia3 = nn.layers.DenseLayer(lddia_rnn, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
-    lddia3drop = nn.layers.dropout(lddia3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
-    lddia3dropnorm = layers.NormalisationLayer(lddia3drop)
-    l_diastole = layers.CumSumLayer(lddia3dropnorm)
 
+    lddia3mu = nn.layers.DenseLayer(lddia_rnn, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
+    lddia3sigma = nn.layers.DenseLayer(lddia_rnn, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
+    lddia3musigma = nn.layers.ConcatLayer([lddia3mu, lddia3sigma], axis=1)
+
+    l_diastole = layers.MuSigmaErfLayer(lddia3musigma)
 
     submodels = [submodel]
     return {
@@ -203,8 +205,10 @@ def build_model():
         },
         "regularizable": dict(
             {
-            lddia3: l2_weight_out,
-            ldsys3: l2_weight_out,},
+            ldsys3mu: l2_weight_out,
+            ldsys3sigma: l2_weight_out,
+            lddia3mu: l2_weight_out,
+            lddia3sigma: l2_weight_out,},
             **{
                 k: v
                 for d in [model["regularizable"] for model in submodels if "regularizable" in model]

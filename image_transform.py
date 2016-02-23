@@ -9,8 +9,6 @@ import skimage.io
 import skimage.transform
 import utils
 
-
-
 tform_identity = skimage.transform.AffineTransform()
 NO_AUGMENT_PARAMS = {
     "zoom": (1.0, 1.0),

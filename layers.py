@@ -81,6 +81,18 @@ class ScaleLayer(lasagne.layers.MergeLayer):
         return inputs[0] * T.shape_padright(inputs[1], n_ones=inputs[0].ndim-inputs[1].ndim)
 
 
+class LogicalNotLayer(lasagne.layers.Layer):
+    def __init__(self, incoming, **kwargs):
+        super(LogicalNotLayer, self).__init__(incoming, **kwargs)
+
+    def get_output_shape_for(self, input_shape):
+        return input_shape
+
+    def get_output_for(self, input, **kwargs):
+        # take the minimal working slice size, and use that one.
+        return 1 - input
+
+
 class NormalisationLayer(lasagne.layers.Layer):
     def __init__(self, incoming, norm_sum=1.0, allow_negative=False, **kwargs):
         super(NormalisationLayer, self).__init__(incoming, **kwargs)

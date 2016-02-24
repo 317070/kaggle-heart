@@ -213,12 +213,6 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             slice_locations = np.array([slice_locations[idx]["relative_position"] for idx in sorted_indices])
             slice_locations = slice_locations - (slice_locations[-1] + slice_locations[0])/2.0
 
-            if "sliced:data:sax:locations" in result:
-                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
-                put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations, True, is_padded)
-                if "sliced:data:sax:is_not_padded" in result:
-                    result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
-
             data = [
                 clean_images([slicedata], metadata=metadata, cleaning_processes=cleaning_processes)[0]
                 for slicedata, metadata in zip(data, metadata_tag)]
@@ -243,7 +237,20 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
 
+            # Augment sax order
+            if augmentation_params and augmentation_params.get("flip_sax", 0) > 0.5:
+                patient_4d_tensor = patient_4d_tensor[::-1]
+                slice_locations = slice_locations[::-1]
+
+            # Put data (images and metadata) in right location
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
+
+            if "sliced:data:sax:locations" in result:
+                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
+                eps_location = 1e-7
+                put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
+                if "sliced:data:sax:is_not_padded" in result:
+                    result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
 
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()

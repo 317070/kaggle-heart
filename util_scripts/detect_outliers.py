@@ -2,6 +2,7 @@
 """
 
 import glob
+import re
 
 import numpy as np
 
@@ -11,10 +12,21 @@ all_test_sax_files = glob.glob('/data/dsb15_pkl/pkl_validate/*/study/sax*')
 
 all_sax_files = all_train_sax_files + all_test_sax_files
 
+nr_slices = [0] * 700
+
 for sax_file in all_sax_files:
-  x = len(np.load(sax_file)['metadata'])
-  if not x == 30:
-    print x, sax_file
+  pat_id = int(re.search(r'/(\d+)/', sax_file).group(1))
+  nr_slices[pat_id-1] += 1
+
+pats_w_slices = {i: [] for i in xrange(30)}
+
+for pid, nrs in enumerate(nr_slices):
+  pats_w_slices[nrs].append(pid+1)
+
+for x in pats_w_slices:
+  print x, pats_w_slices[x]
+
+
 #  metadata = np.load(sax_file)['metadata'][0]
 #  rows = metadata['Rows']
 #  cols = metadata['Columns']

@@ -227,5 +227,31 @@ class RelativeLocationLayer(lasagne.layers.Layer):
 
 
     def get_output_for(self, slicelocations, **kwargs):
-        x = slicelocations - T.min(slicelocations, axis=1)
-        return abs(x * 2.0 / T.max(x, axis=1) - 1.0)
+        x = slicelocations - T.min(slicelocations, axis=1).dimshuffle(0, 'x')
+        return abs(x * 2.0 / T.max(x, axis=1).dimshuffle(0, 'x') - 1.0)
+
+
+class RepeatLayer(lasagne.layers.Layer):
+    def __init__(self, incoming, repeats, axis=0, **kwargs):
+        super(RepeatLayer, self).__init__(incoming, **kwargs)
+        self.repeats = repeats
+        self.axis = axis
+
+    def get_output_shape_for(self, input_shape):
+        output_shape = list(input_shape)
+        output_shape.insert(self.axis, self.repeats)
+        return tuple(output_shape)
+
+    def get_output_for(self, input, **kwargs):
+        return repeat(input, self.repeats, self.axis)
+
+
+def repeat(input, repeats, axis):
+    shape_ones = [1]*input.ndim
+    shape_ones.insert(axis, repeats)
+    ones = T.ones(tuple(shape_ones), dtype=input.dtype)
+
+    pattern = range(input.ndim)
+    pattern.insert(axis, "x")
+    # print shape_ones, pattern
+    return ones * input.dimshuffle(*pattern)

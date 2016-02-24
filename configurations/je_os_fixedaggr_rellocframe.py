@@ -39,7 +39,7 @@ dump_network_loaded_data = False
 batch_size = 8
 sunny_batch_size = 4
 batches_per_chunk = 16
-num_epochs_train = 200 
+num_epochs_train = 300 
 
 # - learning rate and method
 base_lr = 0.0001
@@ -157,6 +157,13 @@ def build_model():
     # Convolutional layers and some dense layers are defined in a submodel
     l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
 
+    relative_slice_locations = layers.RelativeLocationLayer(lin_slice_locations)
+    relative_slice_locations_slices = nn.layers.ReshapeLayer(relative_slice_locations, (-1, 1,))
+    relloc_slices_repeated = nn.layers.ConcatLayer([relative_slice_locations_slices]*image_size, axis=2)
+    relloc_slices_repeated = nn.layers.ConcatLayer([relloc_slices_repeated]*image_size, axis=3)
+    relloc_slices = nn.layers.ReshapeLayer(relloc_slices_repeated, (-1, 1, image_size, image_size))
+    l0_slices_enhanced = nn.layers.ConcatLayer([l0_slices, relloc_slices], axis=1)
+
     l1a = nn.layers.dnn.Conv2DDNNLayer(l0_slices,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1 = nn.layers.dnn.MaxPool2DDNNLayer(l1b, pool_size=(2,2), stride=(2,2))
@@ -187,8 +194,8 @@ def build_model():
     ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
-    l_sys_mu = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(10.0), nonlinearity=None)
-    l_sys_sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(3.), nonlinearity=lb_softplus(.1))
+    l_sys_mu = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(50.0), nonlinearity=None)
+    l_sys_sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(10.), nonlinearity=lb_softplus(1))
     
     # Diastole Dense layers
     lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
@@ -197,8 +204,8 @@ def build_model():
     lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
-    l_dia_mu = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(10.0), nonlinearity=None)
-    l_dia_sigma = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(3.), nonlinearity=lb_softplus(.1))
+    l_dia_mu = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(50.0), nonlinearity=None)
+    l_dia_sigma = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(10.), nonlinearity=lb_softplus(1))
 
     # AGGREGATE SLICES PER PATIENT
     l_scaled_slice_locations = layers.TrainableScaleLayer(lin_slice_locations, scale=nn.init.Constant(0.1), trainable=False)

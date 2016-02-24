@@ -214,7 +214,18 @@ class TrainableScaleLayer(lasagne.layers.Layer):
         shape = []
 
         self.scale = self.add_param(
-            scale, shape, 'scale', regularizable=False, trainable=True)
+            scale, shape, 'scale', regularizable=False, trainable=trainable)
 
     def get_output_for(self, input, **kwargs):
         return input * self.scale.dimshuffle('x', 'x')
+
+
+class RelativeLocationLayer(lasagne.layers.Layer):
+
+    def __init__(self, slicelocations, **kwargs):
+        super(RelativeLocationLayer, self).__init__(slicelocations, **kwargs)
+
+
+    def get_output_for(self, slicelocations, **kwargs):
+        x = slicelocations - T.min(slicelocations, axis=1)
+        return abs(x * 2.0 / T.max(x, axis=1) - 1.0)

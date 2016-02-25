@@ -38,7 +38,7 @@ dump_network_loaded_data = False
 # - batch sizes
 batch_size = 8
 sunny_batch_size = 4
-batches_per_chunk = 16
+batches_per_chunk = 8
 num_epochs_train = 400 
 
 # - learning rate and method
@@ -85,9 +85,16 @@ create_eval_valid_gen = functools.partial(data_loader.generate_validation_batch,
 create_eval_train_gen = functools.partial(data_loader.generate_validation_batch, set="train")
 create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
 
+
+def filter_samples(folders):
+    # don't use patients who don't have more than 6 slices
+    return [
+        folder for folder in folders
+        if data_loader.compute_nr_slices(folder) > 6]
+
 # Input sizes
 image_size = 64
-nr_slices = 20
+nr_slices = 22
 data_sizes = {
     "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:sax:locations": (batch_size, nr_slices),

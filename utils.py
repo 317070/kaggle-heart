@@ -18,6 +18,10 @@ import theano.tensor as T
 maxfloat = np.finfo(np.float32).max
 
 
+
+maxfloat = np.finfo(np.float32).max
+
+
 def hms(seconds):
     seconds = np.floor(seconds)
     minutes, seconds = divmod(seconds, 60)

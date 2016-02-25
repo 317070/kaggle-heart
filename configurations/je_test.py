@@ -44,7 +44,7 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess_normscale,
     normscale_resize_and_augment_function=partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(128,128)))
+        normalised_patch_size=(64 ,64)))
 #preprocess_train = preprocess_normscale
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess_with_augmentation  # no augmentation

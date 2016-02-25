@@ -150,12 +150,12 @@ def optimize_expert_weights(expert_predictions,
         # convert to theano_values (for regularization)
         target_values = theano.shared(np.argmax(targets, axis=-1).astype('int32'))
         noise = T.shared_randomstreams.RandomStreams(seed=317070)
-        target_values += noise.random_integers(size=target_values.shape, low=-5, high=5, dtype='int32')
+        target_values += noise.random_integers(size=target_values.shape, low=0, high=0, dtype='int32')
         t = T.cumsum(T.extra_ops.to_one_hot(target_values, 600, dtype='float32'), axis=-1)
 
 
     #the different predictions, are the experts
-    geom_av_log = T.sum(X_log_i * w_i, axis=0) * filter_params[1] / (T.sum(w_i, axis=0) + eps)
+    geom_av_log = T.sum(X_log_i * w_i, axis=0) / (T.sum(w_i, axis=0) + eps)
     geom_av_log = geom_av_log - T.max(geom_av_log,axis=-1).dimshuffle(0,'x')  # stabilizes rounding errors?
 
     geom_av = T.exp(geom_av_log)
@@ -164,7 +164,7 @@ def optimize_expert_weights(expert_predictions,
     filter = T.clip( 0.75 / (T.abs_(filter_params[0]) + eps) * (1-(x_coor/( T.abs_(filter_params[0])+eps))**2), 0.0, np.float32(np.finfo(np.float64).max))
     #filter =(1./(np.sqrt(2*np.pi))).astype('float32')/filter_params[0] * T.exp(-((x_coor/filter_params[0])**2)/2 )
 
-    geom_pdf = convolve1d(geom_pdf, filter, WINDOW_SIZE)
+    #geom_pdf = convolve1d(geom_pdf, filter, WINDOW_SIZE)
 
 
     cumulative_distribution = T.cumsum(geom_pdf, axis=-1)
@@ -177,8 +177,6 @@ def optimize_expert_weights(expert_predictions,
         ind.set_value(range(NUM_VALIDATIONS))
         f_eval = theano.function([], cumulative_distribution)
         cumulative_distribution = f_eval()
-
-
         return cumulative_distribution[0]
 
     t_i = t.take(ind, axis=0)
@@ -380,7 +378,7 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         del predictions  # can be LOADS of data
 
 
-    for pass_index in xrange(1,3):
+    for pass_index in xrange(1,11):
         print
         print "  PASS %d " % pass_index
         print "==========="

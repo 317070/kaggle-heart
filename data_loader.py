@@ -277,7 +277,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 else:
                     l = [sax for sax in files if "sax" in sax]
                 if not l:
-                    if not hasattr(_config(), 'check_inputs') or _config().check_inputs:
+                    if hasattr(_config(), 'check_inputs') and _config().check_inputs:
                         print "Warning: patient %d has no images of this type" % id
                     continue
                 if "middle" in tag:

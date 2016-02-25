@@ -204,6 +204,8 @@ def build_model(input_layer=None):
             "systole:sigma": ldsys3sigma,
             "diastole:mu": lddia3mu,
             "diastole:sigma": lddia3sigma,
+            "systole": ldsys2,
+            "diastole": lddia2,
         }
     }
 

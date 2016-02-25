@@ -9,12 +9,10 @@ import cPickle as pickle
 
 import compressed_cache
 
-
 @compressed_cache.memoize()
 def load_data_from_file(folder):
     return pickle.load(open(folder, "r"))['data'].astype('float32')
 
-
-@compressed_cache.memoize()
+@compressed_cache.simple_memoized
 def load_metadata_from_file(folder):
     return pickle.load(open(folder, "r"))['metadata']

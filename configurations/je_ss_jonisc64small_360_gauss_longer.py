@@ -119,14 +119,17 @@ def lb_softplus(lb):
 
 
 # Architecture
-def build_model():
+def build_model(input_layer=None):
 
     #################
     # Regular model #
     #################
     input_size = data_sizes["sliced:data:singleslice"]
 
-    l0 = nn.layers.InputLayer(input_size)
+    if input_layer:
+        l0 = input_layer
+    else:
+        l0 = nn.layers.InputLayer(input_size)
 
     l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
@@ -196,5 +199,11 @@ def build_model():
             lddia3mu: l2_weight_out,
             lddia3sigma: l2_weight_out,
         },
+        "meta_outputs":{
+            "systole:mu": ldsys3mu,
+            "systole:sigma": ldsys3sigma,
+            "diastole:mu": lddia3mu,
+            "diastole:sigma": lddia3sigma,
+        }
     }
 

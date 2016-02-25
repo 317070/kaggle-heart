@@ -22,8 +22,8 @@ def _load_file(path):
     return data
 
 _HOUGH_ROI_PATHS = (
-    os.path.expanduser('~/storage/users/jburms/data/kaggle_heart/pkl_train_slice2roi.pkl'),
-    os.path.expanduser('~/storage/users/jburms/data/kaggle_heart/pkl_validate_slice2roi.pkl'),)
+    os.path.expanduser('/data/dsb15_pkl/pkl_train_slice2roi.pkl'),
+    os.path.expanduser('/data/dsb15_pkl/pkl_validate_slice2roi.pkl'),)
 _hough_rois = merge_dicts(map(_load_file, _HOUGH_ROI_PATHS))
 
 def _enhance_metadata(metadata, patient_id, slice_name):
@@ -113,9 +113,9 @@ def orthogonal_projection_on_slice(percentual_coordinate, source_metadata, targe
 
 
 
-for patient_id in xrange(1,501):
+for patient_id in xrange(595,600):
     print "Looking for the pickle files..."
-    files = sorted(glob.glob(os.path.expanduser("~/storage/data/dsb15_pkl/pkl_train/%d/study/*.pkl" % patient_id)))
+    files = sorted(glob.glob(os.path.expanduser("/data/dsb15_pkl/pkl_validate/%d/study/*.pkl" % patient_id)))
 
     f, (ax1, ax2, ax3) = plt.subplots(1, 3)
     # to put it into the upper left corner for example:

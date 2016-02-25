@@ -25,6 +25,8 @@ import string
 import time
 from validation_set import get_cross_validation_indices
 
+# TODO: not hardcoded!
+test_patients_indices = xrange(501,701)
 
 def _load_file(path):
     with open(path, "r") as f:
@@ -104,7 +106,7 @@ def optimize_expert_weights(expert_predictions,
         expert_predictions = expert_predictions[expert_weights>cutoff,:,:]  # remove
 
     NUM_EXPERTS = expert_predictions.shape[0]
-    NUM_FILTER_PARAMETERS = 1
+    NUM_FILTER_PARAMETERS = 2
     WINDOW_SIZE = 599
 
     # optimizing weights
@@ -115,6 +117,7 @@ def optimize_expert_weights(expert_predictions,
     ind = theano.shared(np.zeros((NUM_VALIDATIONS,), dtype='int32'))  # targets = (NUM_VALIDATIONS, 600)
     if not targets is None:
         t = theano.shared(targets.astype('float32'))  # targets = (NUM_VALIDATIONS, 600)
+
 
     if optimal_params is None:
         params_init = np.concatenate([ np.ones((NUM_EXPERTS,), dtype='float32'),
@@ -144,27 +147,38 @@ def optimize_expert_weights(expert_predictions,
     w_i = w_i * T.nnet.softmax(W.dimshuffle('x',0)).dimshuffle(1, 0, 'x')
 
     if do_optimization:
-        pass
-        #noise = T.shared_randomstreams.RandomStreams(seed=317070)
-        #w_i += noise.normal(w_i.shape)
+        # convert to theano_values (for regularization)
+        target_values = theano.shared(np.argmax(targets, axis=-1).astype('int32'))
+        noise = T.shared_randomstreams.RandomStreams(seed=317070)
+        target_values += noise.random_integers(size=target_values.shape, low=-5, high=5, dtype='int32')
+        t = T.cumsum(T.extra_ops.to_one_hot(target_values, 600, dtype='float32'), axis=-1)
+
 
     #the different predictions, are the experts
-    geom_av_log = T.sum(X_log_i * w_i, axis=0) / (T.sum(w_i, axis=0) + eps)
+    geom_av_log = T.sum(X_log_i * w_i, axis=0) * filter_params[1] / (T.sum(w_i, axis=0) + eps)
     geom_av_log = geom_av_log - T.max(geom_av_log,axis=-1).dimshuffle(0,'x')  # stabilizes rounding errors?
 
     geom_av = T.exp(geom_av_log)
 
     geom_pdf = geom_av/T.sum(geom_av,axis=-1).dimshuffle(0,'x')
     filter = T.clip( 0.75 / (T.abs_(filter_params[0]) + eps) * (1-(x_coor/( T.abs_(filter_params[0])+eps))**2), 0.0, np.float32(np.finfo(np.float64).max))
-    #geom_pdf = convolve1d(geom_pdf, filter, WINDOW_SIZE)
+    #filter =(1./(np.sqrt(2*np.pi))).astype('float32')/filter_params[0] * T.exp(-((x_coor/filter_params[0])**2)/2 )
+
+    geom_pdf = convolve1d(geom_pdf, filter, WINDOW_SIZE)
 
 
     cumulative_distribution = T.cumsum(geom_pdf, axis=-1)
+
+    #exponent = np.exp(filter_params[1]-1)+eps
+
+    #cumulative_distribution = ((1-(1-cumulative_distribution)**exponent) + (cumulative_distribution**exponent))/2
 
     if not do_optimization:
         ind.set_value(range(NUM_VALIDATIONS))
         f_eval = theano.function([], cumulative_distribution)
         cumulative_distribution = f_eval()
+
+
         return cumulative_distribution[0]
 
     t_i = t.take(ind, axis=0)
@@ -175,7 +189,7 @@ def optimize_expert_weights(expert_predictions,
     f_val = theano.function([], CRPS)
 
     def optimize_my_params():
-        for _ in xrange(50):  # early stopping
+        for _ in xrange(1000):  # early stopping
             score = iter_optimize()
 
         result = params.get_value()
@@ -190,7 +204,7 @@ def optimize_expert_weights(expert_predictions,
         final_weights = -1e10 * np.ones(expert_weights.shape,)
         final_weights[np.where(expert_weights>cutoff)] = optimal_params[:NUM_EXPERTS]
         final_params = np.concatenate(( final_weights, optimal_params[NUM_EXPERTS:]))
-
+        print "filter size:", np.abs(optimal_params[NUM_EXPERTS])
         return softmax(final_weights), train_score, final_params
     else:
         final_params = []
@@ -226,7 +240,8 @@ def optimize_expert_weights(expert_predictions,
         average_loss   = np.mean(final_losses)
 
         expert_weights_result = softmax(optimal_params[:NUM_EXPERTS])
-        filter_param_result = np.abs(optimal_params[NUM_EXPERTS:NUM_EXPERTS+NUM_FILTER_PARAMETERS])
+        filter_param_result = optimal_params[NUM_EXPERTS:NUM_EXPERTS+NUM_FILTER_PARAMETERS]
+        print "filter param result:", filter_param_result
 
         return expert_weights_result, average_loss, optimal_params  # (NUM_EXPERTS,)
 
@@ -271,9 +286,8 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         #+glob.glob(prediction_file_location+"ira_*.pkl")  # buggy
         +glob.glob(prediction_file_location+"j6*.pkl")
         +glob.glob(prediction_file_location+"j7*.pkl")
-        +glob.glob(prediction_file_location+"je_os_fixedaggr_joniscale64small_360_gauss.pkl")
+        #+glob.glob(prediction_file_location+"je_os_fixedaggr_joniscale64small_360_gauss.pkl")
         +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropnorm.pkl")
-        +glob.glob(prediction_file_location+"je_ss_normscale_patchcontrast.pkl")
         +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropoutput")
         +glob.glob(prediction_file_location+"je_ss_smcrps_jonisc128_500_dropnorm.pkl")
         #+glob.glob(prediction_file_location+"j5_normscale.pkl")
@@ -366,7 +380,7 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         del predictions  # can be LOADS of data
 
 
-    for pass_index in xrange(1,11):
+    for pass_index in xrange(1,3):
         print
         print "  PASS %d " % pass_index
         print "==========="
@@ -475,10 +489,14 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
 
             if "final_systole" in prediction:
                 assert patient == regular_labels[patient-1, 0]
-                error = utils.CRSP(prediction["final_systole"], regular_labels[patient-1, 1])
-                errors.append(error)
-                error = utils.CRSP(prediction["final_diastole"], regular_labels[patient-1, 2])
-                errors.append(error)
+                error1 = utils.CRSP(prediction["final_systole"], regular_labels[patient-1, 1])
+                errors.append(error1)
+                prediction["systole_crps_error"] = error1
+                error2 = utils.CRSP(prediction["final_diastole"], regular_labels[patient-1, 2])
+                errors.append(error2)
+                prediction["diastole_crps_error"] = error1
+                prediction["average_crps_error"] = 0.5*error1 + 0.5*error2
+
         if len(errors)>0:
             errors = np.array(errors)
             estimated_CRSP = np.mean(errors)
@@ -487,6 +505,25 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         else:
             print "  %s kaggle loss: not calculated" % (string.rjust(set_name, 12))
     print "WARNING: both of the previous are overfitted!"
+
+    for patient_ids, set_name in [(validation_patients_indices, "validation")]:
+        print "patient:  disagreement:  CRPS-contr:"
+        for patient in sorted(patient_ids, key=lambda id: -final_predictions[id-1]["average_crps_error"]):
+            prediction = final_predictions[patient-1]
+            if "final_systole" in prediction:
+                systole_prediction_matrix = np.array([average_systole_predictions_per_file[i][patient-1] for i in xrange(NUM_EXPERTS)])
+                diastole_prediction_matrix = np.array([average_diastole_predictions_per_file[i][patient-1] for i in xrange(NUM_EXPERTS)])
+                disagreement = 0.5*(get_expert_disagreement(systole_prediction_matrix, systole_expert_weight)
+                                  + get_expert_disagreement(diastole_prediction_matrix, diastole_expert_weight))
+                print string.rjust("%d" % patient,8),
+                print string.rjust("%.5f" % disagreement,15),
+                if "systole_crps_error" in prediction:
+                    error1 = prediction["systole_crps_error"]
+                    error2 = prediction["diastole_crps_error"]
+                    crps_contribution = 1000*(error1+error2) / 2. / len(patient_ids)
+                    print string.rjust("%.5f" % crps_contribution,13),
+                print
+
     print
     print "estimated leaderboard loss: %f" % ((first_pass_sys_loss + first_pass_dia_loss)/2)
     print
@@ -505,6 +542,22 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
                 csvwriter.writerow(["%d_Systole" % prediction["patient"]] + ["%.18f" % p for p in prediction["final_systole"].flatten()])
     print "submission file dumped"
 
+
+
+def get_expert_disagreement(expert_predictions, expert_weights=None, cutoff=0.01):
+    """
+    :param expert_predictions: experts x 600 x
+    :return:
+    """
+    #if not expert_weights is None:
+    #    expert_predictions = expert_predictions[expert_weights>cutoff,:]  # remove
+    NUM_EXPERTS = expert_predictions.shape[0]
+    cross_crps = 0
+    for i in xrange(NUM_EXPERTS):
+        for j in xrange(i,NUM_EXPERTS):
+            cross_crps += np.mean((expert_predictions[i,:] - expert_predictions[j,:])**2)
+    cross_crps /= (NUM_EXPERTS * (NUM_EXPERTS - 1)) / 2
+    return cross_crps
 
 
 

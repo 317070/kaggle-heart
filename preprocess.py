@@ -7,6 +7,7 @@ import quasi_random
 from itertools import izip
 from functools import partial
 
+
 def uint_to_float(img):
     return img / np.float32(255.0)
 
@@ -64,7 +65,7 @@ def sample_augmentation_parameters():
     return res
 
 
-def put_in_the_middle(target_tensor, data_tensor, pad_better=False):
+def put_in_the_middle(target_tensor, data_tensor, pad_better=False, is_padded=None):
     """
     put data_sensor with arbitrary number of dimensions in the middle of target tensor.
     if data_tensor is bigger, data is cut off
@@ -90,6 +91,9 @@ def put_in_the_middle(target_tensor, data_tensor, pad_better=False):
     t_sh = [get_indices(l1,l2) for l1, l2 in zip(target_shape, data_shape)]
     target_indices, data_indices = zip(*t_sh)
     target_tensor[target_indices] = data_tensor[data_indices]
+    if is_padded is not None:
+        is_padded[:] = True
+        is_padded[target_indices] = False
     if pad_better:
         if target_indices[0].start:
             for i in xrange(0, target_indices[0].start):
@@ -227,6 +231,8 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
         elif tag.startswith("sliced:data:sax:locations"):
             pass  # will be filled in by the next one
+        elif tag.startswith("sliced:data:sax:is_not_padded"):
+            pass  # will be filled in by the next one
         elif tag.startswith("sliced:data:sax"):
             # step 1: sort (data, metadata_tag) with slice_location_finder
             slice_locations = slice_location_finder({i: metadata for i,metadata in enumerate(metadata_tag)})
@@ -236,9 +242,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             metadata_tag = [metadata_tag[idx] for idx in sorted_indices]
 
             slice_locations = np.array([slice_locations[idx]["relative_position"] for idx in sorted_indices])
-
-            if "sliced:data:sax:locations" in result:
-                put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations, True)
+            slice_locations = slice_locations - (slice_locations[-1] + slice_locations[0])/2.0
 
             data = [
                 clean_images([slicedata], metadata=metadata, cleaning_processes=cleaning_processes)[0]
@@ -264,7 +268,20 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
 
+            # Augment sax order
+            if augmentation_params and augmentation_params.get("flip_sax", 0) > 0.5:
+                patient_4d_tensor = patient_4d_tensor[::-1]
+                slice_locations = slice_locations[::-1]
+
+            # Put data (images and metadata) in right location
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
+
+            if "sliced:data:sax:locations" in result:
+                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
+                eps_location = 1e-7
+                put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
+                if "sliced:data:sax:is_not_padded" in result:
+                    result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
 
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()

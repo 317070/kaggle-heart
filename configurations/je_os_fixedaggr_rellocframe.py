@@ -158,7 +158,7 @@ def build_model():
     l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
 
     relative_slice_locations = layers.RelativeLocationLayer(lin_slice_locations)
-    relative_slice_locations_slices = nn.layers.ReshapeLayer(relative_slice_locations, (-1, 1,))
+    relative_slice_locations_slices = nn.layers.ReshapeLayer(relative_slice_locations, (-1, 1, 1, 1))
     relloc_slices_repeated = nn.layers.ConcatLayer([relative_slice_locations_slices]*image_size, axis=2)
     relloc_slices_repeated = nn.layers.ConcatLayer([relloc_slices_repeated]*image_size, axis=3)
     relloc_slices = nn.layers.ReshapeLayer(relloc_slices_repeated, (-1, 1, image_size, image_size))

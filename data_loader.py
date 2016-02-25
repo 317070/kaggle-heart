@@ -328,7 +328,8 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             elif tag.startswith("sliced:meta"):
                 # get the key used in the pickle
                 key = tag[len("slided:meta:"):]
-                patient_result[tag] = disk_access.load_metadata_from_file(files[0])[0][key]
+                metadata_field = disk_access.load_metadata_from_file(files[0])[0][key]
+                patient_result[tag] = metadata_field
             # add others when needed
 
         preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
@@ -418,6 +419,11 @@ def get_sunny_patient_data(indices, set="train"):
         }
     }
 
+
+def compute_nr_slices(patient_folder):
+    files = _in_folder(patient_folder)
+    return len([sax for sax in files if "sax" in sax])
+    
 
 def generate_train_batch(required_input_keys, required_output_keys):
     """Creates an iterator that returns train batches."""

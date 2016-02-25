@@ -275,7 +275,9 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             result[tag][index][0] = -1. if patient_data[tag]=='M' else 1.
 
         elif tag.startswith("sliced:meta:PatientAge"):
-            result[tag][index][0] = float(patient_data[tag][:3])
+            number, letter = patient_data[tag][:3], patient_data[tag][-1]
+            letter_rescale_factors = {'D': 365.25, 'W': 52.1429, 'M': 12., 'Y': 1.}
+            result[tag][index][0] = float(patient_data[tag][:3]) / letter_rescale_factors[letter]
 
 
 def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):

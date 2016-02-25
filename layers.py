@@ -185,7 +185,7 @@ class JeroenLayer(lasagne.layers.MergeLayer):
         # Compute mu for each slice pair
         m1 = mu_area[:, :-1]
         m2 = mu_area[:, 1:]
-        eps = 1e-1
+        eps = 1e-2
         mu_volumes = (m1 + m2 + T.sqrt(T.clip(m1*m2, eps, utils.maxfloat))) * h / 3.0
         mu_volumes = mu_volumes * is_pair_not_padded
         

@@ -9,6 +9,10 @@ import theano.tensor as T
 from compressed_cache import simple_memoized
 import random
 
+
+maxfloat = np.finfo(np.float32).max
+
+
 def hms(seconds):
     seconds = np.floor(seconds)
     minutes, seconds = divmod(seconds, 60)

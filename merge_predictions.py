@@ -6,10 +6,12 @@ import argparse
 from functools import partial
 
 import os
+import lasagne
 import numpy as np
 import sys
 
 import theano
+from theano.sandbox.cuda import dnn
 import theano.tensor as T
 import scipy
 from log import print_to_file
@@ -34,6 +36,18 @@ def softmax(z):
     z = z-np.max(z)
     res = np.exp(z) / np.sum(np.exp(z))
     return res
+
+def convolve1d(image, filter, window_size):
+    flat_image = image.reshape((-1, 1, 1, 600))
+    filter = filter.reshape((1,1,1,-1))  # (num_filters, num_input_channels, filter_rows, filter_columns)
+    conved = dnn.dnn_conv(img=flat_image,
+                          kerns=filter,
+                          subsample=(1,1),
+                          border_mode=(0, (window_size-1)/2),
+                          conv_mode='conv',
+                          algo='time_once',
+                          )
+    return conved.reshape(image.shape)
 
 
 def generate_information_weight_matrix(expert_predictions,
@@ -69,12 +83,15 @@ def generate_information_weight_matrix(expert_predictions,
 
 
 def optimize_expert_weights(expert_predictions,
-                            targets,
                             average_distribution,
-                            num_cross_validation_masks,
+                            targets=None,
+                            num_cross_validation_masks=2,
                             num_folds=1,
                             eps=1e-14,
                             cutoff=0.01,
+                            do_optimization=True,
+                            expert_weights=None,
+                            optimal_params=None,
                             *args, **kwargs):
     """
     :param expert_predictions: experts x validation_samples x 600 x
@@ -83,13 +100,30 @@ def optimize_expert_weights(expert_predictions,
     :param eps:
     :return:
     """
-    NUM_VALIDATIONS = targets.shape[0]
+    if not expert_weights is None:
+        expert_predictions = expert_predictions[expert_weights>cutoff,:,:]  # remove
+
     NUM_EXPERTS = expert_predictions.shape[0]
+    NUM_FILTER_PARAMETERS = 1
+    WINDOW_SIZE = 599
+
     # optimizing weights
     X = theano.shared(expert_predictions.astype('float32'))  # source predictions = (NUM_EXPERTS, NUM_VALIDATIONS, 600)
-    t = theano.shared(targets.astype('float32'))  # targets = (NUM_VALIDATIONS, 600)
+    x_coor = theano.shared(np.linspace(-(WINDOW_SIZE-1)/2, (WINDOW_SIZE-1)/2, num=WINDOW_SIZE, dtype='float32'))  # targets = (NUM_VALIDATIONS, 600)
+
+    NUM_VALIDATIONS = expert_predictions.shape[1]
     ind = theano.shared(np.zeros((NUM_VALIDATIONS,), dtype='int32'))  # targets = (NUM_VALIDATIONS, 600)
-    W = T.vector('W', dtype='float32')  # expert weights = (NUM_EXPERTS,)
+    if not targets is None:
+        t = theano.shared(targets.astype('float32'))  # targets = (NUM_VALIDATIONS, 600)
+
+    if optimal_params is None:
+        params_init = np.concatenate([ np.ones((NUM_EXPERTS,), dtype='float32'),
+                                       np.ones((NUM_FILTER_PARAMETERS,), dtype='float32') ])
+    else:
+        params_init = optimal_params.astype('float32')
+
+    params = theano.shared(params_init.astype('float32'))
+    #params = T.vector('params', dtype='float32')  # expert weights = (NUM_EXPERTS,)
 
     # calculate the weighted average for each of these experts
     weights = generate_information_weight_matrix(expert_predictions, average_distribution)
@@ -101,140 +135,100 @@ def optimize_expert_weights(expert_predictions,
     x_log = np.log(pdf)
     x_log[pdf<=0] = np.log(eps)
     # Compute the mean
-    X_log = theano.shared(x_log)  # source predictions = (NUM_EXPERTS, NUM_VALIDATIONS, 600)
+    X_log = theano.shared(x_log.astype('float32'))  # source predictions = (NUM_EXPERTS, NUM_VALIDATIONS, 600)
+    X_log_i = X_log.take(ind, axis=1)
+    w_i = weight_matrix.take(ind, axis=1)
 
-    final_weights = []
-    final_losses = []
+    W = params[:NUM_EXPERTS]
+    filter_params = params[NUM_EXPERTS:NUM_EXPERTS+NUM_FILTER_PARAMETERS]
+    w_i = w_i * T.nnet.softmax(W.dimshuffle('x',0)).dimshuffle(1, 0, 'x')
 
-    def func_grad_on_indices():
-        X_log_i = X_log.take(ind, axis=1)
-        t_i = t.take(ind, axis=0)
-        w_i = weight_matrix.take(ind, axis=1)
-
-        w_i = w_i * T.nnet.softmax(W.dimshuffle('x',0)).dimshuffle(1, 0, 'x')
-
-        #the different predictions, are the experts
-        geom_av_log = T.sum(X_log_i * w_i, axis=0) / (T.sum(w_i, axis=0) + eps)
-        geom_av_log = geom_av_log - T.max(geom_av_log,axis=-1).dimshuffle(0,'x')  # stabilizes rounding errors?
-
-        geom_av = T.exp(geom_av_log)
-        res = T.cumsum(geom_av/T.sum(geom_av,axis=-1).dimshuffle(0,'x'),axis=-1)
-
-        CRPS = T.mean((res - t_i)**2)
-        grad = T.grad(CRPS, W)
-        return CRPS, grad
-
-    CRPS_train, grad_train = func_grad_on_indices()
-    CRPS_valid, grad_valid = func_grad_on_indices()
-
-    print "compiling the Theano functions"
-    f = theano.function([W], CRPS_train, allow_input_downcast=True)
-    g = theano.function([W], grad_train, allow_input_downcast=True)
-    f_val = theano.function([W], CRPS_valid, allow_input_downcast=True)
-
-    for fold in xrange(num_folds):
-        for i_cross_validation in xrange(num_cross_validation_masks):
-            print "cross_validation %d/%d"%(fold*num_cross_validation_masks+i_cross_validation+1, num_folds*num_cross_validation_masks)
-            val_indices = get_cross_validation_indices(range(NUM_VALIDATIONS),
-                                                   validation_index=i_cross_validation,
-                                                   number_of_splits=num_cross_validation_masks,
-                                                   rng_seed=fold,
-                                                   )
-
-
-            indices = [i for i in range(NUM_VALIDATIONS) if i not in val_indices]
-
-
-            print "starting optimization"
-            w_init = np.ones((NUM_EXPERTS,), dtype='float32')
-            #out, crps, d = scipy.optimize.fmin_l_bfgs_b(f, w_init, fprime=g, pgtol=1e-09, epsilon=1e-08, maxfun=10000)
-            ind.set_value(indices)
-            result = scipy.optimize.fmin_bfgs(f, w_init, fprime=g, epsilon=eps, maxiter=10000)
-            final_weights.append(softmax(result))
-
-            ind.set_value(val_indices)
-            validation_score = f_val(result)
-            print "         Current validation value: %.6f" % validation_score
-            final_losses.append(validation_score)
-
-    #optimal_weights = utils.geometric_average(final_weights)
-    #optimal_weights = np.percentile(final_weights, axis=0)
-    optimal_weights = np.mean(final_weights, axis=0)
-    optimal_weights = [w if w>=cutoff else 0.0 for w in optimal_weights]
-
-    optimal_weights = optimal_weights / np.sum(optimal_weights)
-    average_loss    = np.mean(final_losses)
-    return optimal_weights, average_loss  # (NUM_EXPERTS,)
-
-
-
-
-
-def optimize_expert_weights_second_pass(expert_weights,
-                                        expert_predictions,
-                                        targets,
-                                        average_distribution,
-                                        cutoff=0.01,
-                                        eps=1e-14,
-                                        *args, **kwargs):
-    """
-    :param expert_predictions: experts x validation_samples x 600 x
-    :param targets: validation_samples x 600 x
-    :param average_distribution: 600 x
-    :param eps:
-    :return:
-    """
-
-    expert_predictions = expert_predictions[expert_weights>cutoff,:,:]  # remove
-    NUM_VALIDATIONS = targets.shape[0]
-    NUM_EXPERTS = expert_predictions.shape[0]
-    # optimizing weights
-    t = theano.shared(targets.astype('float32'))  # targets = (NUM_VALIDATIONS, 600)
-    W = T.vector('W', dtype='float32')  # expert weights = (NUM_EXPERTS,)
-
-    # calculate the weighted average for each of these experts
-    weights = generate_information_weight_matrix(expert_predictions, average_distribution)
-
-    weight_matrix = theano.shared(weights.astype('float32'))
-
-    # generate a bunch of cross validation masks
-    pdf = utils.cdf_to_pdf(expert_predictions)
-    x_log = np.log(pdf)
-    x_log[pdf<=0] = np.log(eps)
-    # Compute the mean
-    X_log = theano.shared(x_log)  # source predictions = (NUM_EXPERTS, NUM_VALIDATIONS, 600)
-    weight_matrix = weight_matrix * T.nnet.softmax(W.dimshuffle('x',0)).dimshuffle(1, 0, 'x')
+    if do_optimization:
+        pass
+        #noise = T.shared_randomstreams.RandomStreams(seed=317070)
+        #w_i += noise.normal(w_i.shape)
 
     #the different predictions, are the experts
-    geom_av_log = T.sum(X_log * weight_matrix, axis=0) / (T.sum(weight_matrix, axis=0) + eps)
+    geom_av_log = T.sum(X_log_i * w_i, axis=0) / (T.sum(w_i, axis=0) + eps)
     geom_av_log = geom_av_log - T.max(geom_av_log,axis=-1).dimshuffle(0,'x')  # stabilizes rounding errors?
 
     geom_av = T.exp(geom_av_log)
-    res = T.cumsum(geom_av/T.sum(geom_av,axis=-1).dimshuffle(0,'x'),axis=-1)
 
-    CRPS = T.mean((res - t)**2)
-    grad = T.grad(CRPS, W)
+    geom_pdf = geom_av/T.sum(geom_av,axis=-1).dimshuffle(0,'x')
+    filter = T.clip( 0.75 / (T.abs_(filter_params[0]) + eps) * (1-(x_coor/( T.abs_(filter_params[0])+eps))**2), 0.0, np.float32(np.finfo(np.float64).max))
+    #geom_pdf = convolve1d(geom_pdf, filter, WINDOW_SIZE)
+
+
+    cumulative_distribution = T.cumsum(geom_pdf, axis=-1)
+
+    if not do_optimization:
+        ind.set_value(range(NUM_VALIDATIONS))
+        f_eval = theano.function([], cumulative_distribution)
+        cumulative_distribution = f_eval()
+        return cumulative_distribution[0]
+
+    t_i = t.take(ind, axis=0)
+    CRPS = T.mean((cumulative_distribution - t_i)**2)
 
     print "compiling the Theano functions"
-    f = theano.function([W], CRPS, allow_input_downcast=True)
-    g = theano.function([W], grad, allow_input_downcast=True)
+    iter_optimize = theano.function([], CRPS, on_unused_input="ignore", updates=lasagne.updates.adam(CRPS, [params], 1.0))
+    f_val = theano.function([], CRPS)
 
-    print "starting optimization"
-    w_init = np.ones((NUM_EXPERTS,), dtype='float32')
-    result = scipy.optimize.fmin_bfgs(f, w_init, fprime=g, epsilon=eps, maxiter=10000)
-    optimal_weights = softmax(result)
+    def optimize_my_params():
+        for _ in xrange(50):  # early stopping
+            score = iter_optimize()
 
-    validation_score = f(result)
-    print "         Current validation value: %.6f" % validation_score
-    optimal_weights = optimal_weights / np.sum(optimal_weights)
-
-    final_weights = np.zeros(expert_weights.shape)
-    final_weights[np.where(expert_weights>cutoff)] = optimal_weights
-
-    return final_weights, validation_score
+        result = params.get_value()
+        return result, score
 
 
+    if num_cross_validation_masks==0:
 
+        ind.set_value(range(NUM_VALIDATIONS))
+        params.set_value(params_init)
+        optimal_params, train_score = optimize_my_params()
+        final_weights = -1e10 * np.ones(expert_weights.shape,)
+        final_weights[np.where(expert_weights>cutoff)] = optimal_params[:NUM_EXPERTS]
+        final_params = np.concatenate(( final_weights, optimal_params[NUM_EXPERTS:]))
+
+        return softmax(final_weights), train_score, final_params
+    else:
+        final_params = []
+        final_losses = []
+
+        for fold in xrange(num_folds):
+            for i_cross_validation in xrange(num_cross_validation_masks):
+                print "cross_validation %d/%d"%(fold*num_cross_validation_masks+i_cross_validation+1, num_folds*num_cross_validation_masks)
+                val_indices = get_cross_validation_indices(range(NUM_VALIDATIONS),
+                                                       validation_index=i_cross_validation,
+                                                       number_of_splits=num_cross_validation_masks,
+                                                       rng_seed=fold,
+                                                       )
+
+                indices = [i for i in range(NUM_VALIDATIONS) if i not in val_indices]
+
+
+                print "starting optimization"
+                #out, crps, d = scipy.optimize.fmin_l_bfgs_b(f, w_init, fprime=g, pgtol=1e-09, epsilon=1e-08, maxfun=10000)
+                ind.set_value(indices)
+                params.set_value(params_init)
+                result, train_score = optimize_my_params()
+
+                final_params.append(result)
+
+                ind.set_value(val_indices)
+                validation_score = f_val()
+                print "              Current train value: %.6f" % train_score
+                print "         Current validation value: %.6f" % validation_score
+                final_losses.append(validation_score)
+
+        optimal_params = np.mean(final_params, axis=0)
+        average_loss   = np.mean(final_losses)
+
+        expert_weights_result = softmax(optimal_params[:NUM_EXPERTS])
+        filter_param_result = np.abs(optimal_params[NUM_EXPERTS:NUM_EXPERTS+NUM_FILTER_PARAMETERS])
+
+        return expert_weights_result, average_loss, optimal_params  # (NUM_EXPERTS,)
 
 
 
@@ -277,6 +271,7 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         #+glob.glob(prediction_file_location+"ira_*.pkl")  # buggy
         +glob.glob(prediction_file_location+"j6*.pkl")
         +glob.glob(prediction_file_location+"j7*.pkl")
+        +glob.glob(prediction_file_location+"je_os_fixedaggr_joniscale64small_360_gauss.pkl")
         +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropnorm.pkl")
         +glob.glob(prediction_file_location+"je_ss_normscale_patchcontrast.pkl")
         +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropoutput")
@@ -380,36 +375,40 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
 
         systole_valid_labels = np.array([utils.cumulative_one_hot(v) for v in regular_labels[cv,1].flatten()])
         if pass_index==1:
-            systole_expert_weight, sys_loss = optimize_expert_weights(systole_expert_predictions_matrix,
-                                                            systole_valid_labels,
-                                                            average_systole,
+            systole_expert_weight, sys_loss, systole_optimal_params = optimize_expert_weights(
+                                                            systole_expert_predictions_matrix,
+                                                            average_distribution=average_systole,
+                                                            targets=systole_valid_labels,
                                                             num_cross_validation_masks=NUM_VALIDATIONS,
                                                             fold=1,
                                                             )
             first_pass_sys_loss = sys_loss
         else:
-            systole_expert_weight, sys_loss = optimize_expert_weights_second_pass(
-                                                        systole_expert_weight,
+            systole_expert_weight, sys_loss, systole_optimal_params = optimize_expert_weights(
                                                         systole_expert_predictions_matrix,
-                                                        systole_valid_labels,
-                                                        average_systole,
+                                                        average_distribution=average_systole,
+                                                        targets=systole_valid_labels,
+                                                        num_cross_validation_masks=0,
+                                                        expert_weights=systole_expert_weight,
                                                         )
 
         diastole_valid_labels = np.array([utils.cumulative_one_hot(v) for v in regular_labels[cv,2].flatten()])
         if pass_index==1:
-            diastole_expert_weight, dia_loss = optimize_expert_weights(diastole_expert_predictions_matrix,
-                                                            diastole_valid_labels,
-                                                            average_diastole,
+            diastole_expert_weight, dia_loss, diastole_optimal_params = optimize_expert_weights(
+                                                            diastole_expert_predictions_matrix,
+                                                            average_distribution=average_diastole,
+                                                            targets=diastole_valid_labels,
                                                             num_cross_validation_masks=NUM_VALIDATIONS,
                                                             fold=1,
                                                             )
             first_pass_dia_loss = dia_loss
         else:
-            diastole_expert_weight, dia_loss = optimize_expert_weights_second_pass(
-                                                        diastole_expert_weight,
+            diastole_expert_weight, dia_loss, diastole_optimal_params = optimize_expert_weights(
                                                         diastole_expert_predictions_matrix,
-                                                        diastole_valid_labels,
-                                                        average_diastole,
+                                                        average_distribution=average_diastole,
+                                                        targets=diastole_valid_labels,
+                                                        num_cross_validation_masks=0,
+                                                        expert_weights=diastole_expert_weight,
                                                         )
         print
         print "   Final systole loss: %.6f" % sys_loss
@@ -437,20 +436,31 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
     already_printed = False
     for final_prediction in final_predictions:
         patient_id = final_prediction['patient']
+        print "\r   final prediction of patient %d" % patient_id,
         systole_prediction_matrix = np.array([average_systole_predictions_per_file[i][patient_id-1] for i in xrange(NUM_EXPERTS)])
-
         diastole_prediction_matrix = np.array([average_diastole_predictions_per_file[i][patient_id-1] for i in xrange(NUM_EXPERTS)])
-        final_prediction["final_systole"] = average_method(systole_prediction_matrix[:,None,:], average=average_systole, expert_weights=systole_expert_weight)
-        final_prediction["final_diastole"] = average_method(diastole_prediction_matrix[:,None,:], average=average_diastole, expert_weights=diastole_expert_weight)
+
+        final_prediction["final_systole"] = optimize_expert_weights(
+                        systole_prediction_matrix[:,None,:],
+                        average_distribution=average_systole,
+                        do_optimization=False,
+                        optimal_params=systole_optimal_params,
+                        )
+
+        final_prediction["final_diastole"] = optimize_expert_weights(
+                        diastole_prediction_matrix[:,None,:],
+                        average_distribution=average_diastole,
+                        do_optimization=False,
+                        optimal_params=diastole_optimal_params,
+                        )
         try:
             test_if_valid_distribution(final_prediction["final_systole"])
             test_if_valid_distribution(final_prediction["final_diastole"])
         except:
-            if not already_printed:
-                print "WARNING: These FINAL distributions are not distributions"
-                already_printed = True
             final_prediction["final_systole"] = make_monotone_distribution(final_prediction["final_systole"])
             final_prediction["final_diastole"] = make_monotone_distribution(final_prediction["final_diastole"])
+            test_if_valid_distribution(final_prediction["final_systole"])
+            test_if_valid_distribution(final_prediction["final_diastole"])
 
     print
     print "Calculating training and validation set scores for reference"

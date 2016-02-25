@@ -9,6 +9,7 @@ import theano.tensor as T
 
 import data_loader
 import deep_learning_layers
+from highway import jonas_highway
 import image_transform
 import layers
 import preprocess
@@ -29,8 +30,8 @@ caching = None
 # Save and validation frequency
 validate_every = 10
 validate_train_set = True
-save_every = 1000
-restart_from_save = False
+save_every = 10
+restart_from_save = True
 
 # Training (schedule) parameters
 # - batch sizes
@@ -56,12 +57,14 @@ cleaning_processes_post = [
     functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
-    "rotation": (-180, 180),
+    "rotate": (-180, 180),
     "shear": (0, 0),
-    "translation": (-8, 8),
+    "skew_x": (-10, 10),
+    "skew_y": (-10, 10),
+    "translate": (-8, 8),
     "flip_vert": (0, 1),
     "roll_time": (0, 0),
-    "flip_time": (0, 0),
+    "flip_time": (0, 0)
 }
 
 use_hough_roi = True  # use roi to center patches
@@ -123,31 +126,11 @@ def build_model(input_layer = None):
     else:
         l0 = nn.layers.InputLayer(input_size)
 
-    l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l1 = nn.layers.dnn.MaxPool2DDNNLayer(l1b, pool_size=(2,2), stride=(2,2))
-    print l1.output_shape
-
-    l2a = nn.layers.dnn.Conv2DDNNLayer(l1,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l2b = nn.layers.dnn.Conv2DDNNLayer(l2a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l2 = nn.layers.dnn.MaxPool2DDNNLayer(l2b, pool_size=(2,2), stride=(2,2))
-    print l2.output_shape
-
-    l3a = nn.layers.dnn.Conv2DDNNLayer(l2,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l3b = nn.layers.dnn.Conv2DDNNLayer(l3a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l3c = nn.layers.dnn.Conv2DDNNLayer(l3b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l3 = nn.layers.dnn.MaxPool2DDNNLayer(l3c, pool_size=(2,2), stride=(2,2))
-    print l3.output_shape
-
-    l4a = nn.layers.dnn.Conv2DDNNLayer(l3,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l4b = nn.layers.dnn.Conv2DDNNLayer(l4a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l4c = nn.layers.dnn.Conv2DDNNLayer(l4b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l4 = nn.layers.dnn.MaxPool2DDNNLayer(l4c, pool_size=(2,2), stride=(2,2))
-
-    l5a = nn.layers.dnn.Conv2DDNNLayer(l4,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l5b = nn.layers.dnn.Conv2DDNNLayer(l5a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l5c = nn.layers.dnn.Conv2DDNNLayer(l5b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l5 = nn.layers.dnn.MaxPool2DDNNLayer(l5c, pool_size=(2,2), stride=(2,2))
+    l1 = jonas_highway(l0, num_filters=64, num_conv=2, filter_size=(3,3), pool_size=(2,2))
+    l2 = jonas_highway(l1, num_filters=128, num_conv=2, filter_size=(3,3), pool_size=(2,2))
+    l3 = jonas_highway(l2, num_filters=256, num_conv=3, filter_size=(3,3), pool_size=(2,2))
+    l4 = jonas_highway(l3, num_filters=512, num_conv=3, filter_size=(3,3), pool_size=(2,2))
+    l5 = jonas_highway(l4, num_filters=512, num_conv=3, filter_size=(3,3), pool_size=(2,2))
 
     # Systole Dense layers
     ldsys1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)

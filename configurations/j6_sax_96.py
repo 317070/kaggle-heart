@@ -29,8 +29,8 @@ caching = None
 # Save and validation frequency
 validate_every = 10
 validate_train_set = True
-save_every = 1000
-restart_from_save = False
+save_every = 10
+restart_from_save = True
 
 # Training (schedule) parameters
 # - batch sizes
@@ -56,12 +56,14 @@ cleaning_processes_post = [
     functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
-    "rotation": (-180, 180),
+    "rotate": (-180, 180),
     "shear": (0, 0),
-    "translation": (-8, 8),
+    "skew_x": (-10, 10),
+    "skew_y": (-10, 10),
+    "translate": (-8, 8),
     "flip_vert": (0, 1),
     "roll_time": (0, 0),
-    "flip_time": (0, 0),
+    "flip_time": (0, 0)
 }
 
 use_hough_roi = True  # use roi to center patches
@@ -84,7 +86,7 @@ create_eval_train_gen = functools.partial(data_loader.generate_validation_batch,
 create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
 
 # Input sizes
-image_size = 64
+image_size = 96
 data_sizes = {
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
@@ -126,18 +128,15 @@ def build_model(input_layer = None):
     l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1 = nn.layers.dnn.MaxPool2DDNNLayer(l1b, pool_size=(2,2), stride=(2,2))
-    print l1.output_shape
 
     l2a = nn.layers.dnn.Conv2DDNNLayer(l1,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l2b = nn.layers.dnn.Conv2DDNNLayer(l2a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l2 = nn.layers.dnn.MaxPool2DDNNLayer(l2b, pool_size=(2,2), stride=(2,2))
-    print l2.output_shape
 
     l3a = nn.layers.dnn.Conv2DDNNLayer(l2,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l3b = nn.layers.dnn.Conv2DDNNLayer(l3a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l3c = nn.layers.dnn.Conv2DDNNLayer(l3b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l3 = nn.layers.dnn.MaxPool2DDNNLayer(l3c, pool_size=(2,2), stride=(2,2))
-    print l3.output_shape
 
     l4a = nn.layers.dnn.Conv2DDNNLayer(l3,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l4b = nn.layers.dnn.Conv2DDNNLayer(l4a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)

@@ -235,8 +235,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             pass  # will be filled in by the next one
         elif tag.startswith("sliced:data:sax"):
             # step 1: sort (data, metadata_tag) with slice_location_finder
-            slice_locations = slice_location_finder({i: metadata for i,metadata in enumerate(metadata_tag)})
-            sorted_indices = [key for key in sorted(slice_locations.iterkeys(), key=lambda x: slice_locations[x]["relative_position"])]
+            slice_locations, sorted_indices, sorted_distances = slice_location_finder({i: metadata for i,metadata in enumerate(metadata_tag)})
 
             data = [data[idx] for idx in sorted_indices]
             metadata_tag = [metadata_tag[idx] for idx in sorted_indices]
@@ -276,12 +275,18 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             # Put data (images and metadata) in right location
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 
+
+            is_padded = np.array([False]*len(result["sliced:data:sax:distances"][index]))
             if "sliced:data:sax:locations" in result:
-                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
                 eps_location = 1e-7
                 put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
-                if "sliced:data:sax:is_not_padded" in result:
-                    result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
+
+            if "sliced:data:sax:distances" in result:
+                eps_location = 1e-7
+                put_in_the_middle(result["sliced:data:sax:distances"][index], sorted_distances + eps_location, True, is_padded)
+
+            if "sliced:data:sax:is_not_padded" in result:
+                result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
 
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()
@@ -500,4 +505,20 @@ def slice_location_finder(metadata_dict):
             scalar = np.inner(v1, v2)
             data["relative_position"] = scalar
 
-    return datadict
+    sorted_indices = [key for key in sorted(datadict.iterkeys(), key=lambda x: datadict[x]["relative_position"])]
+
+    sorted_distances = []
+    for i in xrange(len(sorted_indices)-1):
+        res = []
+        for d1, d2 in [(datadict[sorted_indices[i]], datadict[sorted_indices[i+1]]),
+                       (datadict[sorted_indices[i+1]], datadict[sorted_indices[i]])]:
+            F = np.array(d1["orientation"]).reshape( (2,3) )
+            n = np.cross(F[0,:], F[1,:])
+            n = n/np.sqrt(np.sum(n*n))
+            p = d2["middle_pixel_position"] - d1["position"]
+            distance = np.abs(np.sum(n*p))
+            res.append(distance)
+        sorted_distances.append(np.mean(res))
+
+    return datadict, sorted_indices, sorted_distances
+

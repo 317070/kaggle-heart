@@ -7,8 +7,9 @@ from scipy.fftpack import fftn, ifftn
 from skimage.feature import peak_local_max, canny
 from skimage.transform import hough_circle
 import skimage.draw
-import compressed_cache
+# import compressed_cache
 from configuration import config
+import utils
 
 
 def read_labels(file_path):
@@ -25,12 +26,12 @@ def read_labels(file_path):
     return id2labels
 
 
-@compressed_cache.memoize()
+# @compressed_cache.memoize()
 def read_slice(path):
     return pickle.load(open(path))['data']
 
 
-@compressed_cache.memoize()
+# @compressed_cache.memoize()
 def read_metadata(path):
     d = pickle.load(open(path))['metadata'][0]
     metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient', 'ImagePositionPatient', 'SliceLocation',
@@ -40,7 +41,7 @@ def read_metadata(path):
     metadata['SliceLocation'] = np.float32(metadata['SliceLocation'])
     metadata['ImagePositionPatient'] = np.float32(metadata['ImagePositionPatient'])
     metadata['PatientSex'] = 1 if metadata['PatientSex'] == 'F' else -1
-    metadata['PatientAge'] = int(metadata['PatientAge'][1:3])
+    metadata['PatientAge'] = utils.get_patient_age(metadata['PatientAge'])
     metadata['Rows'] = int(metadata['Rows'])
     metadata['Columns'] = int(metadata['Columns'])
     return metadata
@@ -49,18 +50,29 @@ def read_metadata(path):
 def sample_augmentation_parameters(transformation):
     random_params = None
 
-    if not all(v is None for k, v in transformation.items() if k not in ['patch_size', 'mm_patch_size', 'mask_roi']):
+    if not all(v is None for k, v in transformation.items() if
+               k in ['translation_range_x', 'translation_range_y', 'rotation_range',
+                     'shear_range', 'roi_scale_range', 'do_flip', 'sequence_shift']):
         shift_x = config().rng.uniform(*transformation['translation_range_x'])
         shift_y = config().rng.uniform(*transformation['translation_range_y'])
         translation = (shift_x, shift_y)
         rotation = config().rng.uniform(*transformation['rotation_range'])
         shear = config().rng.uniform(*transformation['shear_range'])
         roi_scale = config().rng.uniform(*transformation['roi_scale_range'])
-        flip = config().rng.randint(2) > 0 if transformation['do_flip'] else False  # flip half of the time
+
+        if type(transformation['do_flip']) == tuple:
+            flip_x = config().rng.randint(2) > 0 if transformation['do_flip'][0] else False
+            flip_y = config().rng.randint(2) > 0 if transformation['do_flip'][1] else False
+        else:
+            flip_x = config().rng.randint(2) > 0 if transformation['do_flip'] else False
+            flip_y = False
+
         sequence_shift = config().rng.randint(30) if transformation['sequence_shift'] else 0
         random_params = namedtuple('Params', ['translation', 'rotation', 'shear', 'roi_scale',
-                                              'flip', 'sequence_shift'])(translation, rotation, shear, roi_scale, flip,
-                                                                         sequence_shift)
+                                              'flip_x', 'flip_y', 'sequence_shift'])(translation, rotation, shear,
+                                                                                     roi_scale, flip_x, flip_y,
+                                                                                     sequence_shift)
+        print random_params
     return random_params
 
 
@@ -113,7 +125,8 @@ def transform_norm_rescale(data, metadata, transformation, roi=None, random_augm
         augment_tform = build_augmentation_transform(rotation=random_augmentation_params.rotation,
                                                      shear=random_augmentation_params.shear,
                                                      translation=random_augmentation_params.translation,
-                                                     flip=random_augmentation_params.flip)
+                                                     flip_x=random_augmentation_params.flip_x,
+                                                     flip_y=random_augmentation_params.flip_y)
         total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale
 
     # apply transformation per image
@@ -215,9 +228,12 @@ def build_center_uncenter_transforms(image_shape):
     return tform_center, tform_uncenter
 
 
-def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip=False, zoom=(1.0, 1.0)):
-    if flip:
+def build_augmentation_transform(rotation=0, shear=0, translation=(0, 0), flip_x=False, flip_y=False, zoom=(1.0, 1.0)):
+    if flip_x:
         shear += 180  # shear by 180 degrees is equivalent to flip along the X-axis
+    if flip_y:
+        shear += 180
+        rotation += 180
 
     tform_augment = skimage.transform.AffineTransform(scale=(1 / zoom[0], 1 / zoom[1]), rotation=np.deg2rad(rotation),
                                                       shear=np.deg2rad(shear), translation=translation)
@@ -291,7 +307,7 @@ def normalize_contrast_zmuv(data, z=2):
         data[i] = np.clip(img, -0.0, 1.0)
 
 
-def slice_location_finder(slicepath2metadata):
+def slice_location_finder(slicepath2metadata, normalized=False):
     """
     :param slicepath2metadata: dict with arbitrary keys, and metadata values
     :return:
@@ -321,9 +337,9 @@ def slice_location_finder(slicepath2metadata):
         if '4ch' in sp:
             slicepath2position[sp] = -50
 
-    if len(slicepath2midpix) == 1:
+    if len(slicepath2midpix) <= 5:
         for sp, midpix in slicepath2midpix.iteritems():
-            slicepath2position[sp] = 0.0
+            slicepath2position[sp] = -1
     else:
         # find the keys of the 2 points furthest away from each other
         max_dist = -1.0
@@ -347,6 +363,12 @@ def slice_location_finder(slicepath2metadata):
         for sp, midpix in slicepath2midpix.iteritems():
             v2 = midpix - p_ref1
             slicepath2position[sp] = np.inner(v1, v2)
+
+        if normalized:
+            max_pos = max(slicepath2position.values())
+            min_pos = min(slicepath2position.values())
+            for sp, pos in slicepath2position.iteritems():
+                slicepath2position[sp] = np.abs(2. / (max_pos - min_pos) * (pos - max_pos) + 1)
 
     return slicepath2position
 

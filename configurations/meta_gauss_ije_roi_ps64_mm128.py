@@ -95,7 +95,7 @@ def build_model():
                                b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
     sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_lstm0, p=0.5), num_units=1, W=nn.init.Orthogonal(),
                                   b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
-    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0, log=True)
+    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0, sigma_logscale=True)
 
     # ------------------ diastole
     l_sub_dst_out = submodel.l_outs[1]
@@ -120,7 +120,7 @@ def build_model():
                                b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
     sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_lstm1, p=0.5), num_units=1, W=nn.init.Orthogonal(),
                                   b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
-    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1, log=True)
+    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1, sigma_logscale=True)
 
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))

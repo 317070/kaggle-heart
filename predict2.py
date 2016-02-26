@@ -50,6 +50,7 @@ for l_in, x in izip(model.l_ins, xs_shared):
 
 iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
                                 givens=givens_in)
+iter_print = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.mu_layers], givens=givens_in)
 
 if set == 'valid':
     valid_data_iterator = config().valid_data_iterator
@@ -68,7 +69,7 @@ if set == 'valid':
                 valid_data_iterator.generate()):
             for x_shared, x in zip(xs_shared, xs_batch_valid):
                 x_shared.set_value(x)
-
+            print iter_print()
             batch_targets.append(ys_batch_valid)
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)

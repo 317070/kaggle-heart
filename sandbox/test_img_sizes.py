@@ -1,6 +1,6 @@
 import glob
 import re
-import data_test
+import data as data_test
 import utils
 
 data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
@@ -31,18 +31,18 @@ def test_1():
 
 def test_3():
     patient_path = sorted(glob.glob(data_path + '/*/study'))
+    px = []
     for p in patient_path:
-        px = []
         spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
         for s in spaths:
-            data = data_test.read_slice(s)
+            # data = data_test.read_slice(s)
             metadata = data_test.read_metadata(s)
-            px.append(metadata['PixelSpacing'][0])
+            px.append(metadata['SliceThickness'])
 
-        px = set(px)
-        if len(px) != 1:
-            print p
-            print px
+    print px
+    px = set(px)
+    if len(px) != 1:
+        print px
 
 
 def test_2():
@@ -78,5 +78,18 @@ def test_2():
     print max_dm, max_heartm
 
 
+def test4():
+    patient_path = sorted(glob.glob(data_path + '/*/study'))
+    px = []
+    for p in patient_path:
+        spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
+        for s in spaths:
+            metadata = data_test.read_metadata(s)
+            px.append(metadata['PatientAge'])
+    px = set(px)
+    if len(px) != 1:
+        print px
+
+
 if __name__ == '__main__':
-    test_3()
+    test4()

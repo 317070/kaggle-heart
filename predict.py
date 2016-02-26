@@ -49,7 +49,7 @@ for l_in, x in izip(model.l_ins, xs_shared):
     givens_in[l_in.input_var] = x
 
 iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
-                                givens=givens_in)
+                                givens=givens_in, on_unused_input='warn')
 
 if set == 'valid':
     valid_data_iterator = config().valid_data_iterator

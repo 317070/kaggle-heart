@@ -1,12 +1,15 @@
 import lasagne as nn
 import theano.tensor as T
-import theano
 import numpy as np
-from lasagne import nonlinearities, init
-
+from lasagne import nonlinearities
 
 def heaviside(x):
     return T.arange(0, 600).dimshuffle('x', 0) - T.repeat(x, 600, axis=1) >= 0
+
+
+def crps(predictions, targets_volume):
+    targets_heaviside = heaviside(targets_volume)
+    return T.mean((predictions - targets_heaviside) ** 2)
 
 
 def cdf(sample, mu=0, sigma=1, eps=1e-6):
@@ -30,13 +33,29 @@ class MultLayer(nn.layers.MergeLayer):
         return inputs[0] * inputs[1]
 
 
-class NormalCDFLayer(nn.layers.MergeLayer):
+class ConstantLayer(nn.layers.Layer):
+    """
+    Makes a layer of constant value the same shape as the given input layer
+    """
+
+    def __init__(self, shape_layer, constant=1, **kwargs):
+        super(ConstantLayer, self).__init__(shape_layer, **kwargs)
+        self.constant = constant
+
+    def get_output_shape_for(self, input_shape):
+        return input_shape
+
+    def get_output_for(self, input, **kwargs):
+        return T.ones_like(input) * self.constant
+
+
+class GMMLayer(nn.layers.MergeLayer):
     """
     log=True is log_sigma is given else log=False
     """
 
-    def __init__(self, mu, sigma, log=False, **kwargs):
-        super(NormalCDFLayer, self).__init__([mu, sigma], **kwargs)
+    def __init__(self, mu, sigma, w, log=False, **kwargs):
+        super(GMMLayer, self).__init__([mu, sigma, w], **kwargs)
         self.log = log
 
     def get_output_shape_for(self, input_shapes):
@@ -45,8 +64,63 @@ class NormalCDFLayer(nn.layers.MergeLayer):
     def get_output_for(self, input, **kwargs):
         mu = input[0]
         sigma = input[1]
+        w = input[2]
         if self.log:
             sigma = T.exp(sigma)
+
+        x_range = T.arange(0, 600).dimshuffle('x', 0, 'x')
+        mu = mu.dimshuffle(0, 'x', 1)
+        sigma = sigma.dimshuffle(0, 'x', 1)
+        x = (x_range - mu) / (sigma * T.sqrt(2.) + 1e-16)
+        cdf = (T.erf(x) + 1.) / 2.  # (bs, 600, n_mix)
+        cdf = T.sum(cdf * w.dimshuffle(0, 'x', 1), axis=-1)
+        return cdf
+
+
+class RepeatLayer(nn.layers.Layer):
+    def __init__(self, incoming, repeats, axis=0, **kwargs):
+        super(RepeatLayer, self).__init__(incoming, **kwargs)
+        self.repeats = repeats
+        self.axis = axis
+
+    def get_output_shape_for(self, input_shape):
+        output_shape = list(input_shape)
+        output_shape.insert(self.axis, self.repeats)
+        return tuple(output_shape)
+
+    def get_output_for(self, input, **kwargs):
+        shape_ones = [1] * input.ndim
+        shape_ones.insert(self.axis, self.repeats)
+        ones = T.ones(tuple(shape_ones), dtype=input.dtype)
+
+        pattern = range(input.ndim)
+        pattern.insert(self.axis, "x")
+        # print shape_ones, pattern
+        return ones * input.dimshuffle(*pattern)
+
+
+class NormalCDFLayer(nn.layers.MergeLayer):
+    """
+    log=True is log_sigma is given else log=False
+    """
+
+    def __init__(self, mu, sigma, sigma_logscale=False, mu_logscale=False, **kwargs):
+        super(NormalCDFLayer, self).__init__([mu, sigma], **kwargs)
+        self.sigma_logscale = sigma_logscale
+        self.mu_logscale = mu_logscale
+
+    def get_output_shape_for(self, input_shapes):
+        return input_shapes[0][0], 600
+
+    def get_output_for(self, input, **kwargs):
+        mu = input[0]
+        sigma = input[1]
+
+        if self.sigma_logscale:
+            sigma = T.exp(sigma)
+        if self.mu_logscale:
+            mu = T.exp(mu)
+
         x_range = T.arange(0, 600).dimshuffle('x', 0)
         mu = T.repeat(mu, 600, axis=1)
         sigma = T.repeat(sigma, 600, axis=1)
@@ -125,114 +199,6 @@ class NonlinearityLayer(nn.layers.Layer):
         return self.nonlinearity(input)
 
 
-class BatchNormLayer(nn.layers.Layer):
-    def __init__(self, incoming, axes='auto', epsilon=1e-4, alpha=0.1,
-                 mode='low_mem', beta=init.Constant(0), gamma=init.Constant(1),
-                 mean=init.Constant(0), inv_std=init.Constant(1), **kwargs):
-        super(BatchNormLayer, self).__init__(incoming, **kwargs)
-
-        if axes == 'auto':
-            # default: normalize over all but the second axis
-            axes = (0,) + tuple(range(2, len(self.input_shape)))
-        elif isinstance(axes, int):
-            axes = (axes,)
-        self.axes = axes
-
-        self.epsilon = epsilon
-        self.alpha = alpha
-        self.mode = mode
-
-        # create parameters, ignoring all dimensions in axes
-        shape = [size for axis, size in enumerate(self.input_shape)
-                 if axis not in self.axes]
-        if any(size is None for size in shape):
-            raise ValueError("BatchNormLayer needs specified input sizes for "
-                             "all axes not normalized over.")
-        if beta is None:
-            self.beta = None
-        else:
-            self.beta = self.add_param(beta, shape, 'beta',
-                                       trainable=True, regularizable=False)
-        if gamma is None:
-            self.gamma = None
-        else:
-            self.gamma = self.add_param(gamma, shape, 'gamma',
-                                        trainable=True, regularizable=True)
-        self.mean = self.add_param(mean, shape, 'mean',
-                                   trainable=False, regularizable=False)
-        self.inv_std = self.add_param(inv_std, shape, 'inv_std',
-                                      trainable=False, regularizable=False)
-
-    def get_output_for(self, input, deterministic=False,
-                       batch_norm_use_averages=None,
-                       batch_norm_update_averages=None, **kwargs):
-        input_mean = input.mean(self.axes)
-        input_inv_std = T.inv(T.sqrt(input.var(self.axes) + self.epsilon))
-
-        # Decide whether to use the stored averages or mini-batch statistics
-        if batch_norm_use_averages is None:
-            batch_norm_use_averages = deterministic
-        use_averages = batch_norm_use_averages
-
-        if use_averages:
-            mean = self.mean
-            inv_std = self.inv_std
-        else:
-            mean = input_mean
-            inv_std = input_inv_std
-
-        # Decide whether to update the stored averages
-        if batch_norm_update_averages is None:
-            batch_norm_update_averages = not deterministic
-        update_averages = batch_norm_update_averages
-
-        if update_averages:
-            # Trick: To update the stored statistics, we create memory-aliased
-            # clones of the stored statistics:
-            running_mean = theano.clone(self.mean, share_inputs=False)
-            running_inv_std = theano.clone(self.inv_std, share_inputs=False)
-            # set a default update for them:
-            running_mean.default_update = ((1 - self.alpha) * running_mean +
-                                           self.alpha * input_mean)
-            running_inv_std.default_update = ((1 - self.alpha) *
-                                              running_inv_std +
-                                              self.alpha * input_inv_std)
-            # and make sure they end up in the graph without participating in
-            # the computation (this way their default_update will be collected
-            # and applied, but the computation will be optimized away):
-            mean += 0 * running_mean
-            inv_std += 0 * running_inv_std
-
-        # prepare dimshuffle pattern inserting broadcastable axes as needed
-        param_axes = iter(range(input.ndim - len(self.axes)))
-        pattern = ['x' if input_axis in self.axes
-                   else next(param_axes)
-                   for input_axis in range(input.ndim)]
-
-        # apply dimshuffle pattern to all parameters
-        beta = 0 if self.beta is None else self.beta.dimshuffle(pattern)
-        gamma = 1 if self.gamma is None else self.gamma.dimshuffle(pattern)
-        mean = mean.dimshuffle(pattern)
-        inv_std = inv_std.dimshuffle(pattern)
-
-        # normalize
-        normalized = (input - mean) * (gamma * inv_std) + beta
-        return normalized
-
-
-def batch_norm(layer, **kwargs):
-    nonlinearity = getattr(layer, 'nonlinearity', None)
-    if nonlinearity is not None:
-        layer.nonlinearity = nonlinearities.identity
-    if hasattr(layer, 'b') and layer.b is not None:
-        del layer.params[layer.b]
-        layer.b = None
-    layer = BatchNormLayer(layer, **kwargs)
-    if nonlinearity is not None:
-        layer = NonlinearityLayer(layer, nonlinearity)
-    return layer
-
-
 class CumSumLayer(nn.layers.Layer):
     def __init__(self, incoming, axis=1, **kwargs):
         super(CumSumLayer, self).__init__(incoming, **kwargs)
@@ -259,3 +225,55 @@ class NormalisationLayer(nn.layers.Layer):
         else:
             inp_low_zero = input
         return inp_low_zero / T.sum(inp_low_zero, axis=1).dimshuffle(0, 'x') * self.norm_sum
+
+
+class JeroenLayer(nn.layers.MergeLayer):
+    """This layer doesn't overfit; it already knows what to do.
+    incomings = [mu_area, sigma_area, is_not_padded, slicelocs]
+    output = N x 2 array, with mu = output[:, 0] and sigma = output[:, 1]
+    """
+
+    def __init__(self, incomings, trainable_scale=False, **kwargs):
+        super(JeroenLayer, self).__init__(incomings, **kwargs)
+
+        self.W_mu = self.add_param(nn.init.Constant(-2.3), (1,), name="W", trainable=trainable_scale)
+        self.b_mu = self.add_param(nn.init.Constant(-20.), (1,), name="b", trainable=trainable_scale)
+
+        self.W_sigma = self.add_param(nn.init.Constant(-2.3), (1,), name="W", trainable=trainable_scale)
+        self.b_sigma = self.add_param(nn.init.Constant(-20.), (1,), name="b", trainable=trainable_scale)
+
+    def get_output_shape_for(self, input_shapes):
+        return input_shapes[0][0], 2
+
+    def get_output_for(self, inputs, **kwargs):
+        mu_area, sigma_area, slice_mask, slicelocs = inputs
+
+        # Rescale input
+        mu_area = mu_area * T.exp(self.W_mu[0]) + T.exp(self.b_mu[0])
+        sigma_area = sigma_area * T.exp(self.W_sigma[0]) + T.exp(self.b_sigma[0])
+
+        # For each slice pair, compute if both of them are valid
+        is_pair = slice_mask[:, :-1] + slice_mask[:, 1:] > 1.5
+
+        # Compute the distance between slices
+        h = abs(slicelocs[:, :-1] - slicelocs[:, 1:])
+        h /= 10.  # mm to cm
+
+        # Compute mu for each slice pair
+        m1 = mu_area[:, :-1]
+        m2 = mu_area[:, 1:]
+        mu_volumes = (m1 + m2 + T.sqrt(m1 * m2)) * h / 3.0
+        mu_volumes *= is_pair
+
+        # Compute sigma for each slice pair
+        s1 = sigma_area[:, :-1]
+        s2 = sigma_area[:, 1:]
+        sigma_volumes = (s1 + s2) * h / 3.0
+        sigma_volumes *= is_pair
+
+        # Compute mu and sigma per patient
+        mu_volume_patient = T.sum(mu_volumes, axis=1, keepdims=True)
+        sigma_volume_patient = T.sqrt(T.sum(sigma_volumes ** 2, axis=1, keepdims=True))
+
+        # Concat and return
+        return T.concatenate([mu_volume_patient, sigma_volume_patient], axis=1)

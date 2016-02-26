@@ -120,7 +120,7 @@ def build_model(l_in=None):
                                b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
     sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, W=nn.init.Orthogonal(),
                                   b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
-    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0, log=True)
+    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0, sigma_logscale=True)
 
     # ---------------------------------------------------------------
 
@@ -133,7 +133,7 @@ def build_model(l_in=None):
                                b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
     sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, W=nn.init.Orthogonal(),
                                   b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
-    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1, log=True)
+    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1, sigma_logscale=True)
 
     l_outs = [l_cdf0, l_cdf1]
     l_top = nn.layers.MergeLayer(l_outs)
@@ -141,10 +141,13 @@ def build_model(l_in=None):
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
-    dense_layers = [l_d01, l_d02, l_d11, l_d12]
+    dense_layers = [l_d01, l_d02, l_d11, l_d12, mu0, sigma0, mu0, mu1]
+    mu_layers = [mu0, mu1]
+    sigma_layers = [sigma0, sigma1]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'dense_layers'])([l_in], l_outs, l_targets,
-                                                                                          l_top, dense_layers)
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'dense_layers', 'mu_layers', 'sigma_layers'])(
+        [l_in], l_outs, l_targets,
+        l_top, dense_layers, mu_layers, sigma_layers)
 
 
 def build_objective(model, deterministic=False):

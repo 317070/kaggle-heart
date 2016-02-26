@@ -6,7 +6,6 @@ import numpy as np
 import theano
 import utils
 import theano.tensor as T
-import buffering
 from configuration import config, set_configuration
 from collections import defaultdict
 

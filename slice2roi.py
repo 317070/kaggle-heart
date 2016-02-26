@@ -222,7 +222,7 @@ def get_slice2roi(data_path, plot=False):
             if plot:
                 plot_roi([ch2], ch2_result_center, ch2_result_radius)
 
-    filename = data_path.split('/')[-1] + '_slice2roi_koe.pkl'
+    filename = data_path.split('/')[-1] + '_slice2roi.pkl'
     utils.save_pkl(slice2roi, filename)
     print 'saved to ', filename
     return slice2roi

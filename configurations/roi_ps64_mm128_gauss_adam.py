@@ -120,7 +120,7 @@ def build_model(l_in=None):
                                b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
     sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, W=nn.init.Orthogonal(),
                                   b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
-    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0, log=True)
+    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0, sigma_logscale=True)
 
     # ---------------------------------------------------------------
 
@@ -133,7 +133,7 @@ def build_model(l_in=None):
                                b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
     sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, W=nn.init.Orthogonal(),
                                   b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
-    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1, log=True)
+    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1, sigma_logscale=True)
 
     l_outs = [l_cdf0, l_cdf1]
     l_top = nn.layers.MergeLayer(l_outs)

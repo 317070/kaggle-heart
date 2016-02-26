@@ -8,6 +8,8 @@ import time
 import re
 import numpy as np
 
+maxfloat = np.finfo(np.float32).max
+
 
 def get_dir_path(dir_name, root_dir='/mnt/storage/metadata/kaggle-heart'):
     root_dir = '/home/ikorshun/metadata'  # TODO hack
@@ -69,6 +71,16 @@ def get_patient_id(path):
 
 def get_slice_id(path):
     return re.search(r'/((sax|2ch|4ch)_\d+\.pkl)$', path).group(1)
+
+
+def get_patient_age(s):
+    age = float(s[:-1])
+    units = s[-1]
+    if units == 'M':
+        age /= 12.
+    elif units == 'W':
+        age /= 52.1429
+    return age
 
 
 def current_learning_rate(schedule, idx):

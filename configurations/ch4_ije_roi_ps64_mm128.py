@@ -13,26 +13,28 @@ caching = None
 restart_from_save = None
 rng = np.random.RandomState(42)
 patch_size = (64, 64)
+mm_patch_size = (128, 128)
 train_transformation_params = {
     'patch_size': patch_size,
-    'mm_patch_size': (128, 128),
-    'mask_roi': False,
+    'mm_patch_size': mm_patch_size,
     'rotation_range': (-180, 180),
-    'translation_range_x': (-5, 10),
-    'translation_range_y': (-10, 5),
+    'mask_roi': False,
+    'translation_range_x': (-10, 10),
+    'translation_range_y': (-10, 10),
     'shear_range': (0, 0),
-    'roi_scale_range': (0.8, 1.2),
-    'do_flip': True,
+    'roi_scale_range': (1.2, 1.5),
+    'do_flip': (True, False),
     'sequence_shift': False
 }
 
 valid_transformation_params = {
     'patch_size': patch_size,
-    'mm_patch_size': (128, 128)
+    'mm_patch_size': mm_patch_size,
+    'mask_roi': False
 }
 
 batch_size = 32
-nbatches_chunk = 12
+nbatches_chunk = 13
 chunk_size = batch_size * nbatches_chunk
 
 train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
@@ -59,7 +61,7 @@ test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/da
                                                                   view='4ch')
 
 nchunks_per_epoch = max(1, train_data_iterator.nsamples / chunk_size)
-max_nchunks = nchunks_per_epoch * 500
+max_nchunks = nchunks_per_epoch * 100
 learning_rate_schedule = {
     0: 0.0001,
     int(max_nchunks * 0.6): 0.00008,
@@ -119,10 +121,11 @@ def build_model(l_in=None):
     l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
 
-    l_sm0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=600, b=nn.init.Constant(0.1),
-                                 nonlinearity=nn.nonlinearities.softmax)
-    l_sm0 = nn_heart.NormalisationLayer(nn.layers.dropout(l_sm0, p=0.5))
-    l_cdf0 = nn_heart.CumSumLayer(l_sm0)
+    mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                               b=nn.init.Constant(100), nonlinearity=nn_heart.lb_softplus(1))
+    sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                                  b=nn.init.Constant(20), nonlinearity=nn_heart.lb_softplus(1))
+    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0)
 
     # ---------------------------------------------------------------
 
@@ -131,10 +134,11 @@ def build_model(l_in=None):
     l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
 
-    l_sm1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=600, b=nn.init.Constant(0.1),
-                                 nonlinearity=nn.nonlinearities.softmax)
-    l_sm1 = nn_heart.NormalisationLayer(nn.layers.dropout(l_sm1, p=0.5))
-    l_cdf1 = nn_heart.CumSumLayer(l_sm1)
+    mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                               b=nn.init.Constant(150), nonlinearity=nn_heart.lb_softplus(1))
+    sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                                  b=nn.init.Constant(20), nonlinearity=nn_heart.lb_softplus(1))
+    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1)
 
     l_outs = [l_cdf0, l_cdf1]
     l_top = nn.layers.MergeLayer(l_outs)

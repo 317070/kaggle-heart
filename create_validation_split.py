@@ -1,4 +1,4 @@
-# NOT TESTED!!!!!!!!!!!!!
+# TODO: TEST IT !!!!!!!!!!!!!
 
 
 import numpy as np
@@ -64,15 +64,16 @@ def split_train_validation(global_data_path, train_data_path, valid_data_path, n
 
 
 if __name__ == '__main__':
-    # global_data_path = '/data/dsb15_pkl/pkl_train'
-    # train_data_path = '/data/dsb15_pkl/pkl_splitted/train'
-    # valid_data_path = '/data/dsb15_pkl/pkl_splitted/valid'
-    global_data_path = '/data/dsb15_pkl/pkl_splitted/valid'
-    train_data_path = '/data/dsb15_pkl/pkl_splitted/valid1'
-    valid_data_path = '/data/dsb15_pkl/pkl_splitted/valid2'
+    global_data_path = '/data/dsb15_pkl/pkl_train'
+    train_data_path = '/data/dsb15_pkl/pkl_splitted/train'
+    valid_data_path = '/data/dsb15_pkl/pkl_splitted/valid'
+    # global_data_path = '/data/dsb15_pkl/pkl_splitted/valid'
+    # train_data_path = '/data/dsb15_pkl/pkl_splitted/valid1'
+    # valid_data_path = '/data/dsb15_pkl/pkl_splitted/valid2'
+
     if not os.path.isdir(train_data_path):
         os.makedirs(train_data_path)
     if not os.path.isdir(valid_data_path):
         os.makedirs(valid_data_path)
 
-    split_train_validation(global_data_path, train_data_path, valid_data_path, number_of_splits=2)
+    split_train_validation(global_data_path, train_data_path, valid_data_path)

@@ -15,6 +15,9 @@ patch_size = subconfig().patch_size
 train_transformation_params = subconfig().train_transformation_params
 valid_transformation_params = subconfig().valid_transformation_params
 
+train_transformation_params['normalized_slice_pos'] = True
+valid_transformation_params['normalized_slice_pos'] = True
+
 batch_size = 8
 nbatches_chunk = 2
 chunk_size = batch_size * nbatches_chunk
@@ -50,12 +53,14 @@ valid_data_iterator.nslices = nslices
 test_data_iterator.nslices = nslices
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
-max_nchunks = nchunks_per_epoch * 50
+max_nchunks = nchunks_per_epoch * 100
 learning_rate_schedule = {
-    0: 0.0001,
-    int(max_nchunks * 0.25): 0.00007,
-    int(max_nchunks * 0.5): 0.00003,
-    int(max_nchunks * 0.75): 0.00001,
+    0: 0.0002,
+    int(max_nchunks * 0.1): 0.0001,
+    int(max_nchunks * 0.3): 0.00008,
+    int(max_nchunks * 0.5): 0.00004,
+    int(max_nchunks * 0.7): 0.00003,
+    int(max_nchunks * 0.9): 0.00001,
 }
 validate_every = nchunks_per_epoch
 save_every = nchunks_per_epoch
@@ -72,7 +77,7 @@ def build_model():
     submodel = subconfig().build_model(l_in_rshp)
 
     # ------------------ systole
-    l_sub_sys_out = nn.layers.ConcatLayer([submodel.mu_layers[0], submodel.sigma_layers[0]], axis=1)
+    l_sub_sys_out = submodel.dense_layers[1]
     l_sub_sys_out = nn.layers.ReshapeLayer(l_sub_sys_out, (-1, nslices, [1]))
     l_sys_concat = nn.layers.ConcatLayer([l_sub_sys_out, l_in_slice_location], axis=2)
 
@@ -82,14 +87,14 @@ def build_model():
     cell = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None,
                           nonlinearity=nn.nonlinearities.tanh)
 
-    l_lstm0 = nn.layers.LSTMLayer(l_sys_concat, num_units=512,
+    l_lstm0 = nn.layers.LSTMLayer(nn.layers.dropout(l_sys_concat, 0.5), num_units=512,
                                   ingate=input_gate, forgetgate=forget_gate,
                                   cell=cell, outgate=output_gate,
                                   mask_input=l_in_slice_mask,
                                   peepholes=False, precompute_input=False,
                                   grad_clipping=5, only_return_final=True)
 
-    l_lstm0_back = nn.layers.LSTMLayer(l_sys_concat, num_units=512,
+    l_lstm0_back = nn.layers.LSTMLayer(nn.layers.dropout(l_sys_concat, 0.5), num_units=512,
                                        ingate=input_gate, forgetgate=forget_gate,
                                        cell=cell, outgate=output_gate,
                                        mask_input=l_in_slice_mask,
@@ -103,7 +108,7 @@ def build_model():
     l_cdf0 = nn_heart.CumSumLayer(l_sm0)
 
     # ------------------ diastole
-    l_sub_dst_out = nn.layers.ConcatLayer([submodel.mu_layers[1], submodel.sigma_layers[1]], axis=1)
+    l_sub_dst_out = submodel.dense_layers[3]
     l_sub_dst_out = nn.layers.ReshapeLayer(l_sub_dst_out, (-1, nslices, [1]))
     l_dst_concat = nn.layers.ConcatLayer([l_sub_dst_out, l_in_slice_location], axis=2)
 
@@ -113,13 +118,13 @@ def build_model():
     cell = nn.layers.Gate(W_in=nn.init.GlorotUniform(), W_hid=nn.init.Orthogonal(), W_cell=None,
                           nonlinearity=nn.nonlinearities.tanh)
 
-    l_lstm1 = nn.layers.LSTMLayer(l_dst_concat, num_units=512,
+    l_lstm1 = nn.layers.LSTMLayer(nn.layers.dropout(l_dst_concat, 0.5), num_units=512,
                                   ingate=input_gate, forgetgate=forget_gate,
                                   cell=cell, outgate=output_gate,
                                   mask_input=l_in_slice_mask,
                                   peepholes=False, precompute_input=False,
                                   grad_clipping=5, only_return_final=True)
-    l_lstm1_back = nn.layers.LSTMLayer(l_dst_concat, num_units=512,
+    l_lstm1_back = nn.layers.LSTMLayer(nn.layers.dropout(l_dst_concat, 0.5), num_units=512,
                                        ingate=input_gate, forgetgate=forget_gate,
                                        cell=cell, outgate=output_gate,
                                        mask_input=l_in_slice_mask,
@@ -132,6 +137,8 @@ def build_model():
                                  nonlinearity=nn.nonlinearities.softmax)
     l_cdf1 = nn_heart.CumSumLayer(l_sm1)
 
+    # ---------------------
+
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
@@ -141,7 +148,7 @@ def build_model():
 
     train_params = nn.layers.get_all_params(l_top)
     submodel_params = nn.layers.get_all_params(submodel.l_top)
-    dense_layer_params = [l.get_params() for l in submodel.dense_layers]
+    dense_layer_params = [l.get_params() for l in submodel.dense_layers if l not in submodel.softmax_layers]
     conv_layer_params = [p for p in submodel_params if p not in dense_layer_params]
     train_params = [p for p in train_params if p not in conv_layer_params]
 

@@ -52,7 +52,7 @@ def test2():
     l_mu = nn.layers.InputLayer((None, 1))
     l_log_sigma = nn.layers.InputLayer((None, 1))
 
-    p0 = nn_heart.NormalCDFLayer(l_mu, l_log_sigma, log=True)
+    p0 = nn_heart.NormalCDFLayer(l_mu, l_log_sigma, sigma_logscale=True)
     l_target = nn.layers.InputLayer((None, 1))
 
     t0_heaviside = nn_heart.heaviside(nn.layers.get_output(l_target))

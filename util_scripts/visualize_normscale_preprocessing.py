@@ -149,7 +149,7 @@ wanted_input_tags = [
 wanted_output_tags = ['systole', 'diastole', 'patients']
 
 
-for i in range(60, 417):
+for i in range(20, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
     result = data_loader.get_patient_data(

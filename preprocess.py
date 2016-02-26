@@ -11,12 +11,43 @@ from functools import partial
 def uint_to_float(img):
     return img / np.float32(255.0)
 
+DEFAULT_AUGMENTATION_PARAMETERS = {
+    "zoom_x":[1, 1],
+    "zoom_y":[1, 1],
+    "rotate":[0, 0],
+    "shear":[0, 0],
+    "skew_x":[0, 0],
+    "skew_y":[0, 0],
+    "translate_x":[0, 0],
+    "translate_y":[0, 0],
+    "flip_vert": [0, 0],
+    "roll_time": [0, 0],
+    "flip_time": [0, 0],
+}
 
 quasi_random_generator = None
 
 def sample_augmentation_parameters():
     global quasi_random_generator
-    augmentation_params = config().augmentation_params
+
+    augm = config().augmentation_params
+    if "translation" in augm:
+        newdict = dict()
+        if "translation" in augm:
+            newdict["translate_x"] = augm["translation"]
+            newdict["translate_y"] = augm["translation"]
+        if "shear" in augm:
+            newdict["shear"] = augm["shear"]
+        if "flip_vert" in augm:
+            newdict["flip_vert"] = augm["flip_vert"]
+        if "roll_time" in augm:
+            newdict["roll_time"] = augm["roll_time"]
+        if "flip_time" in augm:
+            newdict["flip_time"] = augm["flip_time"]
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **newdict)
+    else:
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **config().augmentation_params)
+
     if quasi_random_generator is None:
         quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
                                                                                   permutation='Braaten-Weller')
@@ -204,8 +235,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             pass  # will be filled in by the next one
         elif tag.startswith("sliced:data:sax"):
             # step 1: sort (data, metadata_tag) with slice_location_finder
-            slice_locations = slice_location_finder({i: metadata for i,metadata in enumerate(metadata_tag)})
-            sorted_indices = [key for key in sorted(slice_locations.iterkeys(), key=lambda x: slice_locations[x]["relative_position"])]
+            slice_locations, sorted_indices, sorted_distances = slice_location_finder({i: metadata for i,metadata in enumerate(metadata_tag)})
 
             data = [data[idx] for idx in sorted_indices]
             metadata_tag = [metadata_tag[idx] for idx in sorted_indices]
@@ -245,12 +275,18 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             # Put data (images and metadata) in right location
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 
+
+            is_padded = np.array([False]*len(result["sliced:data:sax:distances"][index]))
             if "sliced:data:sax:locations" in result:
-                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
                 eps_location = 1e-7
                 put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
-                if "sliced:data:sax:is_not_padded" in result:
-                    result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
+
+            if "sliced:data:sax:distances" in result:
+                eps_location = 1e-7
+                put_in_the_middle(result["sliced:data:sax:distances"][index], sorted_distances + eps_location, True, is_padded)
+
+            if "sliced:data:sax:is_not_padded" in result:
+                result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
 
         elif tag.startswith("sliced:data:shape"):
             raise NotImplementedError()
@@ -275,7 +311,9 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             result[tag][index][0] = -1. if patient_data[tag]=='M' else 1.
 
         elif tag.startswith("sliced:meta:PatientAge"):
-            result[tag][index][0] = float(patient_data[tag][:3])
+            number, letter = patient_data[tag][:3], patient_data[tag][-1]
+            letter_rescale_factors = {'D': 365.25, 'W': 52.1429, 'M': 12., 'Y': 1.}
+            result[tag][index][0] = float(patient_data[tag][:3]) / letter_rescale_factors[letter]
 
 
 def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):
@@ -467,4 +505,20 @@ def slice_location_finder(metadata_dict):
             scalar = np.inner(v1, v2)
             data["relative_position"] = scalar
 
-    return datadict
+    sorted_indices = [key for key in sorted(datadict.iterkeys(), key=lambda x: datadict[x]["relative_position"])]
+
+    sorted_distances = []
+    for i in xrange(len(sorted_indices)-1):
+        res = []
+        for d1, d2 in [(datadict[sorted_indices[i]], datadict[sorted_indices[i+1]]),
+                       (datadict[sorted_indices[i+1]], datadict[sorted_indices[i]])]:
+            F = np.array(d1["orientation"]).reshape( (2,3) )
+            n = np.cross(F[0,:], F[1,:])
+            n = n/np.sqrt(np.sum(n*n))
+            p = d2["middle_pixel_position"] - d1["position"]
+            distance = np.abs(np.sum(n*p))
+            res.append(distance)
+        sorted_distances.append(np.mean(res))
+
+    return datadict, sorted_indices, sorted_distances
+

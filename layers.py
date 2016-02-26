@@ -185,7 +185,7 @@ class JeroenLayer(lasagne.layers.MergeLayer):
         # Compute mu for each slice pair
         m1 = mu_area[:, :-1]
         m2 = mu_area[:, 1:]
-        eps = 1e-1
+        eps = 1e-2
         mu_volumes = (m1 + m2 + T.sqrt(T.clip(m1*m2, eps, utils.maxfloat))) * h / 3.0
         mu_volumes = mu_volumes * is_pair_not_padded
         
@@ -203,6 +203,26 @@ class JeroenLayer(lasagne.layers.MergeLayer):
         return T.concatenate([
             mu_volume_patient.dimshuffle(0, 'x'),
             sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
+
+
+class WeightedMeanLayer(lasagne.layers.MergeLayer):
+    """This layer doesn't overfit; it already knows what to do.
+
+    incomings = [mu_area, sigma_area, is_not_padded, slicelocs]
+    output = N x 2 array, with mu = output[:, 0] and sigma = output[:, 1]
+    """
+    def __init__(self, weights, incomings, **kwargs):
+        super(WeightedMeanLayer, self).__init__([weights]+incomings, **kwargs)
+
+    def get_output_shape_for(self, input_shapes):
+        return input_shapes[1]
+
+    def get_output_for(self, inputs, **kwargs):
+        conc = T.concatenate([i.dimshuffle(0,1,'x') for i in inputs[1:]], axis=2)
+        weights = T.nnet.softmax(inputs[0])
+        r    = conc * weights.dimshuffle(0,'x',1)
+        result = T.mean(r, axis=2)
+        return result
 
 
 class TrainableScaleLayer(lasagne.layers.Layer):

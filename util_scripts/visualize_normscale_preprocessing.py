@@ -145,27 +145,21 @@ def animate_slice_crop(raw_slicedata, cropped_slicedata, index):
 # smallest normalised: 54 -> id 66
 
 wanted_input_tags = [
-    "sliced:data:sax:locations",
-    "sliced:data:sax:is_not_padded",
-    "sliced:data:sax"]
+    "sliced:data:singleslice:middle"]
 wanted_output_tags = ['systole', 'diastole', 'patients']
 
 
-for i in range(0, 417):
+for i in range(60, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
     result = data_loader.get_patient_data(
-        indices, wanted_input_tags, wanted_output_tags, set="train",
+        indices, wanted_input_tags, wanted_output_tags, set="validation",
         preprocess_function=_config().preprocess_train)
 #    raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
     patient_id = result['output']['patients'][0]
 #    crop_slice = result['input']['sliced:data:singleslice:middle:patch_0']
-    locations = result['input']["sliced:data:sax:locations"][0]
-    is_not_padded = result['input']["sliced:data:sax:is_not_padded"][0]
-    slices = result['input']["sliced:data:sax"][0]
-    print patient_id
-    print is_not_padded
-#    for crop_slice in slices:
-#        animate_slice_crop(crop_slice, crop_slice, patient_id)
+    crop_slice = result['input']["sliced:data:singleslice:middle"][0]
+
+    animate_slice_crop(crop_slice, crop_slice, patient_id)
 
 

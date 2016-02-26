@@ -9,6 +9,8 @@ import theano.tensor as T
 
 import data_loader
 import deep_learning_layers
+import dihedral
+import dihedral_fast
 import image_transform
 import layers
 import preprocess
@@ -32,21 +34,19 @@ validate_train_set = True
 save_every = 10
 restart_from_save = False
 
-dump_network_loaded_data = False
-
 # Training (schedule) parameters
 # - batch sizes
 batch_size = 32
 sunny_batch_size = 4
 batches_per_chunk = 16
 AV_SLICE_PER_PAT = 11
-num_epochs_train = 80 * AV_SLICE_PER_PAT
+num_epochs_train = 50 * AV_SLICE_PER_PAT
 
 # - learning rate and method
 base_lr = .0001
 learning_rate_schedule = {
     0: base_lr,
-    9*num_epochs_train/10: base_lr/10,
+    num_epochs_train*9/10: base_lr/10,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -66,12 +66,12 @@ augmentation_params = {
     "flip_time": (0, 0),
 }
 
-use_hough_roi = True
+use_hough_roi = True  # use roi to center patches
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(64,64)))
+        normalised_patch_size=(100,100)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -112,14 +112,15 @@ postprocess = postprocess.postprocess
 test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
+# Architecture
 
-# nonlinearity putting a lower bound on it's output
+def rms(x, axis=None, epsilon=1e-12):
+    return T.sqrt(T.mean(T.sqr(x), axis=axis) + epsilon)
+
 def lb_softplus(lb):
     return lambda x: nn.nonlinearities.softplus(x) + lb
 
-
-# Architecture
-def build_model(input_layer=None):
+def build_model(input_layer = None):
 
     #################
     # Regular model #
@@ -130,52 +131,62 @@ def build_model(input_layer=None):
         l0 = input_layer
     else:
         l0 = nn.layers.InputLayer(input_size)
+    l0c = dihedral.CyclicSliceLayer(l0)
 
-    l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    l1a = nn.layers.dnn.Conv2DDNNLayer(l0c,  W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
     l1 = nn.layers.dnn.MaxPool2DDNNLayer(l1b, pool_size=(2,2), stride=(2,2))
+    l1r = dihedral_fast.CyclicConvRollLayer(l1)
 
-    l2a = nn.layers.dnn.Conv2DDNNLayer(l1,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l2b = nn.layers.dnn.Conv2DDNNLayer(l2a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    l2a = nn.layers.dnn.Conv2DDNNLayer(l1r,  W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l2b = nn.layers.dnn.Conv2DDNNLayer(l2a, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
     l2 = nn.layers.dnn.MaxPool2DDNNLayer(l2b, pool_size=(2,2), stride=(2,2))
+    l2r = dihedral_fast.CyclicConvRollLayer(l2)
 
-    l3a = nn.layers.dnn.Conv2DDNNLayer(l2,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l3b = nn.layers.dnn.Conv2DDNNLayer(l3a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l3c = nn.layers.dnn.Conv2DDNNLayer(l3b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    l3a = nn.layers.dnn.Conv2DDNNLayer(l2r,  W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l3b = nn.layers.dnn.Conv2DDNNLayer(l3a, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l3c = nn.layers.dnn.Conv2DDNNLayer(l3b, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
     l3 = nn.layers.dnn.MaxPool2DDNNLayer(l3c, pool_size=(2,2), stride=(2,2))
+    l3r = dihedral_fast.CyclicConvRollLayer(l3)
 
-    l4a = nn.layers.dnn.Conv2DDNNLayer(l3,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l4b = nn.layers.dnn.Conv2DDNNLayer(l4a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l4c = nn.layers.dnn.Conv2DDNNLayer(l4b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    l4a = nn.layers.dnn.Conv2DDNNLayer(l3r,  W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l4b = nn.layers.dnn.Conv2DDNNLayer(l4a, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l4c = nn.layers.dnn.Conv2DDNNLayer(l4b, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
     l4 = nn.layers.dnn.MaxPool2DDNNLayer(l4c, pool_size=(2,2), stride=(2,2))
+    l4r = dihedral_fast.CyclicConvRollLayer(l4)
 
-    l5a = nn.layers.dnn.Conv2DDNNLayer(l4,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l5b = nn.layers.dnn.Conv2DDNNLayer(l5a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    l5c = nn.layers.dnn.Conv2DDNNLayer(l5b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    l5a = nn.layers.dnn.Conv2DDNNLayer(l4r,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l5b = nn.layers.dnn.Conv2DDNNLayer(l5a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l5c = nn.layers.dnn.Conv2DDNNLayer(l5b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.very_leaky_rectify)
     l5 = nn.layers.dnn.MaxPool2DDNNLayer(l5c, pool_size=(2,2), stride=(2,2))
+    l5r = dihedral_fast.CyclicConvRollLayer(l5)
+    l5f = nn.layers.FlattenLayer(l5r)
+    l5m = dihedral.CyclicPoolLayer(l5f)
 
+#    l5drop = nn.layers.dropout(l5m, p=0.5)
+    
     # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ldsys1 = nn.layers.DenseLayer(l5m, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
     ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
-    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     ldsys3mu = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
-    ldsys3sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(50.0), nonlinearity=lb_softplus(3))
+    ldsys3sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
     ldsys3musigma = nn.layers.ConcatLayer([ldsys3mu, ldsys3sigma], axis=1)
 
     l_systole = layers.MuSigmaErfLayer(ldsys3musigma)
 
     # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia1 = nn.layers.DenseLayer(l5m, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
     lddia1drop = nn.layers.dropout(lddia1, p=0.5)
-    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
     lddia3mu = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
-    lddia3sigma = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(50.0), nonlinearity=lb_softplus(3))
+    lddia3sigma = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
     lddia3musigma = nn.layers.ConcatLayer([lddia3mu, lddia3sigma], axis=1)
 
     l_diastole = layers.MuSigmaErfLayer(lddia3musigma)
@@ -199,11 +210,7 @@ def build_model(input_layer=None):
             lddia3mu: l2_weight_out,
             lddia3sigma: l2_weight_out,
         },
-        "meta_outputs":{
-            "systole:mu": ldsys3mu,
-            "systole:sigma": ldsys3sigma,
-            "diastole:mu": lddia3mu,
-            "diastole:sigma": lddia3sigma,
+        "meta_outputs": {
             "systole": ldsys2,
             "diastole": lddia2,
         }

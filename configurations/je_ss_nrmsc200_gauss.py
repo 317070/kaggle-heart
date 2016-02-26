@@ -40,13 +40,13 @@ batch_size = 32
 sunny_batch_size = 4
 batches_per_chunk = 16
 AV_SLICE_PER_PAT = 11
-num_epochs_train = 80 * AV_SLICE_PER_PAT
+num_epochs_train = 30 * AV_SLICE_PER_PAT
 
 # - learning rate and method
 base_lr = .0001
 learning_rate_schedule = {
     0: base_lr,
-    9*num_epochs_train/10: base_lr/10,
+    num_epochs_train*4/5: base_lr/10,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -66,12 +66,11 @@ augmentation_params = {
     "flip_time": (0, 0),
 }
 
-use_hough_roi = True
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(64,64)))
+        normalised_patch_size=(200,200)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -86,7 +85,7 @@ create_eval_train_gen = functools.partial(data_loader.generate_validation_batch,
 create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
 
 # Input sizes
-image_size = 64
+image_size = 128
 data_sizes = {
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
@@ -112,24 +111,15 @@ postprocess = postprocess.postprocess
 test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
-
-# nonlinearity putting a lower bound on it's output
-def lb_softplus(lb):
-    return lambda x: nn.nonlinearities.softplus(x) + lb
-
-
 # Architecture
-def build_model(input_layer=None):
+def build_model():
 
     #################
     # Regular model #
     #################
     input_size = data_sizes["sliced:data:singleslice"]
 
-    if input_layer:
-        l0 = input_layer
-    else:
-        l0 = nn.layers.InputLayer(input_size)
+    l0 = nn.layers.InputLayer(input_size)
 
     l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
@@ -162,7 +152,7 @@ def build_model(input_layer=None):
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     ldsys3mu = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
-    ldsys3sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(50.0), nonlinearity=lb_softplus(3))
+    ldsys3sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
     ldsys3musigma = nn.layers.ConcatLayer([ldsys3mu, ldsys3sigma], axis=1)
 
     l_systole = layers.MuSigmaErfLayer(ldsys3musigma)
@@ -175,7 +165,7 @@ def build_model(input_layer=None):
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
     lddia3mu = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
-    lddia3sigma = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(50.0), nonlinearity=lb_softplus(3))
+    lddia3sigma = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
     lddia3musigma = nn.layers.ConcatLayer([lddia3mu, lddia3sigma], axis=1)
 
     l_diastole = layers.MuSigmaErfLayer(lddia3musigma)
@@ -192,20 +182,10 @@ def build_model(input_layer=None):
         "regularizable": {
             ldsys1: l2_weight,
             ldsys2: l2_weight,
-            ldsys3mu: l2_weight_out,
-            ldsys3sigma: l2_weight_out,
+            ldsys3: l2_weight_out,
             lddia1: l2_weight,
             lddia2: l2_weight,
-            lddia3mu: l2_weight_out,
-            lddia3sigma: l2_weight_out,
+            lddia3: l2_weight_out,
         },
-        "meta_outputs":{
-            "systole:mu": ldsys3mu,
-            "systole:sigma": ldsys3sigma,
-            "diastole:mu": lddia3mu,
-            "diastole:sigma": lddia3sigma,
-            "systole": ldsys2,
-            "diastole": lddia2,
-        }
     }
 

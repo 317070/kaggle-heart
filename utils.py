@@ -9,6 +9,15 @@ import theano.tensor as T
 from compressed_cache import simple_memoized
 import random
 
+# TODO: remove this import, it is annoying for a utils file
+import theano
+import theano.tensor as T
+
+
+
+maxfloat = np.finfo(np.float32).max
+
+
 
 maxfloat = np.finfo(np.float32).max
 

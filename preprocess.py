@@ -276,13 +276,14 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 
 
-            is_padded = np.array([False]*len(result["sliced:data:sax:distances"][index]))
+            is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
             if "sliced:data:sax:locations" in result:
                 eps_location = 1e-7
                 put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
 
             if "sliced:data:sax:distances" in result:
                 eps_location = 1e-7
+                sorted_distances.append(0.0)  # is easier for correct padding
                 put_in_the_middle(result["sliced:data:sax:distances"][index], sorted_distances + eps_location, True, is_padded)
 
             if "sliced:data:sax:is_not_padded" in result:

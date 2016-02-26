@@ -71,7 +71,7 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(100,100)))
+        normalised_patch_size=(64,64)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -166,7 +166,7 @@ def build_model(input_layer = None):
 #    l5drop = nn.layers.dropout(l5m, p=0.5)
     
     # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5m, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    ldsys1 = nn.layers.DenseLayer(l5m, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
     ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
     ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
@@ -179,7 +179,7 @@ def build_model(input_layer = None):
     l_systole = layers.MuSigmaErfLayer(ldsys3musigma)
 
     # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5m, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    lddia1 = nn.layers.DenseLayer(l5m, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
     lddia1drop = nn.layers.dropout(lddia1, p=0.5)
     lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
@@ -211,10 +211,8 @@ def build_model(input_layer = None):
             lddia3sigma: l2_weight_out,
         },
         "meta_outputs": {
-            "systole:mu": ldsys3mu,
-            "systole:sigma": ldsys3sigma,
-            "diastole:mu": lddia3mu,
-            "diastole:sigma": lddia3sigma,
+            "systole": ldsys2,
+            "diastole": lddia2,
         }
     }
 

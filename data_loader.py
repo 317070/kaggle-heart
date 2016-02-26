@@ -220,6 +220,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         OUTPUT_DATA_SIZE_TYPE = {
             "systole": (matrix_size, "float32"),
             "diastole": (matrix_size, "float32"),
+            "average": (matrix_size, "float32"),
             "systole:onehot": (matrix_size, "float32"),
             "diastole:onehot": (matrix_size, "float32"),
             "systole:class_weight": (matrix_size, "float32"),
@@ -362,6 +363,8 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1.0
             if "diastole" in wanted_output_tags:
                 result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1.0
+            if "average" in wanted_output_tags:
+                result["output"]["average"][i][int(np.ceil((V_diastole + V_systole)/2.0)):] = 1.0
 
             if "systole:onehot" in wanted_output_tags:
                 result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1.0

@@ -147,11 +147,14 @@ def optimize_expert_weights(expert_predictions,
     w_i = w_i * T.nnet.softmax(W.dimshuffle('x',0)).dimshuffle(1, 0, 'x')
 
     if do_optimization:
+        """
         # convert to theano_values (for regularization)
         target_values = theano.shared(np.argmax(targets, axis=-1).astype('int32'))
         noise = T.shared_randomstreams.RandomStreams(seed=317070)
-        target_values += noise.random_integers(size=target_values.shape, low=0, high=0, dtype='int32')
+        #target_values += noise.random_integers(size=target_values.shape, low=-10, high=10, dtype='int32')
+        target_values += T.iround(noise.normal(size=target_values.shape, std=10, dtype='float32'))
         t = T.cumsum(T.extra_ops.to_one_hot(target_values, 600, dtype='float32'), axis=-1)
+        """
 
 
     #the different predictions, are the experts
@@ -162,7 +165,7 @@ def optimize_expert_weights(expert_predictions,
 
     geom_pdf = geom_av/T.sum(geom_av,axis=-1).dimshuffle(0,'x')
     filter = T.clip( 0.75 / (T.abs_(filter_params[0]) + eps) * (1-(x_coor/( T.abs_(filter_params[0])+eps))**2), 0.0, np.float32(np.finfo(np.float64).max))
-    #filter =(1./(np.sqrt(2*np.pi))).astype('float32')/filter_params[0] * T.exp(-((x_coor/filter_params[0])**2)/2 )
+    #gauss filter =(1./(np.sqrt(2*np.pi))).astype('float32')/filter_params[0] * T.exp(-((x_coor/filter_params[0])**2)/2 )
 
     #geom_pdf = convolve1d(geom_pdf, filter, WINDOW_SIZE)
 
@@ -187,7 +190,7 @@ def optimize_expert_weights(expert_predictions,
     f_val = theano.function([], CRPS)
 
     def optimize_my_params():
-        for _ in xrange(1000):  # early stopping
+        for _ in xrange(37):  # early stopping
             score = iter_optimize()
 
         result = params.get_value()
@@ -286,9 +289,10 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         +glob.glob(prediction_file_location+"j7*.pkl")
         #+glob.glob(prediction_file_location+"je_os_fixedaggr_joniscale64small_360_gauss.pkl")
         +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropnorm.pkl")
+        +glob.glob(prediction_file_location+"je_ss_normscale_patchcontrast.pkl")
         +glob.glob(prediction_file_location+"je_ss_smcrps_nrmsc_500_dropoutput")
         +glob.glob(prediction_file_location+"je_ss_smcrps_jonisc128_500_dropnorm.pkl")
-        #+glob.glob(prediction_file_location+"j5_normscale.pkl")
+        +glob.glob(prediction_file_location+"j5_normscale.pkl")
     )
 
     # filter expert_pkl_files

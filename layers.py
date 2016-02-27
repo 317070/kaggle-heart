@@ -205,11 +205,11 @@ class JeroenLayer(lasagne.layers.MergeLayer):
             sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
 
 
-class JeroenLayer2(lasagne.layers.MergeLayer):
+class JeroenLayerDists(lasagne.layers.MergeLayer):
     """Uses better distances
     """
     def __init__(self, incomings, rescale_input=1.0, **kwargs):
-        super(JeroenLayer, self).__init__(incomings, **kwargs)
+        super(JeroenLayerDists, self).__init__(incomings, **kwargs)
         self.rescale_input = rescale_input
 
     def get_output_shape_for(self, input_shapes):

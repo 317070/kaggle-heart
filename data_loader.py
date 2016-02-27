@@ -191,7 +191,7 @@ def _enhance_metadata(metadata, patient_id, slice_name):
     roi_center = list(_hough_rois[str(patient_id)][slice_name]['roi_center'])
     if not roi_center == (None, None):
         roi_center[0] = float(roi_center[0]) / metadata['Rows']
-        roi_center[1] = float(roi_center[1]) / metadata['Columns'] 
+        roi_center[1] = float(roi_center[1]) / metadata['Columns']
     metadata['hough_roi'] = tuple(roi_center)
     metadata['hough_roi_radii'] = _hough_rois[str(patient_id)][slice_name]['roi_radii']
     _tag_enhanced(metadata)
@@ -314,6 +314,9 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
             elif tag.startswith("sliced:data:sax:is_not_padded"):
                 pass  # will be filled in by sliced:data:sax
+
+            elif tag.startswith("sliced:data:sax:distances"):
+                pass  # will be filled in by the next one
 
             elif tag.startswith("sliced:data:sax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
@@ -439,7 +442,7 @@ def get_sunny_patient_data(indices, set="train"):
 def compute_nr_slices(patient_folder):
     files = _in_folder(patient_folder)
     return len([sax for sax in files if "sax" in sax])
-    
+
 
 def generate_train_batch(required_input_keys, required_output_keys):
     """Creates an iterator that returns train batches."""

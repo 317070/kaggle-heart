@@ -99,9 +99,9 @@ def put_in_the_middle(target_tensor, data_tensor, pad_better=False, is_padded=No
         if target_indices[0].start:
             for i in xrange(0, target_indices[0].start):
                 target_tensor[i] = data_tensor[0]
-        if target_indices[0].stop:        
+        if target_indices[0].stop:
             for i in xrange(target_indices[0].stop, len(target_tensor)):
-                target_tensor[i] = data_tensor[-1]             
+                target_tensor[i] = data_tensor[-1]
 
 
 def sunny_preprocess(chunk_x, img, chunk_y, lbl):
@@ -175,7 +175,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             data = clean_images(
                 [patient_data[tag]], metadata=metadata_tag,
                 cleaning_processes=cleaning_processes)
-            
+
             # Augment and extract patch
             # Decide which roi to use.
             shift_center = (None, None)
@@ -192,7 +192,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             patient_3d_tensor = clean_images(
                 patient_3d_tensor, metadata=metadata_tag,
                 cleaning_processes=cleaning_processes_post)
-            
+
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
 
@@ -217,7 +217,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                     pixel_spacing=metadata["PixelSpacing"],
                     shift_center=shift_center[::-1])[0]
                 for slicedata, metadata, shift_center in zip(data, metadata_tag, shift_centers)]
-            
+
             # Clean data further
             patient_3d_tensors = [
                 clean_images([patient_3d_tensor], metadata=metadata, cleaning_processes=cleaning_processes_post)[0]
@@ -285,7 +285,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             if "sliced:data:sax:distances" in result:
                 eps_location = 1e-7
                 sorted_distances.append(0.0)  # is easier for correct padding
-                put_in_the_middle(result["sliced:data:sax:distances"][index], sorted_distances + eps_location, True, is_padded)
+                put_in_the_middle(result["sliced:data:sax:distances"][index], np.array(sorted_distances) + eps_location, True, is_padded)
 
             if "sliced:data:sax:is_not_padded" in result:
                 result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)

@@ -36,9 +36,9 @@ dump_network_loaded_data = False
 
 # Training (schedule) parameters
 # - batch sizes
-batch_size = 4
+batch_size = 1
 sunny_batch_size = 4
-batches_per_chunk = 32
+batches_per_chunk = 32 *4
 num_epochs_train = 150
 
 # - learning rate and method
@@ -71,7 +71,7 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2,
-        normalised_patch_size=(64,64)))
+        normalised_patch_size=(80,80)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -97,7 +97,6 @@ nr_slices = 22
 data_sizes = {
     "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:sax:locations": (batch_size, nr_slices),
-    "sliced:data:sax:distances": (batch_size, nr_slices),
     "sliced:data:sax:is_not_padded": (batch_size, nr_slices),
     "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size),
@@ -156,19 +155,17 @@ def build_model():
     input_size = data_sizes["sliced:data:sax"]
     input_size_mask = data_sizes["sliced:data:sax:is_not_padded"]
     input_size_locations = data_sizes["sliced:data:sax:locations"]
-    input_size_distances = data_sizes["sliced:data:sax:distances"]
 
     l0 = nn.layers.InputLayer(input_size)
     lin_slice_mask = nn.layers.InputLayer(input_size_mask)
     lin_slice_locations = nn.layers.InputLayer(input_size_locations)
-    lin_slice_distances = nn.layers.InputLayer(input_size_distances)
 
     # PREPROCESS SLICES SEPERATELY
     # Convolutional layers and some dense layers are defined in a submodel
     l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
 
-    import je_ss_jonisc64small_360_gauss_longer
-    submodel = je_ss_jonisc64small_360_gauss_longer.build_model(l0_slices)
+    import je_ss_jonisc80_leaky_convroll
+    submodel = je_ss_jonisc80_leaky_convroll.build_model(l0_slices)
 
     # Systole Dense layers
     l_sys_mu = submodel["meta_outputs"]["systole:mu"]
@@ -179,19 +176,18 @@ def build_model():
 
     # AGGREGATE SLICES PER PATIENT
     l_scaled_slice_locations = layers.TrainableScaleLayer(lin_slice_locations, scale=nn.init.Constant(0.1), trainable=False)
-    l_scaled_slice_distances = layers.TrainableScaleLayer(lin_slice_distances, scale=nn.init.Constant(0.1), trainable=False)
 
     # Systole
     l_pat_sys_ss_mu = nn.layers.ReshapeLayer(l_sys_mu, (-1, nr_slices))
     l_pat_sys_ss_sigma = nn.layers.ReshapeLayer(l_sys_sigma, (-1, nr_slices))
-    l_pat_sys_aggr_mu_sigma = layers.JeroenLayerDists([l_pat_sys_ss_mu, l_pat_sys_ss_sigma, lin_slice_mask, l_scaled_slice_distances], rescale_input=100.)
+    l_pat_sys_aggr_mu_sigma = layers.JeroenLayer([l_pat_sys_ss_mu, l_pat_sys_ss_sigma, lin_slice_mask, l_scaled_slice_locations], rescale_input=100.)
 
     l_systole = layers.MuSigmaErfLayer(l_pat_sys_aggr_mu_sigma)
 
     # Diastole
     l_pat_dia_ss_mu = nn.layers.ReshapeLayer(l_dia_mu, (-1, nr_slices))
     l_pat_dia_ss_sigma = nn.layers.ReshapeLayer(l_dia_sigma, (-1, nr_slices))
-    l_pat_dia_aggr_mu_sigma = layers.JeroenLayerDists([l_pat_dia_ss_mu, l_pat_dia_ss_sigma, lin_slice_mask, l_scaled_slice_distances], rescale_input=100.)
+    l_pat_dia_aggr_mu_sigma = layers.JeroenLayer([l_pat_dia_ss_mu, l_pat_dia_ss_sigma, lin_slice_mask, l_scaled_slice_locations], rescale_input=100.)
 
     l_diastole = layers.MuSigmaErfLayer(l_pat_dia_aggr_mu_sigma)
 
@@ -202,7 +198,6 @@ def build_model():
             "sliced:data:sax": l0,
             "sliced:data:sax:is_not_padded": lin_slice_mask,
             "sliced:data:sax:locations": lin_slice_locations,
-            "sliced:data:sax:distances": lin_slice_distances,
         },
         "outputs": {
             "systole": l_systole,
@@ -216,7 +211,7 @@ def build_model():
                 for k, v in d.items() }
         ),
         "pretrained":{
-            je_ss_jonisc64small_360_gauss_longer.__name__: submodel["outputs"],
+            je_ss_jonisc80_leaky_convroll.__name__: submodel["outputs"],
         }
     }
 

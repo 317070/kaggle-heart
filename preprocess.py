@@ -316,6 +316,10 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             letter_rescale_factors = {'D': 365.25, 'W': 52.1429, 'M': 12., 'Y': 1.}
             result[tag][index][0] = float(patient_data[tag][:3]) / letter_rescale_factors[letter]
 
+    label_correction_function = lambda x: x * augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+
+    return label_correction_function
+
 
 def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):
     """

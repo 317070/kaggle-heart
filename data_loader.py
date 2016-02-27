@@ -336,7 +336,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 patient_result[tag] = metadata_field
             # add others when needed
 
-        preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
+        label_correction_function = preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
 
         # load the labels
         if "patients" in wanted_output_tags:
@@ -348,8 +348,8 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         # only read labels, when we actually have them
         if id in regular_labels[:, 0]:
             assert regular_labels[id-1, 0]==id
-            V_systole = regular_labels[id-1, 1]
-            V_diastole = regular_labels[id-1, 2]
+            V_systole = label_correction_function(regular_labels[id-1, 1])
+            V_diastole = label_correction_function(regular_labels[id-1, 2])
 
             if "systole" in wanted_output_tags:
                 result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1.0

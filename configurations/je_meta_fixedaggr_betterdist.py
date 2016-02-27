@@ -36,10 +36,10 @@ dump_network_loaded_data = False
 
 # Training (schedule) parameters
 # - batch sizes
-batch_size = 1
+batch_size = 4
 sunny_batch_size = 4
-batches_per_chunk = 32 *4
-num_epochs_train = 150
+batches_per_chunk = 32
+num_epochs_train = 150 
 
 # - learning rate and method
 base_lr = 0.0001
@@ -70,8 +70,8 @@ use_hough_roi = True
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
-        image_transform.normscale_resize_and_augment_2,
-        normalised_patch_size=(100,100)))
+        image_transform.normscale_resize_and_augment_2, 
+        normalised_patch_size=(64,64)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -97,12 +97,13 @@ nr_slices = 22
 data_sizes = {
     "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:sax:locations": (batch_size, nr_slices),
+    "sliced:data:sax:distances": (batch_size, nr_slices),
     "sliced:data:sax:is_not_padded": (batch_size, nr_slices),
     "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
-    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size),
+    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), 
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size),
-    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size),
+    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), 
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
@@ -155,6 +156,7 @@ def build_model():
     input_size = data_sizes["sliced:data:sax"]
     input_size_mask = data_sizes["sliced:data:sax:is_not_padded"]
     input_size_locations = data_sizes["sliced:data:sax:locations"]
+    input_size_distances = data_sizes["sliced:data:sax:locations"]
 
     l0 = nn.layers.InputLayer(input_size)
     lin_slice_mask = nn.layers.InputLayer(input_size_mask)
@@ -164,8 +166,8 @@ def build_model():
     # Convolutional layers and some dense layers are defined in a submodel
     l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
 
-    import je_ss_jonisc100_leaky_convroll
-    submodel = je_ss_jonisc100_leaky_convroll.build_model(l0_slices)
+    import je_ss_jonisc64small_360_gauss_longer
+    submodel = je_ss_jonisc64small_360_gauss_longer.build_model(l0_slices)
 
     # Systole Dense layers
     l_sys_mu = submodel["meta_outputs"]["systole:mu"]
@@ -211,7 +213,7 @@ def build_model():
                 for k, v in d.items() }
         ),
         "pretrained":{
-            je_ss_jonisc100_leaky_convroll.__name__: submodel["outputs"],
+            je_ss_jonisc64small_360_gauss_longer.__name__: submodel["outputs"],
         }
     }
 

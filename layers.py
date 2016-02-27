@@ -205,6 +205,52 @@ class JeroenLayer(lasagne.layers.MergeLayer):
             sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
 
 
+class JeroenLayer2(lasagne.layers.MergeLayer):
+    """Uses better distances
+    """
+    def __init__(self, incomings, rescale_input=1.0, **kwargs):
+        super(JeroenLayer, self).__init__(incomings, **kwargs)
+        self.rescale_input = rescale_input
+
+    def get_output_shape_for(self, input_shapes):
+        return (input_shapes[0][0], 2)
+
+    def get_output_for(self, inputs, **kwargs):
+        mu_area, sigma_area, is_not_padded, slicedists = inputs
+
+        # Rescale input
+        mu_area = mu_area / self.rescale_input
+        sigma_area = sigma_area / self.rescale_input
+
+        # For each slice pair, compute if both of them are valid
+        is_pair_not_padded = is_not_padded[:, :-1] + is_not_padded[:, 1:] > 1.5
+
+        # Compute the distance between slices
+        h = slicedists[:, :-1]
+
+        # Compute mu for each slice pair
+        m1 = mu_area[:, :-1]
+        m2 = mu_area[:, 1:]
+        eps = 1e-2
+        mu_volumes = (m1 + m2 + T.sqrt(T.clip(m1*m2, eps, utils.maxfloat))) * h / 3.0
+        mu_volumes = mu_volumes * is_pair_not_padded
+
+        # Compute sigma for each slice pair
+        s1 = sigma_area[:, :-1]
+        s2 = sigma_area[:, 1:]
+        sigma_volumes = h*(s1 + s2) / 3.0
+        sigma_volumes = sigma_volumes * is_pair_not_padded
+
+        # Compute mu and sigma per patient
+        mu_volume_patient = T.sum(mu_volumes, axis=1)
+        sigma_volume_patient = T.sqrt(T.clip(T.sum(sigma_volumes**2, axis=1), eps, utils.maxfloat))
+
+        # Concat and return
+        return T.concatenate([
+            mu_volume_patient.dimshuffle(0, 'x'),
+            sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
+
+
 class WeightedMeanLayer(lasagne.layers.MergeLayer):
     def __init__(self, weights, incomings, **kwargs):
         super(WeightedMeanLayer, self).__init__([weights]+incomings, **kwargs)
@@ -299,7 +345,7 @@ class ArgmaxAndMaxLayer(lasagne.layers.Layer):
 class IntegrateAreaLayer(lasagne.layers.Layer):
     def __init__(self, incoming, sigma_mode='scale', sigma_scale=None, **kwargs):
         super(IntegrateAreaLayer, self).__init__(incoming, **kwargs)
-        if not sigma_mode in ('scale',):
+        if not sigma_mode in ('scale', 'smart',):
             raise ValueError('invalid mode')
         self.sigma_mode = sigma_mode
         self.sigma_scale = sigma_scale
@@ -315,6 +361,9 @@ class IntegrateAreaLayer(lasagne.layers.Layer):
         # compute sigma
         if self.sigma_mode == 'scale':
             sigma = mu * self.sigma_scale
+        elif self.sigma_mode == 'smart':
+            eps = 1e-3
+            sigma = T.sqrt((input * (1-input)).sum(axis=-1).sum(axis=-1, keepdims=True) + eps)
         else:
             raise NotImplementedError('sigma mode not implemented')
         # concatenate and return
@@ -324,7 +373,7 @@ class IntegrateAreaLayer(lasagne.layers.Layer):
 class SelectWithAttentionLayer(lasagne.layers.MergeLayer):
     def __init__(self, incomings, **kwargs):
         super(SelectWithAttentionLayer, self).__init__(incomings, **kwargs)
-        
+
     def get_output_shape_for(self, input_shapes):
         shape_musigma, shape_att = input_shapes
         if not len(shape_musigma) == 3:

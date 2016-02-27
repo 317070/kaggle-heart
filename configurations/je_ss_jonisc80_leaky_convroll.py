@@ -70,7 +70,7 @@ use_hough_roi = True  # use roi to center patches
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
-        image_transform.normscale_resize_and_augment_2, 
+        image_transform.normscale_resize_and_augment_2,
         normalised_patch_size=(80,80)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
@@ -164,7 +164,7 @@ def build_model(input_layer = None):
     l5m = dihedral.CyclicPoolLayer(l5f)
 
 #    l5drop = nn.layers.dropout(l5m, p=0.5)
-    
+
     # Systole Dense layers
     ldsys1 = nn.layers.DenseLayer(l5m, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
@@ -211,8 +211,10 @@ def build_model(input_layer = None):
             lddia3sigma: l2_weight_out,
         },
         "meta_outputs": {
-            "systole": ldsys2,
-            "diastole": lddia2,
+            "systole:mu": ldsys3mu,
+            "systole:sigma": ldsys3sigma,
+            "diastole:mu": lddia3mu,
+            "diastole:sigma": lddia3sigma,
         }
     }
 

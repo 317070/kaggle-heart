@@ -206,11 +206,6 @@ class JeroenLayer(lasagne.layers.MergeLayer):
 
 
 class WeightedMeanLayer(lasagne.layers.MergeLayer):
-    """This layer doesn't overfit; it already knows what to do.
-
-    incomings = [mu_area, sigma_area, is_not_padded, slicelocs]
-    output = N x 2 array, with mu = output[:, 0] and sigma = output[:, 1]
-    """
     def __init__(self, weights, incomings, **kwargs):
         super(WeightedMeanLayer, self).__init__([weights]+incomings, **kwargs)
 
@@ -221,7 +216,7 @@ class WeightedMeanLayer(lasagne.layers.MergeLayer):
         conc = T.concatenate([i.dimshuffle(0,1,'x') for i in inputs[1:]], axis=2)
         weights = T.nnet.softmax(inputs[0])
         r    = conc * weights.dimshuffle(0,'x',1)
-        result = T.mean(r, axis=2)
+        result = T.sum(r, axis=2)
         return result
 
 

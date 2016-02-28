@@ -6,6 +6,7 @@ from image_transform import resize_to_make_it_fit, resize_to_make_sunny_fit, res
 import quasi_random
 from itertools import izip
 from functools import partial
+import utils
 
 
 def uint_to_float(img):
@@ -316,9 +317,12 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             letter_rescale_factors = {'D': 365.25, 'W': 52.1429, 'M': 12., 'Y': 1.}
             result[tag][index][0] = float(patient_data[tag][:3]) / letter_rescale_factors[letter]
 
-    label_correction_function = lambda x: x * augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
-
-    return label_correction_function
+    if augmentation_params:
+        label_correction_function = lambda x: x * augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+        classification_correction_function = lambda x: utils.zoom_array(x, 1./(augmentation_params["zoom_x"] * augmentation_params["zoom_y"]))
+        return label_correction_function, classification_correction_function
+    else:
+        return lambda x: x, lambda x: x
 
 
 def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):

@@ -162,6 +162,9 @@ def optimize_expert_weights(expert_predictions,
 
     #cumulative_distribution = ((1-(1-cumulative_distribution)**exponent) + (cumulative_distribution**exponent))/2
 
+    # TODO: test this
+    #cumulative_distribution = (erf( erfinv( p*2-1 ) * filter_params[1] )+1)/2
+
     if not do_optimization:
         ind.set_value(range(NUM_VALIDATIONS))
         f_eval = theano.function([], cumulative_distribution)

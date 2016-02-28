@@ -242,6 +242,10 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 chunk_shape[0] = chunk_shape[0] * _config().batches_per_chunk
                 chunk_shape = tuple(chunk_shape)
                 result["input"][tag] = np.zeros(chunk_shape, dtype="float32")
+
+        if "classification_correction_function" in wanted_output_tags:
+            result["output"]["classification_correction_function"] = [lambda x:x] * no_samples
+
         return result
 
     result = initialise_empty()
@@ -336,7 +340,10 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 patient_result[tag] = metadata_field
             # add others when needed
 
-        label_correction_function = preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
+        label_correction_function, classification_correction_function = preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
+
+        if "classification_correction_function" in wanted_output_tags:
+            result["output"]["classification_correction_function"][i] = classification_correction_function
 
         # load the labels
         if "patients" in wanted_output_tags:
@@ -377,8 +384,10 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
 
     # Check if any of the inputs or outputs are still empty!
-    if not hasattr(_config(), 'check_inputs') or _config().check_inputs:
+    if hasattr(_config(), 'check_inputs') and _config().check_inputs:
         for key, value in itertools.chain(result["input"].iteritems(), result["output"].iteritems()):
+            if key=="classification_correction_function":
+                continue
             if not np.any(value): #there are only zeros in value
                 raise Exception("there is an empty value at key %s" % key)
             if not np.isfinite(value).all(): #there are NaN's or infinites somewhere

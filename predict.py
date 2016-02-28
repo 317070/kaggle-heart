@@ -92,7 +92,7 @@ def predict_model(expid, mfile=None):
 
     create_test_gen = partial(config().create_test_gen,
                               required_input_keys = xs_shared.keys(),
-                              required_output_keys = ["patients"],
+                              required_output_keys = ["patients", "classification_correction_function"],
                               )
 
     print "Generate predictions with this model"
@@ -114,6 +114,7 @@ def predict_model(expid, mfile=None):
 
 
         patient_ids = test_data["output"]["patients"]
+        classification_correction = test_data["output"]["classification_correction_function"]
         print "  patients:", " ".join(map(str, patient_ids))
         print "  chunk %d/%d" % (e, num_chunks)
 
@@ -128,8 +129,15 @@ def predict_model(expid, mfile=None):
                     index = patient_id-1
                     patient_data = predictions[index]
                     assert patient_id==patient_data["patient"]
-                    patient_data["systole"] =  np.concatenate((patient_data["systole"],  kaggle_systoles[idx:idx+1,:]),axis=0)
-                    patient_data["diastole"] = np.concatenate((patient_data["diastole"], kaggle_diastoles[idx:idx+1,:]),axis=0)
+
+                    kaggle_systole = kaggle_systoles[idx:idx+1,:]
+                    kaggle_diastole = kaggle_diastoles[idx:idx+1,:]
+
+                    kaggle_systole = classification_correction[b*config().batch_size + idx](kaggle_systole)
+                    kaggle_diastole = classification_correction[b*config().batch_size + idx](kaggle_diastole)
+
+                    patient_data["systole"] =  np.concatenate((patient_data["systole"], kaggle_systole ),axis=0)
+                    patient_data["diastole"] = np.concatenate((patient_data["diastole"], kaggle_diastole ),axis=0)
 
         now = time.time()
         time_since_start = now - start_time

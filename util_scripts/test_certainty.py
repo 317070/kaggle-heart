@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import animation
-
+from scipy.special import erf, erfinv
 
 p = np.linspace(0.0, 1.0, 250)
 
@@ -19,7 +19,10 @@ def init():
 
 def animate(i):
     param = np.exp((float(i)-50)/10)
-    pp = ((1-(1-p)**param) + (p**param))/2
+    #pp = ((1-(1-p)**param) + (p**param))/2
+
+    pp = (erf( erfinv( p*2-1 ) * param )+1)/2
+
     fig.suptitle("power %f"%float(param))
     im1[0].set_ydata(pp)
     return im1

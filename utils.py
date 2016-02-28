@@ -306,3 +306,18 @@ def pick_random(arr, no_picks):
     # Pick
     random.shuffle(arr_to_pick_from)
     return arr_to_pick_from[:no_picks]
+
+
+import scipy.ndimage.interpolation
+
+def zoom_array(array, zoom_factor):
+    result = np.ones(array.shape)
+    zoom = [1.0]*array.ndim
+    zoom[-1] = zoom_factor
+    zr = scipy.ndimage.interpolation.zoom(array,
+                                          zoom,
+                                          order=3,
+                                          mode='nearest',
+                                          prefilter=True)
+    result[...,:min(zr.shape[-1],array.shape[-1])] = zr[...,:min(zr.shape[-1],array.shape[-1])]
+    return result

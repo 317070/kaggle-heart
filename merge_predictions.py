@@ -115,9 +115,6 @@ def optimize_expert_weights(expert_predictions,
 
     NUM_VALIDATIONS = expert_predictions.shape[1]
     ind = theano.shared(np.zeros((NUM_VALIDATIONS,), dtype='int32'))  # targets = (NUM_VALIDATIONS, 600)
-    if not targets is None:
-        t = theano.shared(targets.astype('float32'))  # targets = (NUM_VALIDATIONS, 600)
-
 
     if optimal_params is None:
         params_init = np.concatenate([ np.ones((NUM_EXPERTS,), dtype='float32'),
@@ -146,17 +143,6 @@ def optimize_expert_weights(expert_predictions,
     filter_params = params[NUM_EXPERTS:NUM_EXPERTS+NUM_FILTER_PARAMETERS]
     w_i = w_i * T.nnet.softmax(W.dimshuffle('x',0)).dimshuffle(1, 0, 'x')
 
-    if do_optimization:
-        """
-        # convert to theano_values (for regularization)
-        target_values = theano.shared(np.argmax(targets, axis=-1).astype('int32'))
-        noise = T.shared_randomstreams.RandomStreams(seed=317070)
-        #target_values += noise.random_integers(size=target_values.shape, low=-10, high=10, dtype='int32')
-        target_values += T.iround(noise.normal(size=target_values.shape, std=10, dtype='float32'))
-        t = T.cumsum(T.extra_ops.to_one_hot(target_values, 600, dtype='float32'), axis=-1)
-        """
-
-
     #the different predictions, are the experts
     geom_av_log = T.sum(X_log_i * w_i, axis=0) / (T.sum(w_i, axis=0) + eps)
     geom_av_log = geom_av_log - T.max(geom_av_log,axis=-1).dimshuffle(0,'x')  # stabilizes rounding errors?
@@ -176,21 +162,34 @@ def optimize_expert_weights(expert_predictions,
 
     #cumulative_distribution = ((1-(1-cumulative_distribution)**exponent) + (cumulative_distribution**exponent))/2
 
+    # TODO: test this
+    #cumulative_distribution = (erf( erfinv( p*2-1 ) * filter_params[1] )+1)/2
+
     if not do_optimization:
         ind.set_value(range(NUM_VALIDATIONS))
         f_eval = theano.function([], cumulative_distribution)
         cumulative_distribution = f_eval()
         return cumulative_distribution[0]
+    else:
+        # convert to theano_values (for regularization)
+        t_valid = theano.shared(targets.astype('float32'))  # targets = (NUM_VALIDATIONS, 600)
 
-    t_i = t.take(ind, axis=0)
-    CRPS = T.mean((cumulative_distribution - t_i)**2)
+        target_values = theano.shared(np.argmax(targets, axis=-1).astype('int32'))
+        noise = T.shared_randomstreams.RandomStreams(seed=317070)
+        #target_values += noise.random_integers(size=target_values.shape, low=-10, high=10, dtype='int32')
+        target_values += T.iround(noise.normal(size=target_values.shape, std=2, dtype='float32'))
+        t_train = T.cumsum(T.extra_ops.to_one_hot(target_values, 600, dtype='float32'), axis=-1)
+
+
+    CRPS_train = T.mean((cumulative_distribution - t_train.take(ind, axis=0))**2)
+    CRPS_valid = T.mean((cumulative_distribution - t_valid.take(ind, axis=0))**2)
 
     print "compiling the Theano functions"
-    iter_optimize = theano.function([], CRPS, on_unused_input="ignore", updates=lasagne.updates.adam(CRPS, [params], 1.0))
-    f_val = theano.function([], CRPS)
+    iter_optimize = theano.function([], CRPS_train, on_unused_input="ignore", updates=lasagne.updates.adam(CRPS_train, [params], 1.0))
+    f_val = theano.function([], CRPS_valid)
 
     def optimize_my_params():
-        for _ in xrange(37):  # early stopping
+        for _ in xrange(1000):  # early stopping
             score = iter_optimize()
 
         result = params.get_value()

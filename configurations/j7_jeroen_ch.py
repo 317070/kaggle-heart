@@ -202,7 +202,7 @@ def build_model():
     l_meta_systole = nn.layers.ConcatLayer([l_meta_2ch_systole, l_meta_4ch_systole, l_sys_meta])
     l_weights = nn.layers.DenseLayer(l_meta_systole, num_units=512, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
     l_weights = nn.layers.DenseLayer(l_weights, num_units=3, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
-    systole_output = layers.WeightedMeanLayer(l_weights, [l_systole, meta_2ch["outputs"]["diastole"], meta_4ch["outputs"]["diastole"]])
+    systole_output = layers.WeightedMeanLayer(l_weights, [l_systole, meta_2ch["outputs"]["systole"], meta_4ch["outputs"]["systole"]])
 
     # Diastole
     l_pat_dia_ss_mu = nn.layers.ReshapeLayer(l_dia_mu, (-1, nr_slices))
@@ -244,7 +244,10 @@ def build_model():
             je_ss_jonisc64small_360_gauss_longer.__name__: submodel["outputs"],
             j6_2ch_gauss.__name__: meta_2ch["outputs"],
             j6_4ch_gauss.__name__: meta_4ch["outputs"],
-        }
+        },
+        #"cutoff_gradients": [
+        #] + [ v for d in [model["meta_outputs"] for model in [meta_2ch, meta_4ch] if "meta_outputs" in model]
+        #       for v in d.values() ]
     }
 
 

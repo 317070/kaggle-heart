@@ -9,8 +9,10 @@ from skimage.draw import circle_perimeter
 from skimage.util import img_as_ubyte
 import glob
 import re
-import data_test
+import data as data_test
 import copy
+import joni_roi
+import utils
 
 patch_size = (128, 128)
 train_transformation_params = {
@@ -34,7 +36,7 @@ valid_transformation_params = {
 kernel_width = 5
 center_margin = 8
 num_peaks = 10
-num_circles = 20
+num_circles = 10  # 20
 upscale = 1.5
 radstep = 2
 
@@ -49,7 +51,8 @@ def get_data(pid_path):
         for s in spaths:
             metadata = data_test.read_metadata(s)
             data = data_test.read_slice(s)
-            in_data.append({'data': data, 'metadata': metadata})
+            slice_id = utils.get_slice_id(s)
+            in_data.append({'data': data, 'metadata': metadata, 'slice_id': slice_id})
     return in_data
 
 
@@ -73,21 +76,24 @@ def plot(pid):
     original_data = get_data(data_path + '/' + str(pid))
     sorted_slices = sort_slices(original_data)
 
-    maxradius = int(40 / sorted_slices[0]['metadata']['PixelSpacing'][0])
+    maxradius = int(65 / sorted_slices[0]['metadata']['PixelSpacing'][0])
     minradius = int(15 / sorted_slices[0]['metadata']['PixelSpacing'][0])
     print sorted_slices[0]['metadata']['PixelSpacing'][0]
 
-    lsurface, roi_mask, roi_center = data_test.extract_roi_joni(sorted_slices, kernel_width=kernel_width,
-                                                                center_margin=center_margin, num_peaks=num_peaks,
-                                                                num_circles=num_circles, upscale=upscale,
-                                                                minradius=minradius,
-                                                                maxradius=maxradius, radstep=radstep)
+    lsurface, roi_mask, roi_center = joni_roi.extract_roi_joni(sorted_slices, kernel_width=kernel_width,
+                                                               center_margin=center_margin, num_peaks=num_peaks,
+                                                               num_circles=num_circles, upscale=upscale,
+                                                               minradius=minradius,
+                                                               maxradius=maxradius, radstep=radstep)
+    # lsurface, roi_mask, roi_center = joni_roi.extract_roi(sorted_slices, pixel_spacing=sorted_slices[0]['metadata']['PixelSpacing'][0],                              center_margin=center_margin, num_peaks=num_peaks)
+
+
     x_roicenter, y_roicenter = roi_center[0], roi_center[1]
     print pid
     print x_roicenter, y_roicenter
 
     print len(sorted_slices)
-    for dslice in [sorted_slices[0], sorted_slices[len(sorted_slices) / 2], sorted_slices[-1]]:
+    for dslice in sorted_slices:  # [sorted_slices[0], sorted_slices[len(sorted_slices) / 2], sorted_slices[-1]]:
         outdata = dslice['data']
         # print dslice['metadata']['SliceLocation']
         # print dslice['metadata']['ImageOrientationPatient']
@@ -154,7 +160,7 @@ def plot(pid):
 
             fig = plt.figure(1)
             plt.subplot(221)
-            fig.canvas.set_window_title(pid)
+            fig.canvas.set_window_title(str(pid) + dslice['slice_id'])
 
             def init_out():
                 im2.set_data(outdata[0])
@@ -163,7 +169,7 @@ def plot(pid):
                 im2.set_data(outdata[i])
                 return im2
 
-            im2 = fig.gca().imshow(outdata[0], cmap='gist_gray_r', vmin=0, vmax=255)
+            im2 = fig.gca().imshow(outdata[0], cmap='gist_gray_r')
             anim2 = animation.FuncAnimation(fig, animate_out, init_func=init_out, frames=30, interval=50)
 
             plt.subplot(223)
@@ -178,5 +184,5 @@ def plot(pid):
             plt.show()
 
 
-for pid in [265]:
+for pid in [448]:
     plot(pid)

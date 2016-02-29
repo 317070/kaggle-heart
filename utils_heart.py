@@ -4,11 +4,6 @@ import numpy as np
 import scipy.stats
 import lasagne as nn
 
-
-def lb_softplus(lb=1):
-    return lambda x: nn.nonlinearities.softplus(x) + lb
-
-
 def make_monotone_cdf(cdf):
     cdf_out = np.copy(cdf)
     for j in xrange(len(cdf_out) - 1):

@@ -3,7 +3,7 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 import glob
 import re
-import data_test
+import data as data_test
 import utils
 
 

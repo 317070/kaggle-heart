@@ -23,6 +23,7 @@ train_transformation_params = {
     'translation_range_y': (-10, 10),
     'shear_range': (0, 0),
     'roi_scale_range': (1.2, 1.5),
+    'zoom_range': (1 / 1.5, 1.5),
     'do_flip': (True, False),
     'sequence_shift': False
 }
@@ -61,13 +62,13 @@ test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/da
                                                                   view='4ch')
 
 nchunks_per_epoch = max(1, train_data_iterator.nsamples / chunk_size)
-max_nchunks = nchunks_per_epoch * 100
+max_nchunks = nchunks_per_epoch * 200
 learning_rate_schedule = {
     0: 0.0001,
-    int(max_nchunks * 0.6): 0.00008,
-    int(max_nchunks * 0.7): 0.00004,
-    int(max_nchunks * 0.8): 0.00002,
-    int(max_nchunks * 0.9): 0.00001
+    int(max_nchunks * 0.5): 0.00008,
+    int(max_nchunks * 0.6): 0.00004,
+    int(max_nchunks * 0.8): 0.00001,
+    int(max_nchunks * 0.9): 0.000005
 }
 validate_every = nchunks_per_epoch
 save_every = nchunks_per_epoch

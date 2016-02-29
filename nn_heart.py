@@ -3,6 +3,11 @@ import theano.tensor as T
 import numpy as np
 from lasagne import nonlinearities
 
+
+def lb_softplus(lb=1):
+    return lambda x: nn.nonlinearities.softplus(x) + lb
+
+
 def heaviside(x):
     return T.arange(0, 600).dimshuffle('x', 0) - T.repeat(x, 600, axis=1) >= 0
 

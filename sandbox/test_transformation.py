@@ -1,6 +1,7 @@
 import matplotlib
 # matplotlib.use('Qt4Agg')
 
+import numpy as np
 import glob
 import re
 from matplotlib import animation
@@ -19,10 +20,10 @@ slice2roi = utils.load_pkl('../pkl_train_slice2roi.pkl')
 slice2roi_valid = utils.load_pkl('../pkl_validate_slice2roi.pkl')
 slice2roi.update(slice2roi_valid)
 
-patient_path = sorted(glob.glob(data_path + '/*/study'))
+patient_path = sorted(glob.glob(data_path + '/416/study'))
 for p in patient_path:
     print p
-    spaths = sorted(glob.glob(p + '/4ch_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
+    spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
     for s in spaths:
         d = data_test.read_slice(s)
         metadata = data_test.read_metadata(s)
@@ -45,12 +46,16 @@ for p in patient_path:
         fig = plt.figure(1)
         fig.canvas.set_window_title(s)
         plt.subplot(121)
-        im = plt.gca().imshow(d[0], cmap='gist_gray_r', vmin=0, vmax=255)
+        im = plt.gca().imshow(d[0],cmap='gist_gray_r')
         anim = animation.FuncAnimation(fig, animate, init_func=init, frames=len(d), interval=50)
 
         # ---------------------------------
 
-        out_data = data_test.transform_norm_rescale(d, metadata, train_transformation_params, roi=roi)
+        out_data, targets_zoom = data_test.transform_norm_rescale(d, metadata, train_transformation_params, roi=roi)
+
+        print out_data.shape
+        print targets_zoom
+
 
         def init_out():
             im2.set_data(out_data[0])
@@ -62,7 +67,7 @@ for p in patient_path:
 
 
         plt.subplot(122)
-        im2 = fig.gca().imshow(out_data[0], cmap='gist_gray_r')
+        im2 = fig.gca().imshow(out_data[0],cmap='gist_gray_r')
         anim2 = animation.FuncAnimation(fig, animate_out, init_func=init_out, frames=len(out_data), interval=50)
 
         plt.show()

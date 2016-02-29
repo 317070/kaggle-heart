@@ -3,7 +3,7 @@ import numpy as np
 import theano
 from itertools import izip
 import lasagne as nn
-import string
+import cPickle as pickle
 import utils
 import buffering
 import utils_heart
@@ -50,7 +50,7 @@ for l_in, x in izip(model.l_ins, xs_shared):
     givens_in[l_in.input_var] = x
 
 iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
-                                givens=givens_in)
+                                givens=givens_in, on_unused_input='ignore')
 
 predictions = [{"patient": i + 1,
                 "systole": np.zeros((0, 600)),
@@ -61,6 +61,11 @@ if True:  # set == 'valid':
     valid_data_iterator = config().valid_data_iterator
     if n_tta_iterations > 1:
         valid_data_iterator.transformation_params = config().train_transformation_params
+        valid_data_iterator.transformation_params['zoom_range'] = (1., 1.)
+
+    print 'valid transformation params'
+    print valid_data_iterator.transformation_params
+
 
     print
     print 'n valid: %d' % valid_data_iterator.nsamples
@@ -102,8 +107,11 @@ if True:  # set == 'valid':
 
 if True:  # set == 'test':
     test_data_iterator = config().test_data_iterator
-    if n_tta_iterations > 1:
-        test_data_iterator.transformation_params = config().train_transformation_params
+    if n_tta_iterations == 1:
+        test_data_iterator.transformation_params = config().valid_transformation_params
+
+    print 'test transformation params'
+    print test_data_iterator.transformation_params
 
     print 'n test: %d' % test_data_iterator.nsamples
 
@@ -129,10 +137,8 @@ if True:  # set == 'test':
     utils.save_pkl(avg_patient_predictions, prediction_path)
     print ' predictions saved to %s' % prediction_path
 
-    utils.save_submisssion(avg_patient_predictions, submission_path)
+    utils.save_submission(avg_patient_predictions, submission_path)
     print ' submission saved to %s' % submission_path
-
-import cPickle as pickle
 
 jonas_prediction_path = "/mnt/storage/metadata/kaggle-heart/predictions/ira_%s.pkl" % config().__name__
 

@@ -5,8 +5,8 @@ import data_iterators
 import numpy as np
 import theano.tensor as T
 from functools import partial
-import utils_heart
 import nn_heart
+import utils_heart
 
 caching = None
 
@@ -23,7 +23,8 @@ train_transformation_params = {
     'translation_range_y': (-10, 10),
     'shear_range': (0, 0),
     'roi_scale_range': (1.2, 1.5),
-    'do_flip': (True, False),
+    'do_flip': (False, True),
+    'zoom_range': (1 / 1.5, 1.5),
     'sequence_shift': False
 }
 
@@ -34,7 +35,7 @@ valid_transformation_params = {
 }
 
 batch_size = 32
-nbatches_chunk = 12
+nbatches_chunk = 13
 chunk_size = batch_size * nbatches_chunk
 
 train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
@@ -43,7 +44,7 @@ train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/d
                                                                    labels_path='/data/dsb15_pkl/train.csv',
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
                                                                    full_batch=True, random=True, infinite=True,
-                                                                   view='4ch')
+                                                                   view='2ch')
 
 valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
                                                                    batch_size=chunk_size,
@@ -51,23 +52,23 @@ valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/d
                                                                    labels_path='/data/dsb15_pkl/train.csv',
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
                                                                    full_batch=False, random=False, infinite=False,
-                                                                   view='4ch')
+                                                                   view='2ch')
 
 test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
                                                                   batch_size=chunk_size,
                                                                   transform_params=train_transformation_params,
                                                                   slice2roi_path='pkl_validate_slice2roi.pkl',
                                                                   full_batch=False, random=False, infinite=False,
-                                                                  view='4ch')
+                                                                  view='2ch')
 
 nchunks_per_epoch = max(1, train_data_iterator.nsamples / chunk_size)
-max_nchunks = nchunks_per_epoch * 100
+max_nchunks = nchunks_per_epoch * 200
 learning_rate_schedule = {
     0: 0.0001,
-    int(max_nchunks * 0.6): 0.00008,
-    int(max_nchunks * 0.7): 0.00004,
-    int(max_nchunks * 0.8): 0.00002,
-    int(max_nchunks * 0.9): 0.00001
+    int(max_nchunks * 0.5): 0.00008,
+    int(max_nchunks * 0.6): 0.00004,
+    int(max_nchunks * 0.8): 0.00001,
+    int(max_nchunks * 0.9): 0.000005
 }
 validate_every = nchunks_per_epoch
 save_every = nchunks_per_epoch
@@ -146,10 +147,8 @@ def build_model(l_in=None):
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
-    dense_layers = [l_d01, l_d02, l_d11, l_d12]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'dense_layers'])([l_in], l_outs, l_targets,
-                                                                                          l_top, dense_layers)
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top'])([l_in], l_outs, l_targets, l_top)
 
 
 def build_objective(model, deterministic=False):

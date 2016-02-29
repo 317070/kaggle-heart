@@ -5,10 +5,10 @@ import data_iterators
 import numpy as np
 import theano.tensor as T
 from functools import partial
-import utils_heart
 import nn_heart
+import utils_heart
 
-caching = 'memory'
+caching = None
 
 restart_from_save = None
 rng = np.random.RandomState(42)
@@ -146,10 +146,8 @@ def build_model(l_in=None):
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
-    dense_layers = [l_d01, l_d02, l_d11, l_d12]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'dense_layers'])([l_in], l_outs, l_targets,
-                                                                                          l_top, dense_layers)
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top'])([l_in], l_outs, l_targets, l_top)
 
 
 def build_objective(model, deterministic=False):

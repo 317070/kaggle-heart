@@ -23,6 +23,7 @@ train_transformation_params = {
     'translation_range_y': (-10, 10),
     'shear_range': (0, 0),
     'roi_scale_range': (1.2, 1.5),
+    'zoom_range': (1 / 1.5, 1.5),
     'do_flip': (True, False),
     'sequence_shift': False
 }
@@ -61,13 +62,13 @@ test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/da
                                                                   view='4ch')
 
 nchunks_per_epoch = max(1, train_data_iterator.nsamples / chunk_size)
-max_nchunks = nchunks_per_epoch * 100
+max_nchunks = nchunks_per_epoch * 200
 learning_rate_schedule = {
     0: 0.0001,
-    int(max_nchunks * 0.6): 0.00008,
-    int(max_nchunks * 0.7): 0.00004,
-    int(max_nchunks * 0.8): 0.00002,
-    int(max_nchunks * 0.9): 0.00001
+    int(max_nchunks * 0.5): 0.00008,
+    int(max_nchunks * 0.6): 0.00004,
+    int(max_nchunks * 0.8): 0.00001,
+    int(max_nchunks * 0.9): 0.000005
 }
 validate_every = nchunks_per_epoch
 save_every = nchunks_per_epoch
@@ -120,13 +121,6 @@ def build_model(l_in=None):
                                  b=nn.init.Constant(0.1))
     l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
-
-    mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, W=nn.init.Orthogonal(),
-                               b=nn.init.Constant(100), nonlinearity=nn_heart.lb_softplus(1))
-    sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, W=nn.init.Orthogonal(),
-                                  b=nn.init.Constant(20), nonlinearity=nn_heart.lb_softplus(1))
-    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0)
-
     # ---------------------------------------------------------------
 
     l_d11 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"),
@@ -134,9 +128,21 @@ def build_model(l_in=None):
     l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
 
-    mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+    # --------------------------------------------------------------------
+
+    l_sd = nn.layers.ConcatLayer([l_d02, l_d12])
+    l_sd = nn.layers.DenseLayer(nn.layers.dropout(l_sd), num_units=1024, W=nn.init.Orthogonal("relu"),
+                                b=nn.init.Constant(0.1))
+
+    mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_sd, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                               b=nn.init.Constant(100), nonlinearity=nn_heart.lb_softplus(1))
+    sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_sd, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+                                  b=nn.init.Constant(20), nonlinearity=nn_heart.lb_softplus(1))
+    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0)
+
+    mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_sd, p=0.5), num_units=1, W=nn.init.Orthogonal(),
                                b=nn.init.Constant(150), nonlinearity=nn_heart.lb_softplus(1))
-    sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, W=nn.init.Orthogonal(),
+    sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_sd, p=0.5), num_units=1, W=nn.init.Orthogonal(),
                                   b=nn.init.Constant(20), nonlinearity=nn_heart.lb_softplus(1))
     l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1)
 

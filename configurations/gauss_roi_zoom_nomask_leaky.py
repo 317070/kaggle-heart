@@ -8,33 +8,48 @@ from functools import partial
 import utils_heart
 import nn_heart
 
-caching = None
+# similar to je_ss_jonisc64small_360.py
+caching = 'memory'
 
 restart_from_save = None
 rng = np.random.RandomState(42)
 patch_size = (64, 64)
-mm_patch_size = (128, 128)
 train_transformation_params = {
     'patch_size': patch_size,
-    'mm_patch_size': mm_patch_size,
-    'rotation_range': (-180, 180),
+    'mm_patch_size': (128, 128),
     'mask_roi': False,
-    'translation_range_x': (-10, 10),
+    'rotation_range': (-180, 180),
+    'translation_range_x': (-5, 10),
     'translation_range_y': (-10, 10),
     'shear_range': (0, 0),
-    'roi_scale_range': (1.2, 1.5),
-    'do_flip': (True, False),
+    'roi_scale_range': (0.8, 1.2),
+    'zoom_range': (1 / 1.5, 1.5),
+    'do_flip': True,
     'sequence_shift': False
 }
 
 valid_transformation_params = {
     'patch_size': patch_size,
-    'mm_patch_size': mm_patch_size,
-    'mask_roi': False
+    'mm_patch_size': (128, 128),
+    'mask_roi': False,
+}
+
+test_transformation_params = {
+    'patch_size': patch_size,
+    'mm_patch_size': (128, 128),
+    'mask_roi': False,
+    'rotation_range': (-180, 180),
+    'translation_range_x': (-5, 10),
+    'translation_range_y': (-10, 10),
+    'shear_range': (0, 0),
+    'roi_scale_range': (0.8, 1.2),
+    'zoom_range': (1., 1.),
+    'do_flip': True,
+    'sequence_shift': False
 }
 
 batch_size = 32
-nbatches_chunk = 12
+nbatches_chunk = 16
 chunk_size = batch_size * nbatches_chunk
 
 train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
@@ -42,41 +57,38 @@ train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/d
                                                                    transform_params=train_transformation_params,
                                                                    labels_path='/data/dsb15_pkl/train.csv',
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
-                                                                   full_batch=True, random=True, infinite=True,
-                                                                   view='4ch')
+                                                                   full_batch=True, random=True, infinite=True)
 
 valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
                                                                    batch_size=chunk_size,
                                                                    transform_params=valid_transformation_params,
                                                                    labels_path='/data/dsb15_pkl/train.csv',
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
-                                                                   full_batch=False, random=False, infinite=False,
-                                                                   view='4ch')
+                                                                   full_batch=False, random=False, infinite=False)
 
 test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
                                                                   batch_size=chunk_size,
-                                                                  transform_params=train_transformation_params,
+                                                                  transform_params=test_transformation_params,
                                                                   slice2roi_path='pkl_validate_slice2roi.pkl',
-                                                                  full_batch=False, random=False, infinite=False,
-                                                                  view='4ch')
+                                                                  full_batch=False, random=False, infinite=False)
 
-nchunks_per_epoch = max(1, train_data_iterator.nsamples / chunk_size)
-max_nchunks = nchunks_per_epoch * 100
+nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
+max_nchunks = nchunks_per_epoch * 150
 learning_rate_schedule = {
-    0: 0.0001,
-    int(max_nchunks * 0.6): 0.00008,
-    int(max_nchunks * 0.7): 0.00004,
-    int(max_nchunks * 0.8): 0.00002,
+    0: 0.0002,
+    int(max_nchunks * 0.1): 0.0001,
+    int(max_nchunks * 0.3): 0.000075,
+    int(max_nchunks * 0.6): 0.00005,
     int(max_nchunks * 0.9): 0.00001
 }
-validate_every = nchunks_per_epoch
-save_every = nchunks_per_epoch
+validate_every = 2 * nchunks_per_epoch
+save_every = 2 * nchunks_per_epoch
 
 conv3 = partial(Conv2DDNNLayer,
                 stride=(1, 1),
                 pad="same",
                 filter_size=(3, 3),
-                nonlinearity=nn.nonlinearities.rectify,
+                nonlinearity=nn.nonlinearities.very_leaky_rectify,
                 b=nn.init.Constant(0.1),
                 W=nn.init.Orthogonal("relu"))
 
@@ -88,8 +100,8 @@ max_pool = partial(MaxPool2DDNNLayer,
 def build_model(l_in=None):
     l_in = nn.layers.InputLayer((None, 30) + patch_size) if not l_in else l_in
 
-    l = conv3(l_in, num_filters=64)
-    l = conv3(l, num_filters=64)
+    l = conv3(l_in, num_filters=128)
+    l = conv3(l, num_filters=128)
 
     l = max_pool(l)
 
@@ -116,29 +128,30 @@ def build_model(l_in=None):
 
     l = max_pool(l)
 
-    l_d01 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"),
-                                 b=nn.init.Constant(0.1))
-    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
-                                 b=nn.init.Constant(0.1))
+    l_d01 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
+                                 b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
-    mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, W=nn.init.Orthogonal(),
-                               b=nn.init.Constant(100), nonlinearity=nn_heart.lb_softplus(1))
-    sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02, p=0.5), num_units=1, W=nn.init.Orthogonal(),
-                                  b=nn.init.Constant(20), nonlinearity=nn_heart.lb_softplus(1))
-    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0)
+    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01), num_units=1024, W=nn.init.Orthogonal("relu"),
+                                 b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
+
+    mu0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02), num_units=1, W=nn.init.Orthogonal(),
+                               b=nn.init.Constant(50), nonlinearity=nn_heart.lb_softplus())
+    sigma0 = nn.layers.DenseLayer(nn.layers.dropout(l_d02), num_units=1, W=nn.init.Orthogonal(),
+                                  b=nn.init.Constant(10), nonlinearity=nn_heart.lb_softplus())
+    l_cdf0 = nn_heart.NormalCDFLayer(mu0, sigma0, sigma_logscale=False, mu_logscale=False)
 
     # ---------------------------------------------------------------
 
-    l_d11 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"),
-                                 b=nn.init.Constant(0.1))
-    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11, p=0.5), num_units=512, W=nn.init.Orthogonal("relu"),
-                                 b=nn.init.Constant(0.1))
+    l_d11 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
+                                 b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11), num_units=1024, W=nn.init.Orthogonal("relu"),
+                                 b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
-    mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, W=nn.init.Orthogonal(),
-                               b=nn.init.Constant(150), nonlinearity=nn_heart.lb_softplus(1))
-    sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12, p=0.5), num_units=1, W=nn.init.Orthogonal(),
-                                  b=nn.init.Constant(20), nonlinearity=nn_heart.lb_softplus(1))
-    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1)
+    mu1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12), num_units=1, W=nn.init.Orthogonal(),
+                               b=nn.init.Constant(100), nonlinearity=nn_heart.lb_softplus())
+    sigma1 = nn.layers.DenseLayer(nn.layers.dropout(l_d12), num_units=1, W=nn.init.Orthogonal(),
+                                  b=nn.init.Constant(10), nonlinearity=nn_heart.lb_softplus())
+    l_cdf1 = nn_heart.NormalCDFLayer(mu1, sigma1, sigma_logscale=False, mu_logscale=False)
 
     l_outs = [l_cdf0, l_cdf1]
     l_top = nn.layers.MergeLayer(l_outs)
@@ -146,10 +159,13 @@ def build_model(l_in=None):
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
-    dense_layers = [l_d01, l_d02, l_d11, l_d12]
+    dense_layers = [l_d01, l_d02, l_d11, l_d12, mu0, sigma0, mu0, mu1]
+    mu_layers = [mu0, mu1]
+    sigma_layers = [sigma0, sigma1]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'dense_layers'])([l_in], l_outs, l_targets,
-                                                                                          l_top, dense_layers)
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'dense_layers', 'mu_layers', 'sigma_layers'])(
+        [l_in], l_outs, l_targets,
+        l_top, dense_layers, mu_layers, sigma_layers)
 
 
 def build_objective(model, deterministic=False):

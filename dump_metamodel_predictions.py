@@ -8,17 +8,10 @@ import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
 
-if not (3 <= len(sys.argv) <= 5):
-    sys.exit("Usage: predict.py <metadata_path> <set: valid|test> <n_tta_iterations> "
-             "<average: arithmetic, geometric>")
+if not (len(sys.argv) < 3):
+    sys.exit("Usage: predict.py <metadata_path>")
 
 metadata_path = sys.argv[1]
-set = sys.argv[2] if len(sys.argv) >= 3 else 'valid'
-n_tta_iterations = int(sys.argv[3]) if len(sys.argv) >= 4 else 1
-mean = sys.argv[4] if len(sys.argv) >= 5 else 'geometric'
-
-print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, set, mean)
-
 metadata_dir = utils.get_dir_path('train')
 metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
@@ -29,11 +22,7 @@ set_configuration(config_name)
 
 # predictions paths
 prediction_dir = utils.get_dir_path('predictions')
-prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], set, n_tta_iterations, mean)
-
-# submissions paths
-submission_dir = utils.get_dir_path('submissions')
-submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], set, n_tta_iterations, mean)
+prediction_path = prediction_dir + "/%s.pkl" % metadata['experiment_id']
 
 print "Build model"
 model = config().build_model()
@@ -50,14 +39,11 @@ for l_in, x in izip(model.l_ins, xs_shared):
 
 iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
                                 givens=givens_in, on_unused_input='warn')
-iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
-                                givens=givens_in, on_unused_input='warn')
 
-if set == 'valid':
-    valid_data_iterator = config().valid_data_iterator
-    if n_tta_iterations > 1:
-        valid_data_iterator.transformation_params = config().train_transformation_params
-        valid_data_iterator.transformation_params['zoom_range'] = (1., 1.)
+
+valid_data_iterator = config().valid_data_iterator
+valid_data_iterator.transformation_params = config().train_transformation_params
+valid_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
     print
     print 'n valid: %d' % valid_data_iterator.nsamples

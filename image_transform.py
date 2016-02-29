@@ -20,6 +20,7 @@ NO_AUGMENT_PARAMS = {
     "flip_vert": 0.0,
     "roll_time": 0.0,
     "flip_time": 0.0,
+    "change_brightness": 0.0,
 }
 
 def resize_to_make_it_fit(images, output_shape=(50, 50)):

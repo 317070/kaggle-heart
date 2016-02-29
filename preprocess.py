@@ -24,6 +24,7 @@ DEFAULT_AUGMENTATION_PARAMETERS = {
     "flip_vert": [0, 0],
     "roll_time": [0, 0],
     "flip_time": [0, 0],
+    "change_brightness": [0, 0],
 }
 
 quasi_random_generator = None
@@ -196,6 +197,9 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
 
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_3d_tensor = augment_brightness(patient_3d_tensor, augmentation_params["change_brightness"])
+
             put_in_the_middle(result[tag][index], patient_3d_tensor, True)
 
 
@@ -224,6 +228,9 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 for patient_3d_tensor, metadata in zip(patient_3d_tensors, metadata_tag)]
 
             patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
+
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_4d_tensor = augment_brightness(patient_4d_tensor, augmentation_params["change_brightness"])
 
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
@@ -268,6 +275,9 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
 
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_4d_tensor = augment_brightness(patient_4d_tensor, augmentation_params["change_brightness"])
+
             # Augment sax order
             if augmentation_params and augmentation_params.get("flip_sax", 0) > 0.5:
                 patient_4d_tensor = patient_4d_tensor[::-1]
@@ -276,8 +286,6 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             # Put data (images and metadata) in right location
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 
-
-            is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
             if "sliced:data:sax:locations" in result:
                 eps_location = 1e-7
                 put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
@@ -288,6 +296,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 put_in_the_middle(result["sliced:data:sax:distances"][index], np.array(sorted_distances) + eps_location, True, is_padded)
 
             if "sliced:data:sax:is_not_padded" in result:
+                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
                 result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
 
         elif tag.startswith("sliced:data:shape"):
@@ -531,3 +540,7 @@ def slice_location_finder(metadata_dict):
 
     return datadict, sorted_indices, sorted_distances
 
+
+def augment_brightness(patient_tensor, brightness_adjustment):
+#    print "augmenting", brightness_adjustment
+    return np.clip(patient_tensor + brightness_adjustment * np.mean(patient_tensor), 0, 1)

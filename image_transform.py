@@ -17,6 +17,7 @@ NO_AUGMENT_PARAMS = {
     "skew_x": 0.0,
     "skew_y": 0.0,
     "translate_x": 0.0,
+    "translate_y": 0.0,
     "flip_vert": 0.0,
     "roll_time": 0.0,
     "flip_time": 0.0,

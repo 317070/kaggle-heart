@@ -50,13 +50,13 @@ def sample_augmentation_parameters():
         augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **config().augmentation_params)
 
     if quasi_random_generator is None:
-        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
                                                                                   permutation='Braaten-Weller')
     res = dict()
     try:
         sample = quasi_random_generator.next()
     except ValueError:
-        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
                                                                                   permutation='Braaten-Weller')
         sample = quasi_random_generator.next()
 

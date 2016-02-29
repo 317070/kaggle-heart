@@ -139,9 +139,6 @@ def normscale_resize_and_augment_2(slices, output_shape=(50, 50), augment=None,
             build_shift_center_transform(
                 normalised_shape, shift_center, normalised_patch_size))
 
-        # No zooming to preserve scale!
-        augment["zoom_x"] = 1.0
-        augment["zoom_y"] = 1.0
         augment_tform = build_augmentation_transform(**augment)
 
         patch_scale = max(

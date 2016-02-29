@@ -252,6 +252,11 @@ class JeroenLayerDists(lasagne.layers.MergeLayer):
 
 
 class WeightedMeanLayer(lasagne.layers.MergeLayer):
+    """This layer doesn't overfit; it already knows what to do.
+
+    incomings = [mu_area, sigma_area, is_not_padded, slicelocs]
+    output = N x 2 array, with mu = output[:, 0] and sigma = output[:, 1]
+    """
     def __init__(self, weights, incomings, **kwargs):
         super(WeightedMeanLayer, self).__init__([weights]+incomings, **kwargs)
 
@@ -262,7 +267,7 @@ class WeightedMeanLayer(lasagne.layers.MergeLayer):
         conc = T.concatenate([i.dimshuffle(0,1,'x') for i in inputs[1:]], axis=2)
         weights = T.nnet.softmax(inputs[0])
         r    = conc * weights.dimshuffle(0,'x',1)
-        result = T.sum(r, axis=2)
+        result = T.mean(r, axis=2)
         return result
 
 
@@ -316,80 +321,3 @@ def repeat(input, repeats, axis):
     pattern.insert(axis, "x")
     # print shape_ones, pattern
     return ones * input.dimshuffle(*pattern)
-
-
-class ArgmaxAndMaxLayer(lasagne.layers.Layer):
-    def __init__(self, incoming, mode='max', **kwargs):
-        super(ArgmaxAndMaxLayer, self).__init__(incoming, **kwargs)
-        if not mode in ('max', 'min', 'mean'):
-            raise ValueError('invalid mode')
-        self.mode = mode
-
-    def get_output_shape_for(self, input_shape):
-        if not len(input_shape) == 3:
-            raise ValueError('Require input to be a 3D tensor.')
-        if not input_shape[2] == 2:
-            raise ValueError('Requires inputs last dimension to be 2')
-        return (input_shape[0], input_shape[2])
-
-    def get_output_for(self, input, **kwargs):
-        if self.mode in ('max', 'min'):
-            reductor = T.argmax if self.mode == 'max' else T.argmin
-            indices1 = T.arange(input.shape[0])
-            indices2 = reductor(input[:, :, 0], axis=1)
-            return input[indices1, indices2]
-        elif self.mode == 'mean':
-            return T.mean(input, axis=1)
-
-
-class IntegrateAreaLayer(lasagne.layers.Layer):
-    def __init__(self, incoming, sigma_mode='scale', sigma_scale=None, **kwargs):
-        super(IntegrateAreaLayer, self).__init__(incoming, **kwargs)
-        if not sigma_mode in ('scale', 'smart',):
-            raise ValueError('invalid mode')
-        self.sigma_mode = sigma_mode
-        self.sigma_scale = sigma_scale
-
-    def get_output_shape_for(self, input_shape):
-        if not len(input_shape) > 2:
-            raise ValueError('Require input to hae at least 3 dimensions.')
-        return tuple(list(input_shape[:-2]) + [2])
-
-    def get_output_for(self, input, **kwargs):
-        # compute mu
-        mu = input.sum(axis=-1).sum(axis=-1, keepdims=True)
-        # compute sigma
-        if self.sigma_mode == 'scale':
-            sigma = mu * self.sigma_scale
-        elif self.sigma_mode == 'smart':
-            eps = 1e-3
-            sigma = T.sqrt((input * (1-input)).sum(axis=-1).sum(axis=-1, keepdims=True) + eps)
-        else:
-            raise NotImplementedError('sigma mode not implemented')
-        # concatenate and return
-        return T.concatenate([mu, sigma], axis=-1)
-
-
-class SelectWithAttentionLayer(lasagne.layers.MergeLayer):
-    def __init__(self, incomings, **kwargs):
-        super(SelectWithAttentionLayer, self).__init__(incomings, **kwargs)
-
-    def get_output_shape_for(self, input_shapes):
-        shape_musigma, shape_att = input_shapes
-        if not len(shape_musigma) == 3:
-            raise ValueError('Require input to be a 3D tensor.')
-        if not shape_musigma[-1] == 2:
-            raise ValueError('Last dimension of input should be 2.')
-        if not len(shape_att) == 2:
-            raise ValueError('Requires attention dimension to be 2')
-        if not shape_musigma[:2] == shape_att:
-            print shape_musigma, shape_att
-            raise ValueError('First dimensions should be the same')
-        return (shape_musigma[0], shape_musigma[2])
-
-    def get_output_for(self, inputs, **kwargs):
-        musigma, att = inputs
-        mu = (musigma[:, :, 0] * att).sum(axis=1, keepdims=True)
-        sigma = (musigma[:, :, 1] * att).sum(axis=1, keepdims=True)
-        return T.concatenate((mu, sigma), axis=1)
-

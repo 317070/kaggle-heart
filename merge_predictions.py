@@ -248,6 +248,7 @@ def optimize_expert_weights(expert_predictions,
 
 def geomav(x, average=None):
     return np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x[0])))
+<<<<<<< HEAD
 
 
 def normalav(x, average=None):
@@ -257,6 +258,17 @@ def normalav(x, average=None):
 def prodav(x, average=None):
     return np.cumsum(utils.norm_prod(utils.cdf_to_pdf(x[0])))
 
+=======
+
+
+def normalav(x, average=None):
+    return np.mean(x[0], axis=0)
+
+
+def prodav(x, average=None):
+    return np.cumsum(utils.norm_prod(utils.cdf_to_pdf(x[0])))
+
+>>>>>>> e0f20ad40c9368549a5b4770c96174645dee6094
     
 def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
     weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights)

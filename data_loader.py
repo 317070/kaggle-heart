@@ -318,6 +318,9 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             elif tag.startswith("sliced:data:sax:distances"):
                 pass  # will be filled in by the next one
 
+            elif tag.startswith("sliced:data:sax:distances"):
+                pass  # will be filled in by the next one
+
             elif tag.startswith("sliced:data:sax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
                 metadatas_result[tag] = [load_clean_metadata(f) for f in files if "sax" in f]

@@ -29,8 +29,8 @@ caching = None
 # Save and validation frequency
 validate_every = 20
 validate_train_set = True
-save_every = 20
-restart_from_save = False
+save_every = 5
+restart_from_save = True
 
 dump_network_loaded_data = False
 
@@ -42,7 +42,7 @@ batches_per_chunk = 32 *4
 num_epochs_train = 150
 
 # - learning rate and method
-base_lr = 0.0001
+base_lr = 0.00003
 learning_rate_schedule = {
     0: base_lr,
     8*num_epochs_train/10: base_lr/10,

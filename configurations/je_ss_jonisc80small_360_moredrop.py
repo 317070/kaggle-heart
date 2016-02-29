@@ -27,25 +27,24 @@ dump_network_loaded_data = False  # dump the outputs from the dataloader (for de
 caching = None
 
 # Save and validation frequency
-validate_every = 20
+validate_every = 10
 validate_train_set = True
-save_every = 20
-restart_from_save = False
-
-dump_network_loaded_data = False
+save_every = 10
+restart_from_save = True
 
 # Training (schedule) parameters
 # - batch sizes
-batch_size = 8
+batch_size = 32
 sunny_batch_size = 4
 batches_per_chunk = 16
-num_epochs_train = 200
+AV_SLICE_PER_PAT = 11
+num_epochs_train = 80 * AV_SLICE_PER_PAT
 
 # - learning rate and method
-base_lr = 0.0001
+base_lr = .0001
 learning_rate_schedule = {
     0: base_lr,
-    9*num_epochs_train/10: base_lr/10,
+    num_epochs_train*9/10: base_lr/10,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -65,12 +64,12 @@ augmentation_params = {
     "flip_time": (0, 0),
 }
 
-use_hough_roi = True
+use_hough_roi = True  # use roi to center patches
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2,
-        normalised_patch_size=(64,64)))
+        normalised_patch_size=(80,80)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -86,16 +85,11 @@ create_test_gen = functools.partial(data_loader.generate_test_batch, set=["valid
 
 # Input sizes
 image_size = 64
-nr_slices = 20
 data_sizes = {
-    "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
-    "sliced:data:sax:locations": (batch_size, nr_slices),
-    "sliced:data:sax:is_not_padded": (batch_size, nr_slices),
-    "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
-    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size),
-    "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size),
-    "sliced:data:singleslice": (batch_size, 30, image_size, image_size),
-    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size),
+    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:singleslice": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
@@ -113,51 +107,23 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 100  # More augmentations since a we only use single slices
+test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
-
-# nonlinearity putting a lower bound on it's output
-def lb_softplus(lb):
-    return lambda x: nn.nonlinearities.softplus(x) + lb
-
-
-init = nn.init.Orthogonal()
-
-rnn_layer = functools.partial(nn.layers.RecurrentLayer,
-    W_in_to_hid=init,
-    W_hid_to_hid=init,
-    b=nn.init.Constant(0.1),
-    nonlinearity=nn.nonlinearities.rectify,
-    hid_init=nn.init.Constant(0.),
-    backwards=False,
-    learn_init=True,
-    gradient_steps=-1,
-    grad_clipping=False,
-    unroll_scan=False,
-    precompute_input=False)
-
-
-
 # Architecture
-def build_model():
+def build_model(input_layer = None):
 
     #################
     # Regular model #
     #################
-    input_size = data_sizes["sliced:data:sax"]
-    input_size_mask = data_sizes["sliced:data:sax:is_not_padded"]
-    input_size_locations = data_sizes["sliced:data:sax:locations"]
+    input_size = data_sizes["sliced:data:singleslice"]
 
-    l0 = nn.layers.InputLayer(input_size)
-    lin_slice_mask = nn.layers.InputLayer(input_size_mask)
-    lin_slice_locations = nn.layers.InputLayer(input_size_locations)
+    if input_layer:
+        l0 = input_layer
+    else:
+        l0 = nn.layers.InputLayer(input_size)
 
-    # PREPROCESS SLICES SEPERATELY
-    # Convolutional layers and some dense layers are defined in a submodel
-    l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
-
-    l1a = nn.layers.dnn.Conv2DDNNLayer(l0_slices,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1 = nn.layers.dnn.MaxPool2DDNNLayer(l1b, pool_size=(2,2), stride=(2,2))
 
@@ -181,47 +147,36 @@ def build_model():
     l5 = nn.layers.dnn.MaxPool2DDNNLayer(l5c, pool_size=(2,2), stride=(2,2))
 
     # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l5drop = nn.layers.dropout(l5, p=0.5)
+    ldsys1 = nn.layers.DenseLayer(l5drop, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
     ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
-    l_sys_mu = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(10.0), nonlinearity=None)
-    l_sys_sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(3.), nonlinearity=lb_softplus(.1))
+    ldsys3 = nn.layers.DenseLayer(ldsys2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
+
+    ldsys3drop = nn.layers.dropout(ldsys3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
+    ldsys3dropnorm = layers.NormalisationLayer(ldsys3drop)
+    l_systole = layers.CumSumLayer(ldsys3dropnorm)
 
     # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    lddia1 = nn.layers.DenseLayer(l5drop, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia1drop = nn.layers.dropout(lddia1, p=0.5)
     lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
     lddia2drop = nn.layers.dropout(lddia2, p=0.5)
-    l_dia_mu = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(10.0), nonlinearity=None)
-    l_dia_sigma = nn.layers.DenseLayer(lddia2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(3.), nonlinearity=lb_softplus(.1))
+    lddia3 = nn.layers.DenseLayer(lddia2drop, num_units=600, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.softmax)
 
-    # AGGREGATE SLICES PER PATIENT
-    l_scaled_slice_locations = layers.TrainableScaleLayer(lin_slice_locations, scale=nn.init.Constant(0.1), trainable=False)
+    lddia3drop = nn.layers.dropout(lddia3, p=0.5)  # dropout at the output might encourage adjacent neurons to correllate
+    lddia3dropnorm = layers.NormalisationLayer(lddia3drop)
+    l_diastole = layers.CumSumLayer(lddia3dropnorm)
 
-    # Systole
-    l_pat_sys_ss_mu = nn.layers.ReshapeLayer(l_sys_mu, (-1, nr_slices))
-    l_pat_sys_ss_sigma = nn.layers.ReshapeLayer(l_sys_sigma, (-1, nr_slices))
-    l_pat_sys_aggr_mu_sigma = layers.JeroenLayer([l_pat_sys_ss_mu, l_pat_sys_ss_sigma, lin_slice_mask, l_scaled_slice_locations], rescale_input=1.)
-
-    l_systole = layers.MuSigmaErfLayer(l_pat_sys_aggr_mu_sigma)
-
-    # Diastole
-    l_pat_dia_ss_mu = nn.layers.ReshapeLayer(l_dia_mu, (-1, nr_slices))
-    l_pat_dia_ss_sigma = nn.layers.ReshapeLayer(l_dia_sigma, (-1, nr_slices))
-    l_pat_dia_aggr_mu_sigma = layers.JeroenLayer([l_pat_dia_ss_mu, l_pat_dia_ss_sigma, lin_slice_mask, l_scaled_slice_locations], rescale_input=1.)
-
-    l_diastole = layers.MuSigmaErfLayer(l_pat_dia_aggr_mu_sigma)
 
     return {
         "inputs":{
-            "sliced:data:sax": l0,
-            "sliced:data:sax:is_not_padded": lin_slice_mask,
-            "sliced:data:sax:locations": lin_slice_locations,
+            "sliced:data:singleslice": l0
         },
         "outputs": {
             "systole": l_systole,
@@ -230,12 +185,14 @@ def build_model():
         "regularizable": {
             ldsys1: l2_weight,
             ldsys2: l2_weight,
-            l_sys_mu: l2_weight_out,
-            l_sys_sigma: l2_weight_out,
+            ldsys3: l2_weight_out,
             lddia1: l2_weight,
             lddia2: l2_weight,
-            l_dia_mu: l2_weight_out,
-            l_dia_sigma: l2_weight_out,
+            lddia3: l2_weight_out,
         },
+        "meta_outputs": {
+            "systole": ldsys2,
+            "diastole": lddia2,
+        }
     }
 

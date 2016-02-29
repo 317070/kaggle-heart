@@ -198,12 +198,13 @@ def build_model():
     ld1d = nn.layers.dnn.Conv2DDNNLayer(ld1c,  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     ld1o = nn.layers.dnn.Conv2DDNNLayer(ld1d,  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
 
+    dropout = lambda incoming: nn.layers.DropoutLayer(incoming, p=0.5)
     ld0i = nn.layers.ConcatLayer([l0_frames_d0, upsample(ld1o)], axis=1)
-    ld0a = nn.layers.dnn.Conv2DDNNLayer(ld0i,  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    ld0b = nn.layers.dnn.Conv2DDNNLayer(ld0a,  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    ld0c = nn.layers.dnn.Conv2DDNNLayer(ld0b,  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    ld0d = nn.layers.dnn.Conv2DDNNLayer(ld0c,  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
-    ld0o = nn.layers.dnn.Conv2DDNNLayer(ld0d,  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=1, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.sigmoid)
+    ld0a = nn.layers.dnn.Conv2DDNNLayer(dropout(ld0i),  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    ld0b = nn.layers.dnn.Conv2DDNNLayer(dropout(ld0a),  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    ld0c = nn.layers.dnn.Conv2DDNNLayer(dropout(ld0b),  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    ld0d = nn.layers.dnn.Conv2DDNNLayer(dropout(ld0c),  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=32, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
+    ld0o = nn.layers.dnn.Conv2DDNNLayer(dropout(ld0d),  W=nn.init.Orthogonal("relu"), filter_size=(5,5), num_filters=1, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.sigmoid)
     ld0r = nn.layers.ReshapeLayer(ld0o, (batch_size * nr_slices * nr_frames_subsampled, patch_px, patch_px))
 
     l_frames_musigma = layers.IntegrateAreaLayer(ld0r, sigma_mode='smart', sigma_scale=.1)

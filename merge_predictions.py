@@ -163,7 +163,8 @@ def optimize_expert_weights(expert_predictions,
     #cumulative_distribution = ((1-(1-cumulative_distribution)**exponent) + (cumulative_distribution**exponent))/2
 
     # TODO: test this
-    #cumulative_distribution = (erf( erfinv( p*2-1 ) * filter_params[1] )+1)/2
+    # nans
+    #cumulative_distribution = (T.erf( T.erfinv( T.clip(cumulative_distribution*2-1, -1+eps, 1-eps) ) * filter_params[1] )+1)/2
 
     if not do_optimization:
         ind.set_value(range(NUM_VALIDATIONS))
@@ -268,7 +269,7 @@ def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weight
 
 
 def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata/kaggle-heart/predictions/",
-                               redo_tta = True):
+                               redo_tta = False):
 
     submission_path = "/mnt/storage/metadata/kaggle-heart/submissions/final_submission-%s.csv" % time.time()
 
@@ -294,6 +295,7 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         +glob.glob(prediction_file_location+"j5_normscale.pkl")
     )
 
+    """
     # filter expert_pkl_files
     for file in expert_pkl_files[:]:
         try:
@@ -306,6 +308,7 @@ def merge_all_prediction_files(prediction_file_location = "/mnt/storage/metadata
         except:
             expert_pkl_files.remove(file)
             print "                -> removed"
+    """
 
     NUM_EXPERTS = len(expert_pkl_files)
     NUM_VALIDATIONS = len(validation_patients_indices)

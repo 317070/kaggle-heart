@@ -220,6 +220,25 @@ class WeightedMeanLayer(lasagne.layers.MergeLayer):
         return result
 
 
+
+class IncreaseCertaintyLayer(lasagne.layers.MergeLayer):
+    def __init__(self, weight, incoming, **kwargs):
+        super(IncreaseCertaintyLayer, self).__init__([weight,incoming], **kwargs)
+
+    def get_output_shape_for(self, input_shapes):
+        return input_shapes[1]
+
+    def get_output_for(self, inputs, **kwargs):
+        """
+
+        :param inputs[0]: (batch, 600)
+        :param inputs[1]: (batch, 1)
+        :return:
+        """
+        result = (T.erf( T.erfinv( T.clip(inputs[1].dimshuffle(0,'x',1)*2-1, -1+3e-8, 1-3e-8) ) * inputs[0].dimshuffle(0,1,'x') )+1)/2
+        return result[:,0,:]
+
+
 class TrainableScaleLayer(lasagne.layers.Layer):
 
     def __init__(self, incoming, scale=lasagne.init.Constant(1), trainable=True, **kwargs):

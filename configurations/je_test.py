@@ -44,7 +44,7 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess_normscale,
     normscale_resize_and_augment_function=partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(64 ,64)))
+        normalised_patch_size=(80 ,80)))
 #preprocess_train = preprocess_normscale
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess_with_augmentation  # no augmentation
@@ -57,6 +57,7 @@ augmentation_params = {
     "flip_vert": (0, 0),
     "zoom_x": (.75, 1.25),
     "zoom_y": (.75, 1.25),
+    "change_brightness": (-0.3, 0.3),
 }
 
 cleaning_processes = [

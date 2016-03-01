@@ -64,15 +64,29 @@ augmentation_params = {
     "flip_vert": (0, 1),
     "roll_time": (0, 0),
     "flip_time": (0, 0),
+    "zoom_x": (.75, 1.25),
+    "zoom_y": (.75, 1.25),
     "change_brightness": (-0.3, 0.3),
+}
+
+augmentation_params_test = {
+    "rotation": (-180, 180),
+    "shear": (0, 0),
+    "translation": (-8, 8),
+    "flip_vert": (0, 1),
+    "roll_time": (0, 0),
+    "flip_time": (0, 0),
+    "zoom_x": (.80, 1.20),
+    "zoom_y": (.80, 1.20),
+    "change_brightness": (-0.2, 0.2),
 }
 
 use_hough_roi = True
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
-        image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(64,64)))
+        image_transform.normscale_resize_and_augment_2,
+        normalised_patch_size=(80,80)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 

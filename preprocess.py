@@ -48,7 +48,45 @@ def sample_augmentation_parameters():
             newdict["flip_time"] = augm["flip_time"]
         augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **newdict)
     else:
-        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **config().augmentation_params)
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **augm)
+
+    if quasi_random_generator is None:
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
+                                                                                  permutation='Braaten-Weller')
+    res = dict()
+    try:
+        sample = quasi_random_generator.next()
+    except ValueError:
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
+                                                                                  permutation='Braaten-Weller')
+        sample = quasi_random_generator.next()
+
+    for rand, (key, (a, b)) in izip(sample, augmentation_params.iteritems()):
+        #res[key] = config().rng.uniform(a,b)
+        res[key] = a + rand*(b-a)
+    return res
+
+
+def sample_test_augmentation_parameters():
+    global quasi_random_generator
+
+    augm = config().augmentation_params_test if hasattr(config(), 'augmentation_params_test') else config().augmentation_params
+    if "translation" in augm:
+        newdict = dict()
+        if "translation" in augm:
+            newdict["translate_x"] = augm["translation"]
+            newdict["translate_y"] = augm["translation"]
+        if "shear" in augm:
+            newdict["shear"] = augm["shear"]
+        if "flip_vert" in augm:
+            newdict["flip_vert"] = augm["flip_vert"]
+        if "roll_time" in augm:
+            newdict["roll_time"] = augm["roll_time"]
+        if "flip_time" in augm:
+            newdict["flip_time"] = augm["flip_time"]
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **newdict)
+    else:
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **augm)
 
     if quasi_random_generator is None:
         quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
@@ -149,7 +187,8 @@ def _make_4d_tensor(tensors):
 
 def preprocess_normscale(patient_data, result, index, augment=True,
                          metadata=None,
-                         normscale_resize_and_augment_function=normscale_resize_and_augment):
+                         normscale_resize_and_augment_function=normscale_resize_and_augment,
+                         testaug=False):
     """Normalizes scale and augments the data.
 
     Args:
@@ -160,7 +199,13 @@ def preprocess_normscale(patient_data, result, index, augment=True,
         augment: flag indicating wheter augmentation is needed.
         metadata: metadata belonging to the patient data.
     """
-    augmentation_params = sample_augmentation_parameters() if augment else None
+    if augment:
+        if testaug:
+            augmentation_params = sample_test_augmentation_parameters()
+        else:
+            augmentation_params = sample_augmentation_parameters()
+    else:
+        augmentation_params = None
 
     # Iterate over different sorts of data
     for tag, data in patient_data.iteritems():
@@ -288,15 +333,16 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             if "sliced:data:sax:locations" in result:
                 eps_location = 1e-7
+                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
                 put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
 
             if "sliced:data:sax:distances" in result:
                 eps_location = 1e-7
                 sorted_distances.append(0.0)  # is easier for correct padding
+                is_padded = np.array([False]*len(result["sliced:data:sax:distances"][index]))
                 put_in_the_middle(result["sliced:data:sax:distances"][index], np.array(sorted_distances) + eps_location, True, is_padded)
 
             if "sliced:data:sax:is_not_padded" in result:
-                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
                 result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
 
         elif tag.startswith("sliced:data:shape"):
@@ -334,7 +380,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
         return lambda x: x, lambda x: x
 
 
-def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):
+def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None, testaug=False):
     """
     Load the resulting data, augment it if needed, and put it in result at the correct index
     :param patient_data:

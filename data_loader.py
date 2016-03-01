@@ -198,7 +198,7 @@ def _enhance_metadata(metadata, patient_id, slice_name):
 
 
 def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
-                     set="train", preprocess_function=None):
+                     set="train", preprocess_function=None, testaug=False):
     """
     return a dict with the desired data matched to the required tags
     :param wanted_data_tags:
@@ -347,7 +347,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 patient_result[tag] = metadata_field
             # add others when needed
 
-        label_correction_function, classification_correction_function = preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
+        label_correction_function, classification_correction_function = preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result, testaug=True)
 
         if "classification_correction_function" in wanted_output_tags:
             result["output"]["classification_correction_function"][i] = classification_correction_function
@@ -543,7 +543,8 @@ def generate_test_batch(required_input_keys, required_output_keys, augmentation=
             indices = [indices_for_this_set[i] for i in test_sample_numbers if i<len(indices_for_this_set)]
             kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do,
                                            set=set,
-                                           preprocess_function=_config().preprocess_test)
+                                           preprocess_function=_config().preprocess_test,
+                                           testaug=True)
 
             yield kaggle_data
 

@@ -30,22 +30,22 @@ caching = None
 validate_every = 20
 validate_train_set = True
 save_every = 20
-restart_from_save = True
+restart_from_save = False
 
 dump_network_loaded_data = False
 
 # Training (schedule) parameters
 # - batch sizes
-batch_size = 8
+batch_size = 1
 sunny_batch_size = 4
-batches_per_chunk = 16
-num_epochs_train = 300 
+batches_per_chunk = 32 *4
+num_epochs_train = 62
 
 # - learning rate and method
-base_lr = 0.0001
+base_lr = 0.00003
 learning_rate_schedule = {
     0: base_lr,
-    9*num_epochs_train/10: base_lr/10,
+    45: base_lr/10,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -69,7 +69,7 @@ use_hough_roi = True
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
-        image_transform.normscale_resize_and_augment_2, 
+        image_transform.normscale_resize_and_augment_2,
         normalised_patch_size=(64,64)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
@@ -92,16 +92,16 @@ def filter_samples(folders):
 
 # Input sizes
 image_size = 64
-nr_slices = 20
+nr_slices = 22
 data_sizes = {
     "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:sax:locations": (batch_size, nr_slices),
     "sliced:data:sax:is_not_padded": (batch_size, nr_slices),
     "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
-    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), 
+    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size),
-    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), 
+    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size),
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
@@ -163,40 +163,33 @@ def build_model():
     # Convolutional layers and some dense layers are defined in a submodel
     l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
 
-    import je_ss_jonisc64small_360
-    submodel = je_ss_jonisc64small_360.build_model(l0_slices)
+    import je_ss_jonisc64_leaky_convroll
+    submodel = je_ss_jonisc64_leaky_convroll.build_model(l0_slices)
 
     # Systole Dense layers
-    ldsys2 = submodel["meta_outputs"]["systole"]
+    l_sys_mu = submodel["meta_outputs"]["systole:mu"]
+    l_sys_sigma = submodel["meta_outputs"]["systole:sigma"]
     # Diastole Dense layers
-    lddia2 = submodel["meta_outputs"]["diastole"]
+    l_dia_mu = submodel["meta_outputs"]["diastole:mu"]
+    l_dia_sigma = submodel["meta_outputs"]["diastole:sigma"]
 
     # AGGREGATE SLICES PER PATIENT
+    l_scaled_slice_locations = layers.TrainableScaleLayer(lin_slice_locations, scale=nn.init.Constant(0.1), trainable=False)
+
     # Systole
-    ldsys_pat_in = nn.layers.ReshapeLayer(ldsys2, (-1, nr_slices, [1]))
+    l_pat_sys_ss_mu = nn.layers.ReshapeLayer(l_sys_mu, (-1, nr_slices))
+    l_pat_sys_ss_sigma = nn.layers.ReshapeLayer(l_sys_sigma, (-1, nr_slices))
+    l_pat_sys_aggr_mu_sigma = layers.JeroenLayer([l_pat_sys_ss_mu, l_pat_sys_ss_sigma, lin_slice_mask, l_scaled_slice_locations], rescale_input=100.)
 
-    ldsys_rnn = rnn_layer(ldsys_pat_in, num_units=256, mask_input=lin_slice_mask)
- 
-#    ldsys_rnn_drop = nn.layers.dropout(ldsys_rnn, p=0.5)
-
-    ldsys3mu = nn.layers.DenseLayer(ldsys_rnn, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
-    ldsys3sigma = nn.layers.DenseLayer(ldsys_rnn, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
-    ldsys3musigma = nn.layers.ConcatLayer([ldsys3mu, ldsys3sigma], axis=1)
-
-    l_systole = layers.MuSigmaErfLayer(ldsys3musigma)
+    l_systole = layers.MuSigmaErfLayer(l_pat_sys_aggr_mu_sigma)
 
     # Diastole
-    lddia_pat_in = nn.layers.ReshapeLayer(lddia2, (-1, nr_slices, [1]))
+    l_pat_dia_ss_mu = nn.layers.ReshapeLayer(l_dia_mu, (-1, nr_slices))
+    l_pat_dia_ss_sigma = nn.layers.ReshapeLayer(l_dia_sigma, (-1, nr_slices))
+    l_pat_dia_aggr_mu_sigma = layers.JeroenLayer([l_pat_dia_ss_mu, l_pat_dia_ss_sigma, lin_slice_mask, l_scaled_slice_locations], rescale_input=100.)
 
-    lddia_rnn = rnn_layer(lddia_pat_in, num_units=256, mask_input=lin_slice_mask)
- 
-#    lddia_rnn_drop = nn.layers.dropout(lddia_rnn, p=0.5)
+    l_diastole = layers.MuSigmaErfLayer(l_pat_dia_aggr_mu_sigma)
 
-    lddia3mu = nn.layers.DenseLayer(lddia_rnn, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(200.0), nonlinearity=None)
-    lddia3sigma = nn.layers.DenseLayer(lddia_rnn, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(100.0), nonlinearity=lb_softplus(3))
-    lddia3musigma = nn.layers.ConcatLayer([lddia3mu, lddia3sigma], axis=1)
-
-    l_diastole = layers.MuSigmaErfLayer(lddia3musigma)
 
     submodels = [submodel]
     return {
@@ -210,18 +203,19 @@ def build_model():
             "diastole": l_diastole,
         },
         "regularizable": dict(
-            {
-            ldsys3mu: l2_weight_out,
-            ldsys3sigma: l2_weight_out,
-            lddia3mu: l2_weight_out,
-            lddia3sigma: l2_weight_out,},
+            {},
             **{
                 k: v
                 for d in [model["regularizable"] for model in submodels if "regularizable" in model]
                 for k, v in d.items() }
         ),
         "pretrained":{
-            je_ss_jonisc64small_360.__name__: submodel["outputs"],
+            je_ss_jonisc64_leaky_convroll.__name__: submodel["outputs"],
         }
     }
+
+
+
+
+
 

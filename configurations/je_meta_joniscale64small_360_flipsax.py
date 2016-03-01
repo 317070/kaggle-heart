@@ -85,6 +85,12 @@ create_eval_valid_gen = functools.partial(data_loader.generate_validation_batch,
 create_eval_train_gen = functools.partial(data_loader.generate_validation_batch, set="train")
 create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
 
+def filter_samples(folders):
+    # don't use patients who don't have mre than 6 slices
+    return [
+        folder for folder in folders
+        if data_loader.compute_nr_slices(folder) > 6]
+
 # Input sizes
 image_size = 64
 nr_slices = 20

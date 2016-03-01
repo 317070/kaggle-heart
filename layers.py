@@ -175,26 +175,72 @@ class JeroenLayer(lasagne.layers.MergeLayer):
         # Rescale input
         mu_area = mu_area / self.rescale_input
         sigma_area = sigma_area / self.rescale_input
-        
+
         # For each slice pair, compute if both of them are valid
         is_pair_not_padded = is_not_padded[:, :-1] + is_not_padded[:, 1:] > 1.5
-        
+
         # Compute the distance between slices
         h = abs(slicelocs[:, :-1] - slicelocs[:, 1:])
-        
+
         # Compute mu for each slice pair
         m1 = mu_area[:, :-1]
         m2 = mu_area[:, 1:]
         eps = 1e-2
         mu_volumes = (m1 + m2 + T.sqrt(T.clip(m1*m2, eps, utils.maxfloat))) * h / 3.0
         mu_volumes = mu_volumes * is_pair_not_padded
-        
+
         # Compute sigma for each slice pair
         s1 = sigma_area[:, :-1]
         s2 = sigma_area[:, 1:]
         sigma_volumes = h*(s1 + s2) / 3.0
         sigma_volumes = sigma_volumes * is_pair_not_padded
-        
+
+        # Compute mu and sigma per patient
+        mu_volume_patient = T.sum(mu_volumes, axis=1)
+        sigma_volume_patient = T.sqrt(T.clip(T.sum(sigma_volumes**2, axis=1), eps, utils.maxfloat))
+
+        # Concat and return
+        return T.concatenate([
+            mu_volume_patient.dimshuffle(0, 'x'),
+            sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
+
+
+class JeroenLayerDists(lasagne.layers.MergeLayer):
+    """Uses better distances
+    """
+    def __init__(self, incomings, rescale_input=1.0, **kwargs):
+        super(JeroenLayerDists, self).__init__(incomings, **kwargs)
+        self.rescale_input = rescale_input
+
+    def get_output_shape_for(self, input_shapes):
+        return (input_shapes[0][0], 2)
+
+    def get_output_for(self, inputs, **kwargs):
+        mu_area, sigma_area, is_not_padded, slicedists = inputs
+
+        # Rescale input
+        mu_area = mu_area / self.rescale_input
+        sigma_area = sigma_area / self.rescale_input
+
+        # For each slice pair, compute if both of them are valid
+        is_pair_not_padded = is_not_padded[:, :-1] + is_not_padded[:, 1:] > 1.5
+
+        # Compute the distance between slices
+        h = slicedists[:, :-1]
+
+        # Compute mu for each slice pair
+        m1 = mu_area[:, :-1]
+        m2 = mu_area[:, 1:]
+        eps = 1e-2
+        mu_volumes = (m1 + m2 + T.sqrt(T.clip(m1*m2, eps, utils.maxfloat))) * h / 3.0
+        mu_volumes = mu_volumes * is_pair_not_padded
+
+        # Compute sigma for each slice pair
+        s1 = sigma_area[:, :-1]
+        s2 = sigma_area[:, 1:]
+        sigma_volumes = h*(s1 + s2) / 3.0
+        sigma_volumes = sigma_volumes * is_pair_not_padded
+
         # Compute mu and sigma per patient
         mu_volume_patient = T.sum(mu_volumes, axis=1)
         sigma_volume_patient = T.sqrt(T.clip(T.sum(sigma_volumes**2, axis=1), eps, utils.maxfloat))
@@ -206,6 +252,11 @@ class JeroenLayer(lasagne.layers.MergeLayer):
 
 
 class WeightedMeanLayer(lasagne.layers.MergeLayer):
+    """This layer doesn't overfit; it already knows what to do.
+
+    incomings = [mu_area, sigma_area, is_not_padded, slicelocs]
+    output = N x 2 array, with mu = output[:, 0] and sigma = output[:, 1]
+    """
     def __init__(self, weights, incomings, **kwargs):
         super(WeightedMeanLayer, self).__init__([weights]+incomings, **kwargs)
 
@@ -216,7 +267,7 @@ class WeightedMeanLayer(lasagne.layers.MergeLayer):
         conc = T.concatenate([i.dimshuffle(0,1,'x') for i in inputs[1:]], axis=2)
         weights = T.nnet.softmax(inputs[0])
         r    = conc * weights.dimshuffle(0,'x',1)
-        result = T.sum(r, axis=2)
+        result = T.mean(r, axis=2)
         return result
 
 

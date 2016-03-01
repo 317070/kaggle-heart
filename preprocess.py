@@ -24,6 +24,7 @@ DEFAULT_AUGMENTATION_PARAMETERS = {
     "flip_vert": [0, 0],
     "roll_time": [0, 0],
     "flip_time": [0, 0],
+    "change_brightness": [0, 0],
 }
 
 quasi_random_generator = None
@@ -47,16 +48,54 @@ def sample_augmentation_parameters():
             newdict["flip_time"] = augm["flip_time"]
         augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **newdict)
     else:
-        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **config().augmentation_params)
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **augm)
 
     if quasi_random_generator is None:
-        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
                                                                                   permutation='Braaten-Weller')
     res = dict()
     try:
         sample = quasi_random_generator.next()
     except ValueError:
-        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
+                                                                                  permutation='Braaten-Weller')
+        sample = quasi_random_generator.next()
+
+    for rand, (key, (a, b)) in izip(sample, augmentation_params.iteritems()):
+        #res[key] = config().rng.uniform(a,b)
+        res[key] = a + rand*(b-a)
+    return res
+
+
+def sample_test_augmentation_parameters():
+    global quasi_random_generator
+
+    augm = config().augmentation_params_test if hasattr(config(), 'augmentation_params_test') else config().augmentation_params
+    if "translation" in augm:
+        newdict = dict()
+        if "translation" in augm:
+            newdict["translate_x"] = augm["translation"]
+            newdict["translate_y"] = augm["translation"]
+        if "shear" in augm:
+            newdict["shear"] = augm["shear"]
+        if "flip_vert" in augm:
+            newdict["flip_vert"] = augm["flip_vert"]
+        if "roll_time" in augm:
+            newdict["roll_time"] = augm["roll_time"]
+        if "flip_time" in augm:
+            newdict["flip_time"] = augm["flip_time"]
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **newdict)
+    else:
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **augm)
+
+    if quasi_random_generator is None:
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
+                                                                                  permutation='Braaten-Weller')
+    res = dict()
+    try:
+        sample = quasi_random_generator.next()
+    except ValueError:
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
                                                                                   permutation='Braaten-Weller')
         sample = quasi_random_generator.next()
 
@@ -99,9 +138,9 @@ def put_in_the_middle(target_tensor, data_tensor, pad_better=False, is_padded=No
         if target_indices[0].start:
             for i in xrange(0, target_indices[0].start):
                 target_tensor[i] = data_tensor[0]
-        if target_indices[0].stop:        
+        if target_indices[0].stop:
             for i in xrange(target_indices[0].stop, len(target_tensor)):
-                target_tensor[i] = data_tensor[-1]             
+                target_tensor[i] = data_tensor[-1]
 
 
 def sunny_preprocess(chunk_x, img, chunk_y, lbl):
@@ -148,7 +187,8 @@ def _make_4d_tensor(tensors):
 
 def preprocess_normscale(patient_data, result, index, augment=True,
                          metadata=None,
-                         normscale_resize_and_augment_function=normscale_resize_and_augment):
+                         normscale_resize_and_augment_function=normscale_resize_and_augment,
+                         testaug=False):
     """Normalizes scale and augments the data.
 
     Args:
@@ -159,7 +199,13 @@ def preprocess_normscale(patient_data, result, index, augment=True,
         augment: flag indicating wheter augmentation is needed.
         metadata: metadata belonging to the patient data.
     """
-    augmentation_params = sample_augmentation_parameters() if augment else None
+    if augment:
+        if testaug:
+            augmentation_params = sample_test_augmentation_parameters()
+        else:
+            augmentation_params = sample_augmentation_parameters()
+    else:
+        augmentation_params = None
 
     # Iterate over different sorts of data
     for tag, data in patient_data.iteritems():
@@ -175,7 +221,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             data = clean_images(
                 [patient_data[tag]], metadata=metadata_tag,
                 cleaning_processes=cleaning_processes)
-            
+
             # Augment and extract patch
             # Decide which roi to use.
             shift_center = (None, None)
@@ -192,9 +238,12 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             patient_3d_tensor = clean_images(
                 patient_3d_tensor, metadata=metadata_tag,
                 cleaning_processes=cleaning_processes_post)
-            
+
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
+
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_3d_tensor = augment_brightness(patient_3d_tensor, augmentation_params["change_brightness"])
 
             put_in_the_middle(result[tag][index], patient_3d_tensor, True)
 
@@ -217,13 +266,16 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                     pixel_spacing=metadata["PixelSpacing"],
                     shift_center=shift_center[::-1])[0]
                 for slicedata, metadata, shift_center in zip(data, metadata_tag, shift_centers)]
-            
+
             # Clean data further
             patient_3d_tensors = [
                 clean_images([patient_3d_tensor], metadata=metadata, cleaning_processes=cleaning_processes_post)[0]
                 for patient_3d_tensor, metadata in zip(patient_3d_tensors, metadata_tag)]
 
             patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
+
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_4d_tensor = augment_brightness(patient_4d_tensor, augmentation_params["change_brightness"])
 
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
@@ -268,6 +320,9 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
 
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_4d_tensor = augment_brightness(patient_4d_tensor, augmentation_params["change_brightness"])
+
             # Augment sax order
             if augmentation_params and augmentation_params.get("flip_sax", 0) > 0.5:
                 patient_4d_tensor = patient_4d_tensor[::-1]
@@ -276,16 +331,16 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             # Put data (images and metadata) in right location
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 
-
-            is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
             if "sliced:data:sax:locations" in result:
                 eps_location = 1e-7
+                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
                 put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
 
             if "sliced:data:sax:distances" in result:
                 eps_location = 1e-7
                 sorted_distances.append(0.0)  # is easier for correct padding
-                put_in_the_middle(result["sliced:data:sax:distances"][index], sorted_distances + eps_location, True, is_padded)
+                is_padded = np.array([False]*len(result["sliced:data:sax:distances"][index]))
+                put_in_the_middle(result["sliced:data:sax:distances"][index], np.array(sorted_distances) + eps_location, True, is_padded)
 
             if "sliced:data:sax:is_not_padded" in result:
                 result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
@@ -325,7 +380,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
         return lambda x: x, lambda x: x
 
 
-def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):
+def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None, testaug=False):
     """
     Load the resulting data, augment it if needed, and put it in result at the correct index
     :param patient_data:
@@ -531,3 +586,7 @@ def slice_location_finder(metadata_dict):
 
     return datadict, sorted_indices, sorted_distances
 
+
+def augment_brightness(patient_tensor, brightness_adjustment):
+#    print "augmenting", brightness_adjustment
+    return np.clip(patient_tensor + brightness_adjustment * np.mean(patient_tensor), 0, 1)

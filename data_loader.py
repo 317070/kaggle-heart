@@ -191,14 +191,14 @@ def _enhance_metadata(metadata, patient_id, slice_name):
     roi_center = list(_hough_rois[str(patient_id)][slice_name]['roi_center'])
     if not roi_center == (None, None):
         roi_center[0] = float(roi_center[0]) / metadata['Rows']
-        roi_center[1] = float(roi_center[1]) / metadata['Columns'] 
+        roi_center[1] = float(roi_center[1]) / metadata['Columns']
     metadata['hough_roi'] = tuple(roi_center)
     metadata['hough_roi_radii'] = _hough_rois[str(patient_id)][slice_name]['roi_radii']
     _tag_enhanced(metadata)
 
 
 def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
-                     set="train", preprocess_function=None):
+                     set="train", preprocess_function=None, testaug=False):
     """
     return a dict with the desired data matched to the required tags
     :param wanted_data_tags:
@@ -220,6 +220,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         OUTPUT_DATA_SIZE_TYPE = {
             "systole": (matrix_size, "float32"),
             "diastole": (matrix_size, "float32"),
+            "average": (matrix_size, "float32"),
             "systole:onehot": (matrix_size, "float32"),
             "diastole:onehot": (matrix_size, "float32"),
             "systole:class_weight": (matrix_size, "float32"),
@@ -314,6 +315,12 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             elif tag.startswith("sliced:data:sax:is_not_padded"):
                 pass  # will be filled in by sliced:data:sax
 
+            elif tag.startswith("sliced:data:sax:distances"):
+                pass  # will be filled in by the next one
+
+            elif tag.startswith("sliced:data:sax:distances"):
+                pass  # will be filled in by the next one
+
             elif tag.startswith("sliced:data:sax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
                 metadatas_result[tag] = [load_clean_metadata(f) for f in files if "sax" in f]
@@ -340,7 +347,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 patient_result[tag] = metadata_field
             # add others when needed
 
-        label_correction_function, classification_correction_function = preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
+        label_correction_function, classification_correction_function = preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result, testaug=True)
 
         if "classification_correction_function" in wanted_output_tags:
             result["output"]["classification_correction_function"][i] = classification_correction_function
@@ -362,6 +369,8 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1.0
             if "diastole" in wanted_output_tags:
                 result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1.0
+            if "average" in wanted_output_tags:
+                result["output"]["average"][i][int(np.ceil((V_diastole + V_systole)/2.0)):] = 1.0
 
             if "systole:onehot" in wanted_output_tags:
                 result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1.0
@@ -436,7 +445,7 @@ def get_sunny_patient_data(indices, set="train"):
 def compute_nr_slices(patient_folder):
     files = _in_folder(patient_folder)
     return len([sax for sax in files if "sax" in sax])
-    
+
 
 def generate_train_batch(required_input_keys, required_output_keys):
     """Creates an iterator that returns train batches."""
@@ -534,7 +543,8 @@ def generate_test_batch(required_input_keys, required_output_keys, augmentation=
             indices = [indices_for_this_set[i] for i in test_sample_numbers if i<len(indices_for_this_set)]
             kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do,
                                            set=set,
-                                           preprocess_function=_config().preprocess_test)
+                                           preprocess_function=_config().preprocess_test,
+                                           testaug=True)
 
             yield kaggle_data
 

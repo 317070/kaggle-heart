@@ -72,6 +72,49 @@ class KaggleObjective(TargetVarDictObjective):
     #    return self.get_loss(*args, **kwargs)
 
 
+class MeanKaggleObjective(TargetVarDictObjective):
+    """
+    This is the objective as defined by Kaggle: https://www.kaggle.com/c/second-annual-data-science-bowl/details/evaluation
+    """
+    def __init__(self, input_layers, *args, **kwargs):
+        super(MeanKaggleObjective, self).__init__(input_layers, *args, **kwargs)
+        self.input_average = input_layers["average"]
+        self.target_vars["average"]  = T.fmatrix("average_target")
+        self.input_systole = input_layers["systole"]
+        self.input_diastole = input_layers["diastole"]
+
+        self.target_vars["systole"]  = T.fmatrix("systole_target")
+        self.target_vars["diastole"] = T.fmatrix("diastole_target")
+
+    def get_loss(self, average=True, other_losses={}, *args, **kwargs):
+        network_average  = lasagne.layers.helper.get_output(self.input_average, *args, **kwargs)
+        network_systole  = lasagne.layers.helper.get_output(self.input_systole, *args, **kwargs)
+        network_diastole = lasagne.layers.helper.get_output(self.input_diastole, *args, **kwargs)
+
+        average_target = self.target_vars["average"]
+        systole_target = self.target_vars["systole"]
+        diastole_target = self.target_vars["diastole"]
+
+        CRPS_average = T.mean((network_average - average_target)**2, axis=(1,))
+        CRPS_systole = T.mean((network_systole - systole_target)**2, axis=(1,))
+        CRPS_diastole = T.mean((network_diastole - diastole_target)**2, axis=(1,))
+        loss = 0.2*CRPS_average + 0.4*CRPS_systole + 0.4*CRPS_diastole
+
+        if average:
+            loss = T.mean(loss, axis=(0,))
+            CRPS_average = T.mean(CRPS_average, axis=(0,))
+            CRPS_systole = T.mean(CRPS_systole, axis=(0,))
+            CRPS_diastole = T.mean(CRPS_diastole, axis=(0,))
+
+        other_losses['CRPS_average'] = CRPS_average
+        other_losses['CRPS_systole'] = CRPS_systole
+        other_losses['CRPS_diastole'] = CRPS_diastole
+        return loss + self.penalty
+
+    #def get_kaggle_loss(self, *args, **kwargs):
+    #    return self.get_loss(*args, **kwargs)
+
+
 class MSEObjective(TargetVarDictObjective):
     def __init__(self, input_layers, *args, **kwargs):
         super(MSEObjective, self).__init__(input_layers, *args, **kwargs)

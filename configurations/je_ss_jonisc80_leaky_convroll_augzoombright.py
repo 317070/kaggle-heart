@@ -40,7 +40,7 @@ batch_size = 32
 sunny_batch_size = 4
 batches_per_chunk = 16
 AV_SLICE_PER_PAT = 11
-num_epochs_train = 50 * AV_SLICE_PER_PAT
+num_epochs_train = 40 * AV_SLICE_PER_PAT
 
 # - learning rate and method
 base_lr = .0001
@@ -64,14 +64,29 @@ augmentation_params = {
     "flip_vert": (0, 1),
     "roll_time": (0, 0),
     "flip_time": (0, 0),
+    "zoom_x": (.75, 1.25),
+    "zoom_y": (.75, 1.25),
+    "change_brightness": (-0.3, 0.3),
+}
+
+augmentation_params_test = {
+    "rotation": (-180, 180),
+    "shear": (0, 0),
+    "translation": (-8, 8),
+    "flip_vert": (0, 1),
+    "roll_time": (0, 0),
+    "flip_time": (0, 0),
+    "zoom_x": (.80, 1.20),
+    "zoom_y": (.80, 1.20),
+    "change_brightness": (-0.2, 0.2),
 }
 
 use_hough_roi = True  # use roi to center patches
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
-        image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(100,100)))
+        image_transform.normscale_resize_and_augment_2,
+        normalised_patch_size=(80,80)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -164,9 +179,9 @@ def build_model(input_layer = None):
     l5m = dihedral.CyclicPoolLayer(l5f)
 
 #    l5drop = nn.layers.dropout(l5m, p=0.5)
-    
+
     # Systole Dense layers
-    ldsys1 = nn.layers.DenseLayer(l5m, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    ldsys1 = nn.layers.DenseLayer(l5m, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
     ldsys1drop = nn.layers.dropout(ldsys1, p=0.5)
     ldsys2 = nn.layers.DenseLayer(ldsys1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
@@ -179,7 +194,7 @@ def build_model(input_layer = None):
     l_systole = layers.MuSigmaErfLayer(ldsys3musigma)
 
     # Diastole Dense layers
-    lddia1 = nn.layers.DenseLayer(l5m, num_units=256, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
+    lddia1 = nn.layers.DenseLayer(l5m, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)
 
     lddia1drop = nn.layers.dropout(lddia1, p=0.5)
     lddia2 = nn.layers.DenseLayer(lddia1drop, num_units=512, W=nn.init.Orthogonal("relu"),b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)

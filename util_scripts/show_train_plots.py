@@ -6,7 +6,7 @@ import cPickle as pickle
 import time
 
 print "Looking for the metadata files..."
-files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/j6_2ch_128mm_zoom.pkl")))
+files = sorted(glob.glob(os.path.expanduser("~/storage/metadata/kaggle-heart/train/j6_2ch_128mm*.pkl")))
 print "Plotting..."
 
 NUM_TRAIN_PATIENTS = 417

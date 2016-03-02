@@ -8,8 +8,17 @@ import time
 import re
 import numpy as np
 import dicom2pkl
+import create_validation_split
 
 maxfloat = np.finfo(np.float32).max
+
+
+def get_train_valid_split(train_data_path):
+    filename = 'valid_split.pkl'
+    if not os.path.isfile(filename):
+        print 'Making validation split'
+        create_validation_split.save_train_validation_ids(filename, train_data_path)
+    return load_pkl(filename)
 
 
 def check_data_paths(data_path, pkl_data_path):

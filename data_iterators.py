@@ -10,16 +10,23 @@ import utils
 
 
 class SliceDataGenerator(object):
-    def __init__(self, data_path, batch_size, transform_params, labels_path=None, slice2roi_path=None,
+    def __init__(self, data_path, batch_size, transform_params, patient_ids=None, labels_path=None, slice2roi_path=None,
                  full_batch=False, random=True, infinite=False, view='sax', data_prep_fun='transform_norm_rescale',
                  **kwargs):
-        self.data_path = data_path
-        self.patient_paths = glob.glob(data_path + '/*/study/')
+
+        if patient_ids:
+            self.patient_paths = []
+            for pid in patient_ids:
+                self.patient_paths.append(data_path + '/%s/study/' % pid)
+        else:
+            self.patient_paths = glob.glob(data_path + '/*/study/')
+
         self.slice_paths = [sorted(glob.glob(p + '/%s_*.pkl' % view)) for p in self.patient_paths]
         self.slice_paths = list(itertools.chain(*self.slice_paths))
         self.slicepath2pid = {}
         for s in self.slice_paths:
             self.slicepath2pid[s] = int(utils.get_patient_id(s))
+
         self.nsamples = len(self.slice_paths)
         self.batch_size = batch_size
         self.rng = np.random.RandomState(42)
@@ -42,9 +49,10 @@ class SliceDataGenerator(object):
 
 
 class SliceNormRescaleDataGenerator(SliceDataGenerator):
-    def __init__(self, data_path, batch_size, transform_params, labels_path=None, slice2roi_path=None, full_batch=False,
-                 random=True, infinite=False, view='sax', data_prep_fun='transform_norm_rescale', **kwargs):
-        super(SliceNormRescaleDataGenerator, self).__init__(data_path, batch_size, transform_params,
+    def __init__(self, data_path, batch_size, transform_params, patient_ids=None, labels_path=None, slice2roi_path=None,
+                 full_batch=False, random=True, infinite=False, view='sax',
+                 data_prep_fun='transform_norm_rescale', **kwargs):
+        super(SliceNormRescaleDataGenerator, self).__init__(data_path, batch_size, transform_params, patient_ids,
                                                             labels_path, slice2roi_path,
                                                             full_batch, random, infinite, view, **kwargs)
 
@@ -94,9 +102,10 @@ class SliceNormRescaleDataGenerator(SliceDataGenerator):
 
 
 class SliceFFTNormRescaleDataGenerator(SliceDataGenerator):
-    def __init__(self, data_path, batch_size, transform_params, labels_path=None, slice2roi_path=None, full_batch=False,
+    def __init__(self, data_path, batch_size, transform_params, patient_ids=None, labels_path=None, slice2roi_path=None,
+                 full_batch=False,
                  random=True, infinite=False, view='sax', **kwargs):
-        super(SliceFFTNormRescaleDataGenerator, self).__init__(data_path, batch_size, transform_params,
+        super(SliceFFTNormRescaleDataGenerator, self).__init__(data_path, batch_size, transform_params, patient_ids,
                                                                labels_path, slice2roi_path,
                                                                full_batch, random, infinite, view, **kwargs)
 
@@ -141,11 +150,17 @@ class SliceFFTNormRescaleDataGenerator(SliceDataGenerator):
 
 
 class PatientsDataGenerator(object):
-    def __init__(self, data_path, batch_size, transform_params, labels_path=None, slice2roi_path=None, full_batch=False,
-                 random=True,
-                 infinite=True, min_slices=0, data_prep_fun='transform_norm_rescale', **kwargs):
+    def __init__(self, data_path, batch_size, transform_params, patient_ids=None, labels_path=None, slice2roi_path=None,
+                 full_batch=False, random=True, infinite=True, min_slices=0, data_prep_fun='transform_norm_rescale',
+                 **kwargs):
 
-        patient_paths = glob.glob(data_path + '/*/study/')
+        if patient_ids:
+            patient_paths = []
+            for pid in patient_ids:
+                patient_paths.append(data_path + '/%s/study/' % pid)
+        else:
+            patient_paths = glob.glob(data_path + '/*/study/')
+
         self.pid2slice_paths = defaultdict(list)
         nslices = []
         for p in patient_paths:

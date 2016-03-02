@@ -8,7 +8,7 @@ import utils
 import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
-from paths import MODEL_PATH
+from pathfinder import MODEL_PATH
 
 NUM_PATIENTS = 700
 

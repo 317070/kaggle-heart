@@ -6,6 +6,8 @@ import theano.tensor as T
 import nn_heart
 from configuration import subconfig
 import utils_heart
+import utils
+from pathfinder import PKL_TRAIN_DATA_PATH, TRAIN_LABELS_PATH, PKL_VALIDATE_DATA_PATH
 
 caching = 'memory'
 restart_from_save = None
@@ -19,32 +21,40 @@ train_transformation_params['normalized_slice_pos'] = False
 valid_transformation_params['normalized_slice_pos'] = False
 test_transformation_params['normalized_slice_pos'] = False
 
+
+# check if validation split exists
+train_valid_ids = utils.get_train_valid_split(PKL_TRAIN_DATA_PATH)
+
 batch_size = 8
 nbatches_chunk = 2
 chunk_size = batch_size * nbatches_chunk
 
-train_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
+train_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_TRAIN_DATA_PATH,
                                                            batch_size=chunk_size,
                                                            transform_params=train_transformation_params,
-                                                           labels_path='/data/dsb15_pkl/train.csv',
+                                                           patient_ids=train_valid_ids['train'],
+                                                           labels_path=TRAIN_LABELS_PATH,
                                                            slice2roi_path='pkl_train_slice2roi.pkl',
-                                                           full_batch=True, random=True, infinite=True, min_slices=5,
+                                                           full_batch=True, random=True, infinite=True,
+                                                           min_slices=5,
                                                            data_prep_fun='transform_norm_rescale_after')
 
-valid_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
+valid_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_TRAIN_DATA_PATH,
                                                            batch_size=chunk_size,
                                                            transform_params=valid_transformation_params,
-                                                           labels_path='/data/dsb15_pkl/train.csv',
+                                                           patient_ids=train_valid_ids['valid'],
+                                                           labels_path=TRAIN_LABELS_PATH,
                                                            slice2roi_path='pkl_train_slice2roi.pkl',
                                                            full_batch=False, random=False, infinite=False,
                                                            min_slices=5,
                                                            data_prep_fun='transform_norm_rescale_after')
 
-test_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
+test_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_VALIDATE_DATA_PATH,
                                                           batch_size=chunk_size,
                                                           transform_params=test_transformation_params,
                                                           slice2roi_path='pkl_validate_slice2roi.pkl',
-                                                          full_batch=False, random=False, infinite=False, min_slices=5,
+                                                          full_batch=False, random=False, infinite=False,
+                                                          min_slices=5,
                                                           data_prep_fun='transform_norm_rescale_after')
 
 # find maximum number of slices

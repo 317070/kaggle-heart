@@ -1,10 +1,6 @@
-# TODO: TEST IT !!!!!!!!!!!!!
-
-
 import numpy as np
 import glob
 import re
-import os
 import utils
 
 _DEFAULT_SEED = 317070
@@ -40,40 +36,39 @@ def get_cross_validation_indices(indices, validation_index=0,
     return cross_validations[validation_index]
 
 
-def split_train_validation(global_data_path, train_data_path, valid_data_path, number_of_splits):
-    print "Loading data"
-
-    patient_dirs = sorted(glob.glob(global_data_path + "/*/study/"),
+def save_train_validation_ids(filename, data_path):
+    patient_dirs = sorted(glob.glob(data_path + "/*/study/"),
                           key=lambda folder: int(re.search(r'/(\d+)/', folder).group(1)))
     dirs_indices = range(0, len(patient_dirs))
 
-    valid_dirs_indices = get_cross_validation_indices(indices=dirs_indices, validation_index=0,
-                                                      number_of_splits=number_of_splits)
+    valid_dirs_indices = get_cross_validation_indices(indices=dirs_indices, validation_index=0)
     train_patient_indices = list(set(dirs_indices) - set(valid_dirs_indices))
 
-    train_patient_dirs = [patient_dirs[idx] for idx in train_patient_indices]
-    validation_patient_dirs = [patient_dirs[idx] for idx in valid_dirs_indices]
+    train_patient_dirs = [utils.get_patient_id(patient_dirs[idx]) for idx in train_patient_indices]
+    validation_patient_dirs = [utils.get_patient_id(patient_dirs[idx]) for idx in valid_dirs_indices]
 
-    for folder in train_patient_dirs:
-        f = os.path.dirname(os.path.abspath(folder))
-        utils.copy(f, train_data_path)
-
-    for folder in validation_patient_dirs:
-        f = os.path.dirname(os.path.abspath(folder))
-        utils.copy(f, valid_data_path)
+    d = {'train': train_patient_dirs, 'valid': validation_patient_dirs}
+    utils.save_pkl(d, filename)
+    print 'train-valid patients split saved to', filename
+    return d
 
 
 if __name__ == '__main__':
     global_data_path = '/data/dsb15_pkl/pkl_train'
-    train_data_path = '/data/dsb15_pkl/pkl_splitted/train'
-    valid_data_path = '/data/dsb15_pkl/pkl_splitted/valid'
-    # global_data_path = '/data/dsb15_pkl/pkl_splitted/valid'
-    # train_data_path = '/data/dsb15_pkl/pkl_splitted/valid1'
-    # valid_data_path = '/data/dsb15_pkl/pkl_splitted/valid2'
 
-    if not os.path.isdir(train_data_path):
-        os.makedirs(train_data_path)
-    if not os.path.isdir(valid_data_path):
-        os.makedirs(valid_data_path)
+    p = save_train_validation_ids(global_data_path)
+    print 'TRAIN'
+    for path in p['train']:
+        print utils.get_patient_id(path),
 
-    split_train_validation(global_data_path, train_data_path, valid_data_path)
+    print '\nVALID'
+    valid_ids = []
+    for path in p['valid']:
+        valid_ids.append(utils.get_patient_id(path))
+        print utils.get_patient_id(path),
+
+    valid_ids1 = []
+    g = glob.glob('/data/dsb15_pkl/pkl_splitted/valid/*/study/')
+    for path in g:
+        valid_ids1.append(utils.get_patient_id(path))
+    print set(valid_ids) == set(valid_ids1)

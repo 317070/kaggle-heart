@@ -7,7 +7,7 @@ import utils
 import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
-from paths import MODEL_PATH, VALIDATE_DATA_PATH, PKL_VALIDATE_DATA_PATH
+import pathfinder
 
 if not (3 <= len(sys.argv) <= 5):
     sys.exit("Usage: predict.py <metadata_path> <set: train|valid|test> <n_tta_iterations> "
@@ -20,10 +20,7 @@ mean = sys.argv[4] if len(sys.argv) >= 5 else 'geometric'
 
 print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, set, mean)
 
-# create pkl data if it doesn't exist
-utils.check_data_paths(VALIDATE_DATA_PATH, PKL_VALIDATE_DATA_PATH)
-
-metadata_dir = utils.get_dir_path('train', root_dir=MODEL_PATH)
+metadata_dir = utils.get_dir_path('train', pathfinder.MODEL_PATH)
 metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 if 'subconfiguration' in metadata:
@@ -31,11 +28,11 @@ if 'subconfiguration' in metadata:
 set_configuration(config_name)
 
 # predictions paths
-prediction_dir = utils.get_dir_path('predictions', root_dir=MODEL_PATH)
+prediction_dir = utils.get_dir_path('predictions', pathfinder.MODEL_PATH)
 prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], set, n_tta_iterations, mean)
 
 # submissions paths
-submission_dir = utils.get_dir_path('submissions', root_dir=MODEL_PATH)
+submission_dir = utils.get_dir_path('submissions', pathfinder.MODEL_PATH)
 submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], set, n_tta_iterations, mean)
 
 print "Build model"

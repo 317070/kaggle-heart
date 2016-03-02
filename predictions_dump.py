@@ -7,12 +7,13 @@ import utils
 import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
+from pathfinder import MODEL_PATH
 
 if not (len(sys.argv) < 3):
     sys.exit("Usage: predict.py <metadata_path>")
 
 metadata_path = sys.argv[1]
-metadata_dir = utils.get_dir_path('train')
+metadata_dir = utils.get_dir_path('train', MODEL_PATH)
 metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 if 'subconfiguration' in metadata:
@@ -21,7 +22,7 @@ if 'subconfiguration' in metadata:
 set_configuration(config_name)
 
 # predictions paths
-prediction_dir = utils.get_dir_path('predictions')
+prediction_dir = utils.get_dir_path('predictions', MODEL_PATH)
 prediction_path = prediction_dir + "/%s.pkl" % metadata['experiment_id']
 prediction_mu_std_path = prediction_dir + "/%s_mu_sigma.pkl" % metadata['experiment_id']
 

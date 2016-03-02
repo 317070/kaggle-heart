@@ -1,21 +1,24 @@
-"""Module acting as a singleton object for storing the configuration module.
-"""
-
 import importlib
 
-
-_CONFIG_DIR = "configurations"
-
 _config = None
+_subconfig = None
 
 
-def set_configuration(configuration):
-    """Imports and initialises the configuration module."""
+def set_configuration(config_name):
     global _config
-    _config = importlib.import_module("%s.%s" % (_CONFIG_DIR, configuration))
+    _config = importlib.import_module("configurations.%s" % config_name)
     print "loaded", _config
 
 
+def set_subconfiguration(config_name):
+    global _subconfig
+    _subconfig = importlib.import_module("configurations.%s" % config_name)
+    print "loaded", _subconfig
+
+
 def config():
-    """Fetches the currently loaded configuration module."""
     return _config
+
+
+def subconfig():
+    return _subconfig

@@ -8,11 +8,8 @@ import cPickle as pickle
 import os, glob, re
 from extract_roi import *
 
-train_data_path='./pkl_train/'
-validate_data_path='./pkl_validate'
-
-
-
+train_data_path='/data/dsb15_pkl/pkl_train'
+validate_data_path='/data/dsb15_pkl/pkl_validate'
 
 from scipy import ndimage as ndi
 import scipy.ndimage.filters as filters

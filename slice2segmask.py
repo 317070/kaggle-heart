@@ -275,7 +275,8 @@ def get_slice2roi(data_path, plot=False):
 
 
 if __name__ == '__main__':
-    data_paths = ['./pkl_train', './pkl_validate']
-    # data_paths = ['/mnt/sda3/data/kaggle-heart/pkl_validate']
+    
+    data_paths = ['/data/dsb15_pkl/pkl_train', '/data/dsb15_pkl/pkl_validate']  
+  # data_paths = ['/mnt/sda3/data/kaggle-heart/pkl_validate']
     for d in data_paths:
         get_slice2roi(d, plot=False)

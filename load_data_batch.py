@@ -1,8 +1,8 @@
 import cPickle as pickle
 import os, glob
 
-train_data_path='./pkl_train/'
-validate_data_path='./pkl_validate'
+train_data_path='/data/dsb15_pkl/pkl_train'
+validate_data_path='/data/dsb15_pkl/pkl_validate'
 
 _extract_id_from_path = lambda path: int(re.search(r'/(\d+)/', path).group(1))
 

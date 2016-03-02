@@ -12,6 +12,7 @@ import logger
 import theano.tensor as T
 import buffering
 from configuration import config, set_configuration, set_subconfiguration
+from paths import MODEL_PATH
 
 if len(sys.argv) < 3:
     sys.exit("Usage: train.py <configuration_name> <submodel_metadata>")
@@ -20,7 +21,7 @@ config_name = sys.argv[1]
 submodel_metadata_path = sys.argv[2]
 
 # set submodel and model config
-metadata_dir = utils.get_dir_path('train')
+metadata_dir = utils.get_dir_path('train', MODEL_PATH)
 submodel_metadata = utils.load_pkl(metadata_dir + '/%s' % submodel_metadata_path)
 
 subconfig_name = submodel_metadata['configuration']
@@ -34,7 +35,7 @@ print
 
 # meta metadata and logs paths
 metadata_path = metadata_dir + '/%s.pkl' % expid
-logs_dir = utils.get_dir_path('logs')
+logs_dir = utils.get_dir_path('logs', MODEL_PATH)
 sys.stdout = logger.Logger(logs_dir + '/%s.log' % expid)
 
 print 'Build model'

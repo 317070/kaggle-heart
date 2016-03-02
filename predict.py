@@ -7,10 +7,11 @@ import utils
 import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
+from paths import MODEL_PATH, VALIDATE_DATA_PATH, PKL_VALIDATE_DATA_PATH
 
 if not (3 <= len(sys.argv) <= 5):
-    sys.exit("Usage: predict.py <metadata_path> <set: valid|test> <n_tta_iterations> "
-             "<average: arithmetic, geometric>")
+    sys.exit("Usage: predict.py <metadata_path> <set: train|valid|test> <n_tta_iterations> "
+             "<average: arithmetic|geometric>")
 
 metadata_path = sys.argv[1]
 set = sys.argv[2] if len(sys.argv) >= 3 else 'valid'
@@ -19,20 +20,22 @@ mean = sys.argv[4] if len(sys.argv) >= 5 else 'geometric'
 
 print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, set, mean)
 
-metadata_dir = utils.get_dir_path('train')
+# create pkl data if it doesn't exist
+utils.check_data_paths(VALIDATE_DATA_PATH, PKL_VALIDATE_DATA_PATH)
+
+metadata_dir = utils.get_dir_path('train', root_dir=MODEL_PATH)
 metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 if 'subconfiguration' in metadata:
     set_subconfiguration(metadata['subconfiguration'])
-
 set_configuration(config_name)
 
 # predictions paths
-prediction_dir = utils.get_dir_path('predictions')
+prediction_dir = utils.get_dir_path('predictions', root_dir=MODEL_PATH)
 prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], set, n_tta_iterations, mean)
 
 # submissions paths
-submission_dir = utils.get_dir_path('submissions')
+submission_dir = utils.get_dir_path('submissions', root_dir=MODEL_PATH)
 submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], set, n_tta_iterations, mean)
 
 print "Build model"
@@ -50,8 +53,54 @@ for l_in, x in izip(model.l_ins, xs_shared):
 
 iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
                                 givens=givens_in, on_unused_input='warn')
-iter_test_det = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
-                                givens=givens_in, on_unused_input='warn')
+
+if set == 'train':
+    train_data_iterator = config().train_data_iterator
+    if n_tta_iterations == 1:
+        train_data_iterator.transformation_params = config().valid_transformation_params
+    else:
+        train_data_iterator.transformation_params = config().train_transformation_params
+
+    train_data_iterator.transformation_params['zoom_range'] = (1., 1.)
+    train_data_iterator.full_batch = False
+    train_data_iterator.random = False
+    train_data_iterator.infinite = False
+
+    print
+    print 'n train: %d' % train_data_iterator.nsamples
+    print 'tta iteration:',
+
+    batch_predictions, batch_targets, batch_ids = [], [], []
+    for i in xrange(n_tta_iterations):
+        print i,
+        sys.stdout.flush()
+        for xs_batch_valid, ys_batch_valid, ids_batch in buffering.buffered_gen_threaded(
+                train_data_iterator.generate()):
+            for x_shared, x in zip(xs_shared, xs_batch_valid):
+                x_shared.set_value(x)
+
+            batch_targets.append(ys_batch_valid)
+            batch_predictions.append(iter_test_det())
+            batch_ids.append(ids_batch)
+
+    avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
+    patient_targets = utils_heart.get_patient_average_heaviside_predictions(batch_targets, batch_ids)
+
+    assert avg_patient_predictions.viewkeys() == patient_targets.viewkeys()
+    crpss_sys, crpss_dst = [], []
+    for id in avg_patient_predictions.iterkeys():
+        crpss_sys.append(utils_heart.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
+        crpss_dst.append(utils_heart.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
+        print id, 0.5 * (crpss_sys[-1] + crpss_dst[-1]), crpss_sys[-1], crpss_dst[-1]
+
+    crps0, crps1 = np.mean(crpss_sys), np.mean(crpss_dst)
+
+    print '\n Train CRPS:', config().get_mean_crps_loss(batch_predictions, batch_targets, batch_ids)
+    print 'Train CRPS', 0.5 * (crps0 + crps1)
+
+    utils.save_pkl(avg_patient_predictions, prediction_path)
+    print ' predictions saved to %s' % prediction_path
+    print
 
 if set == 'valid':
     valid_data_iterator = config().valid_data_iterator
@@ -76,8 +125,6 @@ if set == 'valid':
             batch_predictions.append(iter_test_det())
             batch_ids.append(ids_batch)
 
-    print 'Validation CRPS:', config().get_mean_crps_loss(batch_predictions, batch_targets, batch_ids)
-
     avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
     patient_targets = utils_heart.get_patient_average_heaviside_predictions(batch_targets, batch_ids)
 
@@ -86,11 +133,12 @@ if set == 'valid':
     for id in avg_patient_predictions.iterkeys():
         crpss_sys.append(utils_heart.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
         crpss_dst.append(utils_heart.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
-        print id, 0.5*(crpss_sys[-1] + crpss_dst[-1]), crpss_sys[-1], crpss_dst[-1]
+        print id, 0.5 * (crpss_sys[-1] + crpss_dst[-1]), crpss_sys[-1], crpss_dst[-1]
 
     crps0, crps1 = np.mean(crpss_sys), np.mean(crpss_dst)
 
-    print 'Patient CRPS0, CPRS1, average: ', crps0, crps1, 0.5 * (crps0 + crps1)
+    print '\n Validation CRPS:', config().get_mean_crps_loss(batch_predictions, batch_targets, batch_ids)
+    print 'Validation CRPS: ', crps0, crps1, 0.5 * (crps0 + crps1)
 
     utils.save_pkl(avg_patient_predictions, prediction_path)
     print ' predictions saved to %s' % prediction_path
@@ -98,6 +146,12 @@ if set == 'valid':
 
 if set == 'test':
     test_data_iterator = config().test_data_iterator
+
+    if n_tta_iterations == 1:
+        test_data_iterator.transformation_params = config().valid_transformation_params
+    else:
+        test_data_iterator.transformation_params = config().train_transformation_params
+    test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
     print 'n test: %d' % test_data_iterator.nsamples
     print 'tta iteration:',

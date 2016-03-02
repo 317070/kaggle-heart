@@ -8,6 +8,7 @@ import utils
 import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
+from paths import MODEL_PATH
 
 NUM_PATIENTS = 700
 
@@ -20,7 +21,7 @@ mean = 'geometric'
 
 print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, "both", mean)
 
-metadata_dir = utils.get_dir_path('train')
+metadata_dir = utils.get_dir_path('train', MODEL_PATH)
 metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
 config_name = metadata['configuration']
 if 'subconfiguration' in metadata:
@@ -28,11 +29,11 @@ if 'subconfiguration' in metadata:
 set_configuration(config_name)
 
 # predictions paths
-prediction_dir = utils.get_dir_path('predictions')
+prediction_dir = utils.get_dir_path('predictions', MODEL_PATH)
 prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'both', n_tta_iterations, mean)
 
 # submissions paths
-submission_dir = utils.get_dir_path('submissions')
+submission_dir = utils.get_dir_path('submissions', MODEL_PATH)
 submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], 'both', n_tta_iterations, mean)
 
 print "Build model"
@@ -65,7 +66,6 @@ if True:  # set == 'valid':
 
     print 'valid transformation params'
     print valid_data_iterator.transformation_params
-
 
     print
     print 'n valid: %d' % valid_data_iterator.nsamples

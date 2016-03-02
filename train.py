@@ -12,12 +12,7 @@ import logger
 import theano.tensor as T
 import buffering
 from configuration import config, set_configuration
-
-# theano.config.warn_float64 = 'warn'
-# theano.config.scan.allow_output_prealloc = False
-# theano.config.profile = True
-# theano.config.profile_memory = True
-# theano.config.scan.allow_gc = True
+from paths import MODEL_PATH, TRAIN_DATA_PATH, PKL_TRAIN_DATA_PATH
 
 if len(sys.argv) < 2:
     sys.exit("Usage: train.py <configuration_name>")
@@ -28,12 +23,15 @@ print
 print "Experiment ID: %s" % expid
 print
 
+# create pkl data if it doesn't exist
+utils.check_data_paths(TRAIN_DATA_PATH, PKL_TRAIN_DATA_PATH)
+
 # metadata
-metadata_dir = utils.get_dir_path('train')
+metadata_dir = utils.get_dir_path('train', root_dir=MODEL_PATH)
 metadata_path = metadata_dir + '/%s.pkl' % expid
 
 # logs
-logs_dir = utils.get_dir_path('logs')
+logs_dir = utils.get_dir_path('logs', root_dir=MODEL_PATH)
 sys.stdout = logger.Logger(logs_dir + '/%s.log' % expid)
 sys.stderr = sys.stdout
 

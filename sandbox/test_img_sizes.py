@@ -5,8 +5,20 @@ import utils
 import utils_heart
 from collections import defaultdict
 
-# data_path = '/mnt/sda3/data/kaggle-heart/pkl_train'
-data_path = '/data/dsb15_pkl/pkl_train'
+data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
+# data_path = '/data/dsb15_pkl/pkl_train'
+
+def test_5():
+    patient_path = sorted(glob.glob(data_path + '/*/study'))
+    shapes = []
+    for p in patient_path:
+        pid = int(utils.get_patient_id(p))
+        spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
+        for s in spaths:
+            data = data_test.read_slice(s)
+    print set(shapes)
+
+
 
 
 def test_1():
@@ -91,4 +103,4 @@ def test4():
 
 
 if __name__ == '__main__':
-    test_1()
+    test_5()

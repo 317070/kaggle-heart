@@ -7,12 +7,21 @@ import subprocess
 import time
 import re
 import numpy as np
+import dicom2pkl
 
 maxfloat = np.finfo(np.float32).max
 
 
-def get_dir_path(dir_name, root_dir='/mnt/storage/metadata/kaggle-heart'):
-    root_dir = '/home/ikorshun/metadata'  # TODO hack
+def check_data_paths(data_path, pkl_data_path):
+    if not os.path.isdir(data_path):
+        raise ValueError('wrong path to DICOM data')
+    if not os.path.isdir(pkl_data_path):
+        print ' converting DICOM to pkl'
+        dicom2pkl.preprocess(data_path, pkl_data_path)
+        print ' Saved in', pkl_data_path
+
+
+def get_dir_path(dir_name, root_dir):
     username = pwd.getpwuid(os.getuid())[0]
     platform_name = hostname()
     dir_path = root_dir + '/' + dir_name + '/%s-%s' % (username, platform_name)

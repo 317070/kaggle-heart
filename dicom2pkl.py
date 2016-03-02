@@ -82,25 +82,27 @@ def convert_view_2np(in_paths, out_path, view):
         save_data(np.array(d_time), m_time, in_path, out_path)
 
 
-if __name__ == '__main__':
+def preprocess(in_data_path, out_data_path=None):
+    dataset = in_data_path.split('/')[-1]
+    in_data_path = in_data_path
+    if not out_data_path:
+        out_data_path = in_data_path.replace(dataset, 'pkl_' + dataset)
 
+    in_study_paths = sorted(os.listdir(in_data_path))
+    out_study_paths = [out_data_path + '/' + s + '/study/' for s in in_study_paths]
+    in_study_paths = [in_data_path + '/' + s + '/study/' for s in in_study_paths]
+
+    for p in out_study_paths:
+        if not os.path.exists(p):
+            os.makedirs(p)
+
+    for s_in, s_out in zip(in_study_paths, out_study_paths):
+        print '\n******** %s *********' % s_in
+        convert_study_2np(s_in, s_out)
+
+
+if __name__ == '__main__':
     if len(sys.argv) < 2:
         sys.exit("Usage: dicom2npy.py <global_data_path>")
     global_path = sys.argv[1]
-
-    for dataset in ['train', 'validate']:
-
-        in_data_path = global_path + dataset + '/'
-        out_data_path = global_path + 'pkl_' + dataset + '/'
-
-        in_study_paths = sorted(os.listdir(in_data_path))
-        out_study_paths = [out_data_path + s + '/study/' for s in in_study_paths]
-        in_study_paths = [in_data_path + s + '/study/' for s in in_study_paths]
-
-        for p in out_study_paths:
-            if not os.path.exists(p):
-                os.makedirs(p)
-
-        for s_in, s_out in zip(in_study_paths, out_study_paths):
-            print '\n******** %s *********' % s_in
-            convert_study_2np(s_in, s_out)
+    preprocess(global_path)

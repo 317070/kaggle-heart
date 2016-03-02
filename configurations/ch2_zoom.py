@@ -147,8 +147,13 @@ def build_model(l_in=None):
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
+    mu_layers = [mu0, mu1]
+    sigma_layers = [sigma0, sigma1]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top'])([l_in], l_outs, l_targets, l_top)
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'mu_layers', 'sigma_layers'])([l_in], l_outs,
+                                                                                                       l_targets, l_top,
+                                                                                                       mu_layers,
+                                                                                                       sigma_layers)
 
 
 def build_objective(model, deterministic=False):

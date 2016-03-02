@@ -28,7 +28,8 @@ train_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb1
                                                            transform_params=train_transformation_params,
                                                            labels_path='/data/dsb15_pkl/train.csv',
                                                            slice2roi_path='pkl_train_slice2roi.pkl',
-                                                           full_batch=True, random=True, infinite=True, min_slices=5)
+                                                           full_batch=True, random=True, infinite=True, min_slices=5,
+                                                           data_prep_fun='transform_norm_rescale_after')
 
 valid_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
                                                            batch_size=chunk_size,
@@ -36,13 +37,15 @@ valid_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb1
                                                            labels_path='/data/dsb15_pkl/train.csv',
                                                            slice2roi_path='pkl_train_slice2roi.pkl',
                                                            full_batch=False, random=False, infinite=False,
-                                                           min_slices=5)
+                                                           min_slices=5,
+                                                           data_prep_fun='transform_norm_rescale_after')
 
 test_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
                                                           batch_size=chunk_size,
                                                           transform_params=test_transformation_params,
                                                           slice2roi_path='pkl_validate_slice2roi.pkl',
-                                                          full_batch=False, random=False, infinite=False, min_slices=5)
+                                                          full_batch=False, random=False, infinite=False, min_slices=5,
+                                                          data_prep_fun='transform_norm_rescale_after')
 
 # find maximum number of slices
 nslices = max(train_data_iterator.nslices,
@@ -90,8 +93,8 @@ def build_model():
                                                l_in_slice_mask, nn.layers.flatten(l_in_slice_location)],
                                               trainable_scale=False)
 
-    l_volume_mu0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=0, axis=-1),([0], 1))
-    l_volume_sigma0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=1, axis=-1),([0], 1))
+    l_volume_mu0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=0, axis=-1), ([0], 1))
+    l_volume_sigma0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=1, axis=-1), ([0], 1))
 
     l_cdf0 = nn_heart.NormalCDFLayer(l_volume_mu0, l_volume_sigma0)
 
@@ -106,23 +109,25 @@ def build_model():
                                                l_in_slice_mask, nn.layers.flatten(l_in_slice_location)],
                                               trainable_scale=False)
 
-    l_volume_mu1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=0, axis=-1),([0], 1))
-    l_volume_sigma1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=1, axis=-1),([0], 1))
+    l_volume_mu1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=0, axis=-1), ([0], 1))
+    l_volume_sigma1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=1, axis=-1), ([0], 1))
 
     l_cdf1 = nn_heart.NormalCDFLayer(l_volume_mu1, l_volume_sigma1)
+
     l_outs = [l_cdf0, l_cdf1]
     l_top = nn.layers.MergeLayer(l_outs)
 
     l_target_mu0 = nn.layers.InputLayer((None, 1))
     l_target_mu1 = nn.layers.InputLayer((None, 1))
     l_targets = [l_target_mu0, l_target_mu1]
-
     train_params = nn.layers.get_all_params(l_top)
     test_layes = [l_volume_mu_sigma0, l_volume_mu_sigma1]
     mu_layers = [l_volume_mu0, l_volume_mu1]
     sigma_layers = [l_volume_sigma0, l_volume_sigma1]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'train_params', 'submodel', 'test_layers', 'mu_layers', 'sigma_layers'])(
+    return namedtuple('Model',
+                      ['l_ins', 'l_outs', 'l_targets', 'l_top', 'train_params', 'submodel', 'test_layers', 'mu_layers',
+                       'sigma_layers'])(
         l_ins, l_outs,
         l_targets,
         l_top,

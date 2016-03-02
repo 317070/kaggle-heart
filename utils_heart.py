@@ -4,6 +4,7 @@ import numpy as np
 import scipy.stats
 import lasagne as nn
 
+
 def make_monotone_cdf(cdf):
     cdf_out = np.copy(cdf)
     for j in xrange(len(cdf_out) - 1):
@@ -36,6 +37,17 @@ def real_to_cdf(y, sigma=1e-10):
     cdf = np.zeros((y.shape[0], 600))
     for i in range(y.shape[0]):
         cdf[i] = norm.cdf(np.linspace(0, 599, 600), y[i], sigma)
+    return cdf
+
+
+def norm_cdf(mu, sigma):
+    cdf = np.zeros((mu.shape[0], 600))
+    for i in range(mu.shape[0]):
+        cdf[i] = norm.cdf(np.linspace(0, 599, 600), mu[i], sigma[i])
+    return cdf
+
+def norm_cdf_1d(mu, sigma):
+    cdf = norm.cdf(np.linspace(0, 599, 600), mu, sigma)
     return cdf
 
 
@@ -125,3 +137,45 @@ def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, me
             patient2cdf[patient_id].append(avg_prediction_cdf)
 
     return patient2cdf
+
+
+def get_patient_normparam_prediction(batch_predictions, batch_patient_ids, mean='geometric'):
+    """
+
+    :param batch_predictions: cdf predictions per slice
+    :param batch_patient_ids:
+    :param mean:
+    :return:
+    """
+    nbatches = len(batch_predictions)
+    npredictions = len(batch_predictions[0])
+
+    patient_ids = []
+    for i in xrange(nbatches):
+        patient_ids += batch_patient_ids[i]
+
+    patient2idxs = defaultdict(list)
+    for i, pid in enumerate(patient_ids):
+        patient2idxs[pid].append(i)
+
+    patient2mu = defaultdict(list)  # list[0] -systole mu, list[1] - diastole mu
+    for i in xrange(npredictions):
+        # collect predictions over batches
+        p = []
+        for j in xrange(nbatches):
+            p.append(batch_predictions[j][i])
+        p = np.vstack(p)
+
+        # average predictions over patient's predictions
+        for patient_id, patient_idxs in patient2idxs.iteritems():
+            prediction_cdfs = p[patient_idxs]
+            if mean == 'geometric':
+                avg_prediction_mu = scipy.stats.gmean(prediction_cdfs, axis=0)
+            elif mean == 'arithmetic':
+                avg_prediction_mu = np.mean(prediction_cdfs, axis=0)
+            else:
+                raise ValueError('No averaging method is given')
+
+            patient2mu[patient_id].append(avg_prediction_mu)
+
+    return patient2mu

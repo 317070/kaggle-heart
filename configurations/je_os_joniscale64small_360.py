@@ -90,7 +90,6 @@ def filter_samples(folders):
         folder for folder in folders
         if data_loader.compute_nr_slices(folder) > 6]
 
-
 # Input sizes
 image_size = 64
 nr_slices = 20

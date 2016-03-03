@@ -106,6 +106,9 @@ patient_folders = {
     "test": test_patient_folders,
 }
 
+def get_patient_id(folder):
+    return _extract_id_from_path(folder)
+
 id_to_index_map = _construct_id_to_index_map(patient_folders)
 num_patients = {set:len(patient_folders[set]) for set in patient_folders}
 NUM_TRAIN_PATIENTS = num_patients['train']

@@ -10,7 +10,7 @@ import nn_heart
 from pathfinder import PKL_TRAIN_DATA_PATH, TRAIN_LABELS_PATH, PKL_VALIDATE_DATA_PATH
 import utils
 
-caching = 'memory'
+caching = None
 
 restart_from_save = None
 rng = np.random.RandomState(42)

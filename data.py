@@ -7,7 +7,7 @@ from scipy.fftpack import fftn, ifftn
 from skimage.feature import peak_local_max, canny
 from skimage.transform import hough_circle
 import skimage.draw
-# import compressed_cache
+import compressed_cache
 from configuration import config
 import utils
 import skimage.exposure, skimage.filters
@@ -27,12 +27,12 @@ def read_labels(file_path):
     return id2labels
 
 
-# @compressed_cache.memoize()
+@compressed_cache.memoize()
 def read_slice(path):
     return pickle.load(open(path))['data']
 
 
-# @compressed_cache.memoize()
+@compressed_cache.memoize()
 def read_fft_slice(path):
     d = pickle.load(open(path))['data']
     ff1 = fftn(d)
@@ -43,7 +43,7 @@ def read_fft_slice(path):
     return d
 
 
-# @compressed_cache.memoize()
+@compressed_cache.memoize()
 def read_metadata(path):
     d = pickle.load(open(path))['metadata'][0]
     metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient', 'ImagePositionPatient', 'SliceLocation',
@@ -60,6 +60,7 @@ def read_metadata(path):
 
 
 def sample_augmentation_parameters(transformation):
+    # TODO: bad thing to mix fixed and random params!!!
     if set(transformation.keys()) == {'patch_size', 'mm_patch_size'} or \
                     set(transformation.keys()) == {'patch_size', 'mm_patch_size', 'mask_roi'}:
         return None
@@ -239,7 +240,6 @@ def transform_norm_rescale(data, metadata, transformation, roi=None, random_augm
         roi_mask = make_circular_roi_mask(patch_size, (patch_size[0] / 2, patch_size[1] / 2), out_roi_radii)
         out_data *= roi_mask
 
-
     # if the sequence is < 30 timesteps, copy last image
     if data.shape[0] < out_shape[0]:
         for j in xrange(data.shape[0], out_shape[0]):
@@ -262,7 +262,7 @@ def transform_norm_rescale(data, metadata, transformation, roi=None, random_augm
 
 
 def transform_norm_rescale_after(data, metadata, transformation, roi=None, random_augmentation_params=None,
-                           mm_center_location=(.5, .4), mm_patch_size=(128, 128), mask_roi=True):
+                                 mm_center_location=(.5, .4), mm_patch_size=(128, 128), mask_roi=True):
     patch_size = transformation['patch_size']
     mm_patch_size = transformation.get('mm_patch_size', mm_patch_size)
     mask_roi = transformation.get('mask_roi', mask_roi)
@@ -499,7 +499,7 @@ def normalize_contrast_zmuv(data, z=2):
         data[i] = np.clip(img, -0.0, 1.0)
 
 
-def slice_location_finder(slicepath2metadata, normalized=False):
+def slice_location_finder(slicepath2metadata):
     """
     :param slicepath2metadata: dict with arbitrary keys, and metadata values
     :return:
@@ -529,9 +529,9 @@ def slice_location_finder(slicepath2metadata, normalized=False):
         if '4ch' in sp:
             slicepath2position[sp] = -50
 
-    if len(slicepath2midpix) <= 5:
+    if len(slicepath2midpix) <= 1:
         for sp, midpix in slicepath2midpix.iteritems():
-            slicepath2position[sp] = -1
+            slicepath2position[sp] = 0.
     else:
         # find the keys of the 2 points furthest away from each other
         max_dist = -1.0
@@ -555,12 +555,6 @@ def slice_location_finder(slicepath2metadata, normalized=False):
         for sp, midpix in slicepath2midpix.iteritems():
             v2 = midpix - p_ref1
             slicepath2position[sp] = np.inner(v1, v2)
-
-        if normalized:
-            max_pos = max(slicepath2position.values())
-            min_pos = min(slicepath2position.values())
-            for sp, pos in slicepath2position.iteritems():
-                slicepath2position[sp] = np.abs(2. / (max_pos - min_pos) * (pos - max_pos) + 1)
 
     return slicepath2position
 

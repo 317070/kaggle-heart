@@ -7,9 +7,8 @@ import theano.tensor as T
 from functools import partial
 import utils_heart
 import nn_heart
-from pathfinder import PKL_TRAIN_DATA_PATH, TRAIN_LABELS_PATH, PKL_VALIDATE_DATA_PATH
-import utils
 
+# similar to je_ss_jonisc64small_360.py
 caching = 'memory'
 
 restart_from_save = None
@@ -50,25 +49,21 @@ batch_size = 32
 nbatches_chunk = 16
 chunk_size = batch_size * nbatches_chunk
 
-train_valid_ids = utils.get_train_valid_split(PKL_TRAIN_DATA_PATH)
-
-train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL_TRAIN_DATA_PATH,
+train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
                                                                    batch_size=chunk_size,
                                                                    transform_params=train_transformation_params,
-                                                                   patient_ids=train_valid_ids['train'],
-                                                                   labels_path=TRAIN_LABELS_PATH,
+                                                                   labels_path='/data/dsb15_pkl/train.csv',
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
                                                                    full_batch=True, random=True, infinite=True)
 
-valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL_TRAIN_DATA_PATH,
+valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
                                                                    batch_size=chunk_size,
                                                                    transform_params=valid_transformation_params,
-                                                                   patient_ids=train_valid_ids['valid'],
-                                                                   labels_path=TRAIN_LABELS_PATH,
+                                                                   labels_path='/data/dsb15_pkl/train.csv',
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
                                                                    full_batch=False, random=False, infinite=False)
 
-test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL_VALIDATE_DATA_PATH,
+test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
                                                                   batch_size=chunk_size,
                                                                   transform_params=test_transformation_params,
                                                                   slice2roi_path='pkl_validate_slice2roi.pkl',
@@ -130,13 +125,13 @@ def build_model(l_in=None):
 
     l = max_pool(l)
 
-    l_w = nn.layers.DenseLayer(nn.layers.dropout(l), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_w = nn.layers.DenseLayer(nn.layers.dropout(l), num_units=512, W=nn.init.Orthogonal("relu"),
                                b=nn.init.Constant(0.1))
 
-    l_d01 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d01 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
 
-    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d02 = nn.layers.DenseLayer(nn.layers.dropout(l_d01), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
 
     l_d02 = nn_heart.MultLayer(l_d02, l_w)
@@ -149,9 +144,9 @@ def build_model(l_in=None):
 
     # ---------------------------------------------------------------
 
-    l_d11 = nn.layers.DenseLayer(l, num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d11 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
-    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11), num_units=1024, W=nn.init.Orthogonal("relu"),
+    l_d12 = nn.layers.DenseLayer(nn.layers.dropout(l_d11), num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1))
 
     l_d12 = nn_heart.MultLayer(l_d12, l_w)

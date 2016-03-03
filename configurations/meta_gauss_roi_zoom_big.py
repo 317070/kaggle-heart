@@ -6,6 +6,8 @@ import theano.tensor as T
 import nn_heart
 from configuration import subconfig
 import utils_heart
+from pathfinder import PKL_TRAIN_DATA_PATH, TRAIN_LABELS_PATH, PKL_VALIDATE_DATA_PATH
+import utils
 
 caching = 'memory'
 restart_from_save = None
@@ -15,30 +17,31 @@ patch_size = subconfig().patch_size
 train_transformation_params = subconfig().train_transformation_params
 valid_transformation_params = subconfig().valid_transformation_params
 test_transformation_params = subconfig().test_transformation_params
-train_transformation_params['normalized_slice_pos'] = False
-valid_transformation_params['normalized_slice_pos'] = False
-test_transformation_params['normalized_slice_pos'] = False
 
 batch_size = 8
 nbatches_chunk = 2
 chunk_size = batch_size * nbatches_chunk
 
-train_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/train',
+train_valid_ids = utils.get_train_valid_split(PKL_TRAIN_DATA_PATH)
+
+train_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_TRAIN_DATA_PATH,
                                                            batch_size=chunk_size,
                                                            transform_params=train_transformation_params,
-                                                           labels_path='/data/dsb15_pkl/train.csv',
+                                                           patient_ids=train_valid_ids['train'],
+                                                           labels_path=TRAIN_LABELS_PATH,
                                                            slice2roi_path='pkl_train_slice2roi.pkl',
                                                            full_batch=True, random=True, infinite=True, min_slices=5)
 
-valid_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_splitted/valid',
+valid_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_TRAIN_DATA_PATH,
                                                            batch_size=chunk_size,
                                                            transform_params=valid_transformation_params,
-                                                           labels_path='/data/dsb15_pkl/train.csv',
+                                                           patient_ids=train_valid_ids['valid'],
+                                                           labels_path=TRAIN_LABELS_PATH,
                                                            slice2roi_path='pkl_train_slice2roi.pkl',
                                                            full_batch=False, random=False, infinite=False,
                                                            min_slices=5)
 
-test_data_iterator = data_iterators.PatientsDataGenerator(data_path='/data/dsb15_pkl/pkl_validate',
+test_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_VALIDATE_DATA_PATH,
                                                           batch_size=chunk_size,
                                                           transform_params=test_transformation_params,
                                                           slice2roi_path='pkl_validate_slice2roi.pkl',
@@ -90,8 +93,8 @@ def build_model():
                                                l_in_slice_mask, nn.layers.flatten(l_in_slice_location)],
                                               trainable_scale=False)
 
-    l_volume_mu0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=0, axis=-1),([0], 1))
-    l_volume_sigma0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=1, axis=-1),([0], 1))
+    l_volume_mu0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=0, axis=-1), ([0], 1))
+    l_volume_sigma0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=1, axis=-1), ([0], 1))
 
     l_cdf0 = nn_heart.NormalCDFLayer(l_volume_mu0, l_volume_sigma0)
 
@@ -106,8 +109,8 @@ def build_model():
                                                l_in_slice_mask, nn.layers.flatten(l_in_slice_location)],
                                               trainable_scale=False)
 
-    l_volume_mu1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=0, axis=-1),([0], 1))
-    l_volume_sigma1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=1, axis=-1),([0], 1))
+    l_volume_mu1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=0, axis=-1), ([0], 1))
+    l_volume_sigma1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=1, axis=-1), ([0], 1))
 
     l_cdf1 = nn_heart.NormalCDFLayer(l_volume_mu1, l_volume_sigma1)
     l_outs = [l_cdf0, l_cdf1]
@@ -122,7 +125,9 @@ def build_model():
     mu_layers = [l_volume_mu0, l_volume_mu1]
     sigma_layers = [l_volume_sigma0, l_volume_sigma1]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'train_params', 'submodel', 'test_layers', 'mu_layers', 'sigma_layers'])(
+    return namedtuple('Model',
+                      ['l_ins', 'l_outs', 'l_targets', 'l_top', 'train_params', 'submodel', 'test_layers', 'mu_layers',
+                       'sigma_layers'])(
         l_ins, l_outs,
         l_targets,
         l_top,

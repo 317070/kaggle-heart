@@ -90,11 +90,10 @@ def build_model():
                                                l_in_slice_mask, nn.layers.flatten(l_in_slice_location)],
                                               trainable_scale=False)
 
-    l_volume_mu0 = nn.layers.SliceLayer(l_volume_mu_sigma0, indices=0, axis=-1)
-    l_volume_sigma0 = nn.layers.SliceLayer(l_volume_mu_sigma0, indices=1, axis=-1)
+    l_volume_mu0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=0, axis=-1),([0], 1))
+    l_volume_sigma0 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma0, indices=1, axis=-1),([0], 1))
 
-    l_cdf0 = nn_heart.NormalCDFLayer(nn.layers.reshape(l_volume_mu0, ([0], 1)),
-                                     nn.layers.reshape(l_volume_sigma0, ([0], 1)))
+    l_cdf0 = nn_heart.NormalCDFLayer(l_volume_mu0, l_volume_sigma0)
 
     # ------------------ diastole
     l_mu1 = submodel.mu_layers[1]
@@ -107,11 +106,10 @@ def build_model():
                                                l_in_slice_mask, nn.layers.flatten(l_in_slice_location)],
                                               trainable_scale=False)
 
-    l_volume_mu1 = nn.layers.SliceLayer(l_volume_mu_sigma1, indices=0, axis=-1)
-    l_volume_sigma1 = nn.layers.SliceLayer(l_volume_mu_sigma1, indices=1, axis=-1)
+    l_volume_mu1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=0, axis=-1),([0], 1))
+    l_volume_sigma1 = nn.layers.reshape(nn.layers.SliceLayer(l_volume_mu_sigma1, indices=1, axis=-1),([0], 1))
 
-    l_cdf1 = nn_heart.NormalCDFLayer(nn.layers.reshape(l_volume_mu1, ([0], 1)),
-                                     nn.layers.reshape(l_volume_sigma1, ([0], 1)))
+    l_cdf1 = nn_heart.NormalCDFLayer(l_volume_mu1, l_volume_sigma1)
     l_outs = [l_cdf0, l_cdf1]
     l_top = nn.layers.MergeLayer(l_outs)
 
@@ -121,13 +119,15 @@ def build_model():
 
     train_params = nn.layers.get_all_params(l_top)
     test_layes = [l_volume_mu_sigma0, l_volume_mu_sigma1]
+    mu_layers = [l_volume_mu0, l_volume_mu1]
+    sigma_layers = [l_volume_sigma0, l_volume_sigma1]
 
-    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'train_params', 'submodel', 'test_layers'])(
+    return namedtuple('Model', ['l_ins', 'l_outs', 'l_targets', 'l_top', 'train_params', 'submodel', 'test_layers', 'mu_layers', 'sigma_layers'])(
         l_ins, l_outs,
         l_targets,
         l_top,
         train_params,
-        submodel, test_layes)
+        submodel, test_layes, mu_layers, sigma_layers)
 
 
 def build_objective(model, deterministic=False):

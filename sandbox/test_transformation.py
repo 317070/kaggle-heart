@@ -1,6 +1,7 @@
 import matplotlib
 # matplotlib.use('Qt4Agg')
 
+import data
 import numpy as np
 import glob
 import re
@@ -20,13 +21,16 @@ slice2roi = utils.load_pkl('../pkl_train_slice2roi.pkl')
 slice2roi_valid = utils.load_pkl('../pkl_validate_slice2roi.pkl')
 slice2roi.update(slice2roi_valid)
 
-patient_path = sorted(glob.glob(data_path + '/634/study'))
+patient_path = sorted(glob.glob(data_path + '/561/study'))
 for p in patient_path:
     print p
     spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
+    slicepath2metadata = {}
     for s in spaths:
         d = data_test.read_slice(s)
         metadata = data_test.read_metadata(s)
+        slicepath2metadata[s] = metadata
+
         pid = utils.get_patient_id(s)
         sid = utils.get_slice_id(s)
         roi = slice2roi[pid][sid]
@@ -71,3 +75,14 @@ for p in patient_path:
         anim2 = animation.FuncAnimation(fig, animate_out, init_func=init_out, frames=len(out_data), interval=50)
 
         plt.show()
+
+
+    slicepath2location = data.slice_location_finder(slicepath2metadata)
+    slice_paths = sorted(slicepath2location.keys(), key=slicepath2location.get)
+    for s in slice_paths:
+        print  s, slicepath2location[s]
+    for s in spaths:
+        print s
+        print slicepath2location[s]
+        print slicepath2metadata[s]['SliceLocation']
+        print '----------------------'

@@ -62,7 +62,7 @@ if True:  # set == 'valid':
     valid_data_iterator = config().valid_data_iterator
     if n_tta_iterations > 1:
         valid_data_iterator.transformation_params = config().train_transformation_params
-        valid_data_iterator.transformation_params['zoom_range'] = (1., 1.)
+    valid_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
     print 'valid transformation params'
     print valid_data_iterator.transformation_params
@@ -109,6 +109,7 @@ if True:  # set == 'test':
     test_data_iterator = config().test_data_iterator
     if n_tta_iterations == 1:
         test_data_iterator.transformation_params = config().valid_transformation_params
+    test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
     print 'test transformation params'
     print test_data_iterator.transformation_params

@@ -220,24 +220,14 @@ class PatientsDataGenerator(object):
 
                     # fill metadata dict for linefinder code and sort slices
                     slicepath2metadata = {}
-                    slice_locations = []
                     for sp in slice_paths:
-                        slice_mtd = data.read_metadata(sp)
-                        slicepath2metadata[sp] = slice_mtd
-                        slice_locations.append(slice_mtd['SliceLocation'])
-
-                    slice_paths = [s for _, s in sorted(zip(slice_locations, slice_paths),
-                                                        key=lambda x: x[0])]
-
-                    # linefinder
-                    normalized_slice_pos = self.transformation_params['normalized_slice_pos'] \
-                        if 'normalized_slice_pos' in self.transformation_params else False
-
-                    slicepath2location = data.slice_location_finder(slicepath2metadata,
-                                                                    normalized=normalized_slice_pos)
+                        slicepath2metadata[sp] = data.read_metadata(sp)
+                    slicepath2location = data.slice_location_finder(slicepath2metadata)
+                    slice_paths = sorted(slicepath2location.keys(), key=slicepath2location.get)
 
                     # sample augmentation params per patient
                     random_params = data.sample_augmentation_parameters(self.transformation_params)
+
                     for j, sp in enumerate(slice_paths):
                         slice_roi = self.slice2roi[str(pid)][
                             utils.get_slice_id(sp)] if self.slice2roi else None

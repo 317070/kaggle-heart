@@ -15,7 +15,7 @@ from theano.sandbox.cuda import dnn
 import theano.tensor as T
 import scipy
 from log import print_to_file
-from paths import MODEL_PATH, SUBMISSION_PATH, LOGS_PATH
+from paths import MODEL_PATH, SUBMISSION_PATH, LOGS_PATH, INTERMEDIATE_PREDICTIONS_PATH
 from postprocess import make_monotone_distribution, test_if_valid_distribution
 import glob
 import cPickle as pickle
@@ -154,7 +154,7 @@ def optimize_expert_weights(expert_predictions,
     #filter = T.clip( 0.75 / (T.abs_(filter_params[0]) + eps) * (1-(x_coor/( T.abs_(filter_params[0])+eps))**2), 0.0, np.float32(np.finfo(np.float64).max))
     filter = (1./(np.sqrt(2*np.pi))).astype('float32')/filter_params[0] * T.exp(-((x_coor/filter_params[0])**2)/2 )
 
-    geom_pdf = convolve1d(geom_pdf, filter, WINDOW_SIZE)
+    #geom_pdf = convolve1d(geom_pdf, filter, WINDOW_SIZE)
 
 
     cumulative_distribution = T.cumsum(geom_pdf, axis=-1)
@@ -165,7 +165,7 @@ def optimize_expert_weights(expert_predictions,
 
     # TODO: test this
     # nans
-    cumulative_distribution = (T.erf( T.erfinv( T.clip(cumulative_distribution*2-1, -1+3e-8, 1-3e-8) ) * filter_params[1] )+1)/2
+    #cumulative_distribution = (T.erf( T.erfinv( T.clip(cumulative_distribution*2-1, -1+3e-8, 1-3e-8) ) * filter_params[1] )+1)/2
 
     if not do_optimization:
         ind.set_value(range(NUM_VALIDATIONS))
@@ -179,7 +179,7 @@ def optimize_expert_weights(expert_predictions,
         target_values = theano.shared(np.argmax(targets, axis=-1).astype('int32'))
         noise = T.shared_randomstreams.RandomStreams(seed=317070)
         #target_values += noise.random_integers(size=target_values.shape, low=-10, high=10, dtype='int32')
-        target_values += T.iround(noise.normal(size=target_values.shape, std=2.5, dtype='float32'))
+        #target_values += T.iround(noise.normal(size=target_values.shape, std=2.5, dtype='float32'))
         t_train = T.cumsum(T.extra_ops.to_one_hot(target_values, 600, dtype='float32'), axis=-1)
 
 
@@ -268,7 +268,7 @@ def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weight
 
 
 
-def merge_all_prediction_files(prediction_file_location = MODEL_PATH,
+def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIONS_PATH,
                                redo_tta = True):
 
     submission_path = SUBMISSION_PATH + "final_submission-%s.csv" % time.time()
@@ -304,7 +304,41 @@ def merge_all_prediction_files(prediction_file_location = MODEL_PATH,
         +glob.glob("/home/jdgrave/je_ss_jonisc64small_360.pkl")
     )
     """
-    expert_pkl_files = sorted(prediction_file_location+"*")
+    """
+    expert_pkl_files = sorted(
+        glob.glob(prediction_file_location+"je_ss*.pkl")
+        +glob.glob(prediction_file_location+"j6*.pkl")
+    )
+    """
+    ss_expert_pkl_files = sorted(
+        glob.glob(prediction_file_location+"j6_2ch.pkl")
+        +glob.glob(prediction_file_location+"j6_2ch_128.pkl")
+        +glob.glob(prediction_file_location+"j6_2ch_128mm_skew.pkl")
+        +glob.glob(prediction_file_location+"j6_2ch_96mm_skew.pkl")
+        +glob.glob(prediction_file_location+"j6_4ch.pkl")
+        +glob.glob(prediction_file_location+"j6_4ch_gauss.pkl")
+        +glob.glob(prediction_file_location+"je_ss_jonisc64_leaky_convroll.pkl")
+        +glob.glob(prediction_file_location+"je_ss_jonisc64small_360.pkl")
+        +glob.glob(prediction_file_location+"je_ss_jonisc64small_360_gauss_longer.pkl")
+        +glob.glob(prediction_file_location+"je_ss_jonisc64small_360_gauss_longer_aubright.pkl")
+        +glob.glob(prediction_file_location+"je_ss_jonisc80_leaky_convroll_augzoombright.pkl")
+        +glob.glob(prediction_file_location+"je_ss_normscale.pkl")
+        +glob.glob(prediction_file_location+"je_ss_nrmsc128_gauss.pkl")
+        +glob.glob(prediction_file_location+"je_ss_nrmsc128_gauss.pkl")
+    )
+
+    fp_expert_pkl_files = sorted(
+        glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_mask_leaky_after.pkl")
+        #+glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss_fixedagesex.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright_betterdists.pkl")
+    )
+
+    expert_pkl_files = fp_expert_pkl_files + ss_expert_pkl_files
+
     """
     # filter expert_pkl_files
     for file in expert_pkl_files[:]:
@@ -316,9 +350,10 @@ def merge_all_prediction_files(prediction_file_location = MODEL_PATH,
                     expert_pkl_files.remove(file)
                     print "                -> removed"
         except:
+            print sys.exc_info()[0]
             expert_pkl_files.remove(file)
             print "                -> removed"
-    """
+    #"""
 
     NUM_EXPERTS = len(expert_pkl_files)
     NUM_VALIDATIONS = len(validation_patients_indices)
@@ -520,17 +555,18 @@ def merge_all_prediction_files(prediction_file_location = MODEL_PATH,
             print "  %s kaggle loss: not calculated" % (string.rjust(set_name, 12))
     print "WARNING: both of the previous are overfitted!"
 
-    for patient_ids, set_name in [(validation_patients_indices, "validation")]:
+    for patient_ids, set_name in [(validation_patients_indices, "validation"),
+                                      (test_patients_indices,  "test")]:
         print "patient:  disagreement:  CRPS-contr:"
-        for patient in sorted(patient_ids, key=lambda id: -final_predictions[id-1]["average_crps_error"]):
+        for patient in sorted(patient_ids):
             prediction = final_predictions[patient-1]
             if "final_systole" in prediction:
                 systole_prediction_matrix = np.array([average_systole_predictions_per_file[i][patient-1] for i in xrange(NUM_EXPERTS)])
                 diastole_prediction_matrix = np.array([average_diastole_predictions_per_file[i][patient-1] for i in xrange(NUM_EXPERTS)])
                 disagreement = 0.5*(get_expert_disagreement(systole_prediction_matrix, systole_expert_weight)
                                   + get_expert_disagreement(diastole_prediction_matrix, diastole_expert_weight))
-                print string.rjust("%d" % patient,8),
-                print string.rjust("%.5f" % disagreement,15),
+                print string.rjust("%d" % patient,7),
+                print string.rjust("%.5f" % disagreement,14),
                 if "systole_crps_error" in prediction:
                     error1 = prediction["systole_crps_error"]
                     error2 = prediction["diastole_crps_error"]
@@ -584,7 +620,7 @@ if __name__ == "__main__":
     #                      required=True)
     args = parser.parse_args()
 
-    log_path = LOGS_PATH + "merging.log"
+    log_path = LOGS_PATH + "merging-%s.log" % time.time()
     with print_to_file(log_path):
         print "Current git version:", utils.get_git_revision_hash()
         merge_all_prediction_files()

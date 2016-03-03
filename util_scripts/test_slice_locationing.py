@@ -91,7 +91,7 @@ def slice_location_finder(metadata_dict):
             res.append(distance)
         sorted_distances.append(np.mean(res))
 
-    print sorted_distances
+    #print sorted_distances
 
     return datadict, sorted_indices, sorted_distances
 
@@ -100,7 +100,7 @@ def slice_location_finder(metadata_dict):
 if __name__ == '__main__':
     import glob, os
     import cPickle as pickle
-    folder_list = glob.glob(os.path.expanduser('~/storage/data/dsb15_pkl/pkl_train/444/') )
+    folder_list = glob.glob(os.path.expanduser('~/storage/data/dsb15_pkl/pkl_validate/561/') )
 
     folder_list = sorted(folder_list)
 
@@ -115,8 +115,11 @@ if __name__ == '__main__':
         for file in file_list:
             metadict[file] = pickle.load(open(file, "r"))['metadata'][0]
 
-        result = slice_location_finder(metadict)
+        result, sorted_indices, sorted_distances = slice_location_finder(metadict)
 
         for key in sorted(result.keys()):
             print key.split('/')[-1], result[key]["relative_position"]
+
+        print sorted_indices
+        print sorted_distances
 

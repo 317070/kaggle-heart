@@ -300,6 +300,20 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
+            elif tag.startswith("sliced:data:chanzoom:4ch"):
+                pass # done by the next one
+            elif tag.startswith("sliced:data:chanzoom:2ch"):
+                l_4ch = [sax for sax in files if "4ch" in sax]
+                l_2ch = [sax for sax in files if "2ch" in sax]
+                patient_result[tag] = [disk_access.load_data_from_file(l_4ch[0]) if l_4ch else None,
+                                       disk_access.load_data_from_file(l_2ch[0]) if l_2ch else None]
+                metadatas_result[tag] = [load_clean_metadata(l_4ch[0]) if l_4ch else None,
+                                         load_clean_metadata(l_2ch[0]) if l_2ch else None,
+                                         None]
+
+
+                l = [sax for sax in files if "sax" in sax]
+                metadatas_result[tag][2] = [load_clean_metadata(f) for f in l]
 
             elif tag.startswith("sliced:data:randomslices"):
                 l = [sax for sax in files if "sax" in sax]

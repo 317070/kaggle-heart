@@ -1,9 +1,9 @@
 {
   "TRAIN_DATA_PATH":"/mnt/storage/data/dsb15/train/",
   "TEST_DATA_PATH":"/mnt/storage/data/dsb15/validate/",
-  "PKL_TRAIN_DATA_PATH":"/mnt/storage/data/dsb15_pkl/pkl_train/",
-  "PKL_TEST_DATA_PATH":"/mnt/storage/data/dsb15_pkl/pkl_validate/",
-  "TEMP_FILES_PATH":"/mnt/storage/data/dsb15_pkl/",
+  "PKL_TRAIN_DATA_PATH":"/data/dsb15_pkl/pkl_train/",
+  "PKL_TEST_DATA_PATH":"/data/dsb15_pkl/pkl_validate/",
+  "TEMP_FILES_PATH":"/data/dsb15_pkl/",
   "MODEL_PATH":"/mnt/storage/metadata/kaggle-heart/train/",
   "SUBMISSION_PATH":"/mnt/storage/metadata/kaggle-heart/submissions/",
   "LOGS_PATH":"/mnt/storage/metadata/kaggle-heart/logs/",

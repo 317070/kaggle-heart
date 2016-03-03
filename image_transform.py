@@ -1,7 +1,6 @@
 """
 take in a numpy tensor, and reshape last 2 dimensions as images to fit the desired shape
 """
-import multiprocessing as mp
 import numpy as np
 import skimage.io
 import skimage.transform

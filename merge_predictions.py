@@ -329,12 +329,12 @@ def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIO
 
     fp_expert_pkl_files = sorted(
         glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_mask_leaky_after.pkl")
-        #+glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss_fixedagesex.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright_betterdists.pkl")
+        +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss_fixedagesex.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright_betterdists.pkl")
     )
 
     expert_pkl_files = fp_expert_pkl_files + ss_expert_pkl_files

@@ -224,7 +224,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             data = clean_images(
                 [patient_data[tag]], metadata=metadata_tag,
                 cleaning_processes=cleaning_processes)
-            
+
             # Augment and extract patch
             # Decide which roi to use.
             shift_center = (None, None)
@@ -246,7 +246,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             patient_3d_tensor = clean_images(
                 patient_3d_tensor, metadata=metadata_tag,
                 cleaning_processes=cleaning_processes_post)
-            
+
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
 
@@ -344,7 +344,6 @@ def preprocess_normscale(patient_data, result, index, augment=True,
 
             # Put data (images and metadata) in right location
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
-
 
             if "sliced:data:sax:locations" in result:
                 eps_location = 1e-7
@@ -858,8 +857,6 @@ def get_chan_transformations(ch2_metadata=None,
 def augment_brightness(patient_tensor, brightness_adjustment):
 #    print "augmenting", brightness_adjustment
     return np.clip(patient_tensor + brightness_adjustment * np.mean(patient_tensor), 0, 1)
-<<<<<<< HEAD
-=======
 
 
 def orthogonal_projection_on_slice(percentual_coordinate, source_metadata, target_metadata):
@@ -1063,4 +1060,7 @@ def get_chan_transformations(ch2_metadata=None,
     ch4_form_fix  = skimage.transform.ProjectiveTransform(matrix=tform_matrix)
 
     return ch2_form_fix, ch4_form_fix
->>>>>>> 5b53ec2583a9bf4a0871d52d1b06f97943af08da
+
+def augment_brightness(patient_tensor, brightness_adjustment):
+#    print "augmenting", brightness_adjustment
+    return np.clip(patient_tensor + brightness_adjustment * np.mean(patient_tensor), 0, 1)

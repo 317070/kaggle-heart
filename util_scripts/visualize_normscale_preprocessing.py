@@ -17,8 +17,8 @@ import configuration
 import data_loader
 import utils
 
-configuration.set_configuration('je_test')
-#configuration.set_configuration('je_ss_smcrps_nrmsc_500_dropnorm')
+#configuration.set_configuration('je_test')
+configuration.set_configuration('j8_ira_layer')
 _config = configuration.config
 
 
@@ -119,7 +119,7 @@ def animate_slice_crop(raw_slicedata, cropped_slicedata, index):
     fig, (ax1, ax2) = plt.subplots(1, 2)
     mngr = plt.get_current_fig_manager()
     # to put it into the upper left corner for example:
-    mngr.window.setGeometry(50, 100, 600, 300)
+#    mngr.window.setGeometry(50, 100, 600, 300)
 
     im1 = ax1.imshow(raw_slicedata[0], cmap='gist_gray_r')
     im2 = ax2.imshow(cropped_slicedata[0], cmap='gist_gray_r')
@@ -145,11 +145,11 @@ def animate_slice_crop(raw_slicedata, cropped_slicedata, index):
 # smallest normalised: 54 -> id 66
 
 wanted_input_tags = [
-    "sliced:data:sax"]
+    "sliced:data:chanzoom:4ch", "sliced:data:chanzoom:2ch"]
 wanted_output_tags = ['systole', 'diastole', 'patients']
 
 
-for i in range(101, 417):
+for i in range(60, 417):
 #    print 'Loading and processing patient %d' % i
     indices = [i]
     result = data_loader.get_patient_data(
@@ -158,13 +158,15 @@ for i in range(101, 417):
 #    raw_slice = result['input']['sliced:data:singleslice:middle:raw_0']
     patient_id = result['output']['patients'][0]
 #    crop_slice = result['input']['sliced:data:singleslice:middle:patch_0']
-    crop_slices = result['input']["sliced:data:sax"][0]
-    crop_slices[:, :, 0, 0] = 0
-    crop_slices[:, :, -1, -1] = 1
-    for crop_slice in crop_slices:
-        crop_slice[:, 0, 0] = 0
-        crop_slice[:, -1, -1] = 1
-        animate_slice_crop(crop_slice, crop_slice, patient_id)
-#    animate_slice_crop(crop_slices[10], crop_slices[11], patient_id)
+    ch2 = result['input']["sliced:data:chanzoom:2ch"][0]
+    ch4 = result['input']["sliced:data:chanzoom:4ch"][0]
+#    crop_slices = result['input']["sliced:data:chanzoom:4ch"][0]
+#    crop_slices[:, :, 0, 0] = 0
+#    crop_slices[:, :, -1, -1] = 1
+#    for crop_slice in crop_slices:
+#        crop_slice[:, 0, 0] = 0
+#        crop_slice[:, -1, -1] = 1
+#        animate_slice_crop(crop_slice, crop_slice, patient_id)
+    animate_slice_crop(ch2, ch4, patient_id)
 
 

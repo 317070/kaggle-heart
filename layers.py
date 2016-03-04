@@ -449,3 +449,145 @@ class IraLayer(lasagne.layers.MergeLayer):
 
         return T.concatenate([l_systole.dimshuffle(0, 1, 'x'),
                               l_diastole.dimshuffle(0, 1, 'x')], axis=2)
+
+
+class SumGaussLayer(lasagne.layers.MergeLayer):
+    """Sum of two gaussians
+
+    Input = 3d
+    """
+    def __init__(self, incomings, **kwargs):
+        super(SumGaussLayer, self).__init__(incomings, **kwargs)
+
+    def get_output_shape_for(self, input_shapes):
+        if (
+            not input_shapes[0] == input_shapes[1]
+            or not len(input_shapes[0]) == 3
+            or not input_shapes[0][-1] == 2):
+            raise ValueError("Invalid input shapes %s" % str(input_shapes))
+
+        return input_shapes[0]
+
+    def get_output_for(self, inputs, **kwargs):
+        musigma_1, musigma_2 = inputs
+
+        mu_1 = musigma_1[:, :, 0]
+        sigma_1 = musigma_1[:, :, 1]
+        mu_2 = musigma_2[:, :, 0]
+        sigma_2 = musigma_2[:, :, 1]
+
+        mu_res = mu_1 + mu_2
+        sigma_res = np.sqrt(sigma_1**2 + sigma_2**2)
+
+        return T.concatenate([
+            mu_res.dimshuffle(0,1,'x'),
+            sigma_res.dimshuffle(0,1,'x')], axis=2)
+
+
+class IraLayerNoTime(lasagne.layers.MergeLayer):
+    def __init__(self, l_4ch_musigma, l_2ch_musigma, **kwargs):
+        super(IraLayerNoTime, self).__init__([l_4ch_musigma, l_2ch_musigma], **kwargs)
+
+    def get_output_shape_for(self, input_shapes):
+        return input_shapes[0][0], input_shapes[0][2]
+
+    def get_output_for(self, inputs, **kwargs):
+        eps = 1e-7
+        musigma_1, musigma_2 = inputs
+        mu_1 = musigma_1[:, :, 0]
+        sigma_1 = musigma_1[:, :, 1]
+        mu_2 = musigma_2[:, :, 0]
+        sigma_2 = musigma_2[:, :, 1]
+
+        # Compute the distance between slices
+        h = 0.1  # mm to cm
+
+        # Compute mu and sigma for each slice pair disc
+        mu_volumes = mu_1 * mu_2 * h * np.pi / 4.0
+        sigma_volumes =  T.sqrt(T.clip(sigma_1**2 * sigma_2**2 + sigma_1**2 * mu_2**2 + sigma_2**2 * mu_1**2, eps, utils.maxfloat)) * h * np.pi / 4.0
+
+        # Compute mu and sigma per patient
+        mu_volume_patient = T.sum(mu_volumes, axis=1)
+
+        sigma_volume_patient = T.sqrt(T.clip(T.sum(sigma_volumes**2, axis=1), eps, utils.maxfloat))
+        sigma_volume_patient = T.clip(sigma_volume_patient, eps, utils.maxfloat)
+
+        return T.concatenate([
+            mu_volume_patient.dimshuffle(0, 'x'),
+            sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
+
+
+class ArgmaxAndMaxLayer(lasagne.layers.Layer):
+    def __init__(self, incoming, mode='max', **kwargs):
+        super(ArgmaxAndMaxLayer, self).__init__(incoming, **kwargs)
+        if not mode in ('max', 'min', 'mean'):
+            raise ValueError('invalid mode')
+        self.mode = mode
+
+    def get_output_shape_for(self, input_shape):
+        if not len(input_shape) == 3:
+            raise ValueError('Require input to be a 3D tensor.')
+        if not input_shape[2] == 2:
+            raise ValueError('Requires inputs last dimension to be 2')
+        return (input_shape[0], input_shape[2])
+
+    def get_output_for(self, input, **kwargs):
+        if self.mode in ('max', 'min'):
+            reductor = T.argmax if self.mode == 'max' else T.argmin
+            indices1 = T.arange(input.shape[0])
+            indices2 = reductor(input[:, :, 0], axis=1)
+            return input[indices1, indices2]
+        elif self.mode == 'mean':
+            return T.mean(input, axis=1)
+
+
+class IntegrateAreaLayer(lasagne.layers.Layer):
+    def __init__(self, incoming, sigma_mode='scale', sigma_scale=None, **kwargs):
+        super(IntegrateAreaLayer, self).__init__(incoming, **kwargs)
+        if not sigma_mode in ('scale', 'smart',):
+            raise ValueError('invalid mode')
+        self.sigma_mode = sigma_mode
+        self.sigma_scale = sigma_scale
+
+    def get_output_shape_for(self, input_shape):
+        if not len(input_shape) > 2:
+            raise ValueError('Require input to hae at least 3 dimensions.')
+        return tuple(list(input_shape[:-2]) + [2])
+
+    def get_output_for(self, input, **kwargs):
+        # compute mu
+        mu = input.sum(axis=-1).sum(axis=-1, keepdims=True)
+        # compute sigma
+        if self.sigma_mode == 'scale':
+            sigma = mu * self.sigma_scale
+        elif self.sigma_mode == 'smart':
+            eps = 1e-3
+            sigma = T.sqrt((input * (1-input)).sum(axis=-1).sum(axis=-1, keepdims=True) + eps)
+        else:
+            raise NotImplementedError('sigma mode not implemented')
+        # concatenate and return
+        return T.concatenate([mu, sigma], axis=-1)
+
+
+class SelectWithAttentionLayer(lasagne.layers.MergeLayer):
+    def __init__(self, incomings, **kwargs):
+        super(SelectWithAttentionLayer, self).__init__(incomings, **kwargs)
+
+    def get_output_shape_for(self, input_shapes):
+        shape_musigma, shape_att = input_shapes
+        if not len(shape_musigma) == 3:
+            raise ValueError('Require input to be a 3D tensor.')
+        if not shape_musigma[-1] == 2:
+            raise ValueError('Last dimension of input should be 2.')
+        if not len(shape_att) == 2:
+            raise ValueError('Requires attention dimension to be 2')
+        if not shape_musigma[:2] == shape_att:
+            print shape_musigma, shape_att
+            raise ValueError('First dimensions should be the same')
+        return (shape_musigma[0], shape_musigma[2])
+
+    def get_output_for(self, inputs, **kwargs):
+        musigma, att = inputs
+        mu = (musigma[:, :, 0] * att).sum(axis=1, keepdims=True)
+        sigma = (musigma[:, :, 1] * att).sum(axis=1, keepdims=True)
+        return T.concatenate((mu, sigma), axis=1)

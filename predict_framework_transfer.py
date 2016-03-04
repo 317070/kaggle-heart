@@ -8,33 +8,36 @@ import utils
 import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
-from pathfinder import MODEL_PATH
+from pathfinder import MODEL_PATH, PREDICTIONS_PATH
 
 NUM_PATIENTS = 700
 
 if not (3 <= len(sys.argv) <= 5):
-    sys.exit("Usage: predict.py <metadata_path> <n_tta_iterations> <average: arithmetic|geometric>")
+    sys.exit("Usage: predict.py <config_name> <n_tta_iterations> <average: arithmetic|geometric>")
 
-metadata_path = sys.argv[1]
+config_name = sys.argv[1]
 n_tta_iterations = int(sys.argv[2]) if len(sys.argv) >= 3 else 100
 mean = sys.argv[3] if len(sys.argv) >= 4 else 'geometric'
 
 print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, "both", mean)
 
 metadata_dir = utils.get_dir_path('train', MODEL_PATH)
-metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
-config_name = metadata['configuration']
+metadata_path = utils.find_model_metadata(metadata_dir, config_name)
+metadata = utils.load_pkl(metadata_path)
+assert config_name == metadata['configuration']
 if 'subconfiguration' in metadata:
     set_subconfiguration(metadata['subconfiguration'])
 set_configuration(config_name)
 
 # predictions paths
+jonas_prediction_path = PREDICTIONS_PATH + '/ira_%s.pkl' % config().__name__
 prediction_dir = utils.get_dir_path('predictions', MODEL_PATH)
-prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'both', n_tta_iterations, mean)
+valid_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'valid', n_tta_iterations, mean)
+test_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'test', n_tta_iterations, mean)
 
 # submissions paths
 submission_dir = utils.get_dir_path('submissions', MODEL_PATH)
-submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], 'both', n_tta_iterations, mean)
+submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], 'test', n_tta_iterations, mean)
 
 print "Build model"
 model = config().build_model()
@@ -62,7 +65,7 @@ predictions = [{"patient": i + 1,
 valid_data_iterator = config().valid_data_iterator
 if n_tta_iterations > 1:
     valid_data_iterator.transformation_params = config().train_transformation_params
-valid_data_iterator.transformation_params['zoom_range'] = (1., 1.)
+    valid_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
 print 'valid transformation params'
 print valid_data_iterator.transformation_params
@@ -72,7 +75,8 @@ print 'n valid: %d' % valid_data_iterator.nsamples
 
 batch_predictions, batch_targets, batch_ids = [], [], []
 for i in xrange(n_tta_iterations):
-    print 'tta iteration %d' % i
+    print i,
+    sys.stdout.flush()
     for xs_batch_valid, ys_batch_valid, ids_batch in buffering.buffered_gen_threaded(
             valid_data_iterator.generate()):
         for x_shared, x in zip(xs_shared, xs_batch_valid):
@@ -98,14 +102,19 @@ for id in avg_patient_predictions.iterkeys():
     crpss_sys.append(utils_heart.crps(avg_patient_predictions[id][0], patient_targets[id][0]))
     crpss_dst.append(utils_heart.crps(avg_patient_predictions[id][1], patient_targets[id][1]))
 
-print 'Validation Systole CRPS: ', np.mean(crpss_sys)
-print 'Validation Diastole CRPS: ', np.mean(crpss_dst)
+crps0, crps1 = np.mean(crpss_sys), np.mean(crpss_dst)
+print '\nValidation CRPS: ', crps0, crps1, 0.5 * (crps0 + crps1)
+utils.save_pkl(avg_patient_predictions, valid_prediction_path)
+print ' validation predictions saved to %s' % valid_prediction_path
+print
 
 # test
 test_data_iterator = config().test_data_iterator
 if n_tta_iterations == 1:
     test_data_iterator.transformation_params = config().valid_transformation_params
-test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
+else:
+    test_data_iterator.transformation_params = config().train_transformation_params
+    test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
 print 'test transformation params'
 print test_data_iterator.transformation_params
@@ -114,7 +123,8 @@ print 'n test: %d' % test_data_iterator.nsamples
 
 batch_predictions, batch_ids = [], []
 for i in xrange(n_tta_iterations):
-    print 'tta iteration %d' % i
+    print i,
+    sys.stdout.flush()
     for xs_batch_valid, _, ids_batch in buffering.buffered_gen_threaded(test_data_iterator.generate()):
         for x_shared, x in zip(xs_shared, xs_batch_valid):
             x_shared.set_value(x)
@@ -130,15 +140,17 @@ for (systole_predictions, diastole_predictions), patient_ids in zip(batch_predic
         patient_data["diastole"] = np.concatenate((patient_data["diastole"], diastole_prediction[None, :]), axis=0)
 
 avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions, batch_ids, mean=mean)
+
+utils.save_pkl(avg_patient_predictions, test_prediction_path)
+print '\npredictions saved to %s' % test_prediction_path
+
 utils.save_submission(avg_patient_predictions, submission_path)
 print ' submission saved to %s' % submission_path
-
-jonas_prediction_path = "/mnt/storage/metadata/kaggle-heart/predictions/ira_%s.pkl" % config().__name__
 
 with open(jonas_prediction_path, 'w') as f:
     pickle.dump({
         'metadata_path': metadata_path,
-        'prediction_path': prediction_path,
+        'prediction_path': test_prediction_path,
         'submission_path': submission_path,
         'configuration_file': config().__name__,
         'git_revision_hash': utils.get_git_revision_hash(),

@@ -17,11 +17,11 @@ train_transformation_params = config().train_transformation_params
 valid_transformation_params = config().valid_transformation_params
 
 data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
-slice2roi = utils.load_pkl('../pkl_train_slice2roi.pkl')
-slice2roi_valid = utils.load_pkl('../pkl_validate_slice2roi.pkl')
+slice2roi = utils.load_pkl('../pkl_train_slice2roi_10.pkl')
+slice2roi_valid = utils.load_pkl('../pkl_validate_slice2roi_10.pkl')
 slice2roi.update(slice2roi_valid)
 
-patient_path = sorted(glob.glob(data_path + '/561/study'))
+patient_path = sorted(glob.glob(data_path + '/629/study'))
 for p in patient_path:
     print p
     spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
@@ -54,12 +54,7 @@ for p in patient_path:
         anim = animation.FuncAnimation(fig, animate, init_func=init, frames=len(d), interval=50)
 
         # ---------------------------------
-
         out_data, targets_zoom = data_test.transform_norm_rescale_after(d, metadata, train_transformation_params, roi=roi)
-
-        print out_data.shape
-        print targets_zoom
-
 
         def init_out():
             im2.set_data(out_data[0])

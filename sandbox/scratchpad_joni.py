@@ -76,8 +76,8 @@ def plot(pid):
     original_data = get_data(data_path + '/' + str(pid))
     sorted_slices = sort_slices(original_data)
 
-    maxradius = int(65 / sorted_slices[0]['metadata']['PixelSpacing'][0])
-    minradius = int(15 / sorted_slices[0]['metadata']['PixelSpacing'][0])
+    maxradius = int(45 / sorted_slices[0]['metadata']['PixelSpacing'][0])
+    minradius = int(25 / sorted_slices[0]['metadata']['PixelSpacing'][0])
     print sorted_slices[0]['metadata']['PixelSpacing'][0]
 
     lsurface, roi_mask, roi_center = joni_roi.extract_roi_joni(sorted_slices, kernel_width=kernel_width,
@@ -85,8 +85,14 @@ def plot(pid):
                                                                num_circles=num_circles, upscale=upscale,
                                                                minradius=minradius,
                                                                maxradius=maxradius, radstep=radstep)
-    # lsurface, roi_mask, roi_center = joni_roi.extract_roi(sorted_slices, pixel_spacing=sorted_slices[0]['metadata']['PixelSpacing'][0],                              center_margin=center_margin, num_peaks=num_peaks)
-
+    print roi_center
+    roi_center2, roi_radii2 = data_test.extract_roi_joni(sorted_slices,
+                                                         pixel_spacing=sorted_slices[0]['metadata']['PixelSpacing'][0],
+                                                         kernel_width=kernel_width,
+                                                         center_margin=center_margin, num_peaks=num_peaks,
+                                                         num_circles=10, radstep=radstep)
+    print roi_center2
+    print '----------'
 
     x_roicenter, y_roicenter = roi_center[0], roi_center[1]
     print pid
@@ -95,11 +101,6 @@ def plot(pid):
     print len(sorted_slices)
     for dslice in sorted_slices:  # [sorted_slices[0], sorted_slices[len(sorted_slices) / 2], sorted_slices[-1]]:
         outdata = dslice['data']
-        # print dslice['metadata']['SliceLocation']
-        # print dslice['metadata']['ImageOrientationPatient']
-        # print dslice['metadata']['PixelSpacing']
-        # print dslice['data'].shape
-        # print '--------------------------------------'
 
         ff1 = fftn(outdata)
         first_harmonic1 = np.absolute(ifftn(ff1[1, :, :]))
@@ -108,7 +109,7 @@ def plot(pid):
         second_harmonic1[second_harmonic1 < 0.1 * np.max(second_harmonic1)] = 0.0
 
         image = img_as_ubyte(first_harmonic1 / np.max(first_harmonic1))
-        edges = canny(image, sigma=3, low_threshold=10, high_threshold=50)
+        edges = canny(image, sigma=3)  # low_threshold=10, high_threshold=50)
 
         # Detect two radii
         hough_radii = np.arange(minradius, maxradius, radstep)
@@ -184,5 +185,5 @@ def plot(pid):
             plt.show()
 
 
-for pid in [448]:
+for pid in [629]:
     plot(pid)

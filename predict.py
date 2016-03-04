@@ -10,10 +10,10 @@ from configuration import config, set_configuration, set_subconfiguration
 import pathfinder
 
 if not (3 <= len(sys.argv) <= 5):
-    sys.exit("Usage: predict.py <metadata_path> <set: train|valid|test> <n_tta_iterations> "
+    sys.exit("Usage: predict.py <config_name> <set: train|valid|test> <n_tta_iterations> "
              "<average: arithmetic|geometric>")
 
-metadata_path = sys.argv[1]
+config_name = sys.argv[1]
 set = sys.argv[2] if len(sys.argv) >= 3 else 'valid'
 n_tta_iterations = int(sys.argv[3]) if len(sys.argv) >= 4 else 1
 mean = sys.argv[4] if len(sys.argv) >= 5 else 'geometric'
@@ -21,8 +21,10 @@ mean = sys.argv[4] if len(sys.argv) >= 5 else 'geometric'
 print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, set, mean)
 
 metadata_dir = utils.get_dir_path('train', pathfinder.MODEL_PATH)
-metadata = utils.load_pkl(metadata_dir + '/%s' % metadata_path)
-config_name = metadata['configuration']
+metadata_path = utils.find_model_metadata(metadata_dir, config_name)
+metadata = utils.load_pkl(metadata_path)
+
+assert config_name == metadata['configuration']
 if 'subconfiguration' in metadata:
     set_subconfiguration(metadata['subconfiguration'])
 set_configuration(config_name)

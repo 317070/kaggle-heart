@@ -138,7 +138,7 @@ def plot_roi(slice_group, roi_center, roi_radii):
         plt.show()
 
 
-def get_slice2roi(data_path, plot=False):
+def get_slice2roi(data_path, out_filename, num_circles=None, plot=False):
     patient_paths = sorted(glob.glob(data_path + '/*/study'))
     slice2roi = {}
     for p in patient_paths:
@@ -166,7 +166,10 @@ def get_slice2roi(data_path, plot=False):
         for slice_group in grouped_sax_slices:
             # pixel spacing changes within one patient but not too much
             pixel_spacing = slice_group[0]['metadata']['PixelSpacing'][0]
-            roi_center, roi_radii = data.extract_roi(slice_group, pixel_spacing)
+            if num_circles:
+                roi_center, roi_radii = data.extract_roi(slice_group, pixel_spacing, num_circles=num_circles)
+            else:
+                roi_center, roi_radii = data.extract_roi(slice_group, pixel_spacing)
 
             if plot:
                 plot_roi(slice_group, roi_center, roi_radii)
@@ -222,9 +225,8 @@ def get_slice2roi(data_path, plot=False):
             if plot:
                 plot_roi([ch2], ch2_result_center, ch2_result_radius)
 
-    filename = data_path.split('/')[-1] + '_slice2roi.pkl'
-    utils.save_pkl(slice2roi, filename)
-    print 'saved to ', filename
+    utils.save_pkl(slice2roi, out_filename)
+    print 'saved to ', out_filename
     return slice2roi
 
 

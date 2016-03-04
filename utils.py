@@ -9,8 +9,17 @@ import re
 import numpy as np
 import dicom2pkl
 import create_validation_split
+import glob
 
 maxfloat = np.finfo(np.float32).max
+
+
+def find_model_metadata(metadata_dir, config_name):
+    metadata_paths = glob.glob(metadata_dir + '/%s-*' % config_name)
+    if len(metadata_paths) > 1:
+        raise ValueError('Multiple metadata files for config %s' % config_name)
+    print metadata_paths[0]
+    return metadata_paths[0]
 
 
 def get_train_valid_split(train_data_path):

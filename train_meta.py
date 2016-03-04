@@ -13,21 +13,16 @@ import theano.tensor as T
 import buffering
 from configuration import config, set_configuration, set_subconfiguration
 import pathfinder
-import glob
 
-if len(sys.argv) < 3:
-    sys.exit("Usage: train.py <configuration_name>")
+if len(sys.argv) < 2:
+    sys.exit("Usage: train.py <meta_configuration_name>")
 
 config_name = sys.argv[1]
 
 subconfig_name = config_name.replace('meta_', '')
 metadata_dir = utils.get_dir_path('train', pathfinder.MODEL_PATH)
-submodel_metadata_path = glob.glob(metadata_dir + '/%s*' % config_name)
-if len(submodel_metadata_path) > 1:
-    raise ValueError('Multiple metadata files for config %s' % subconfig_name)
-else:
-    print submodel_metadata_path[0]
-    submodel_metadata = utils.load_pkl(metadata_dir + '/%s' % submodel_metadata_path[0])
+submodel_metadata_path = utils.find_model_metadata(metadata_dir, subconfig_name)
+submodel_metadata = utils.load_pkl(submodel_metadata_path)
 
 assert subconfig_name == submodel_metadata['configuration']
 set_subconfiguration(subconfig_name)

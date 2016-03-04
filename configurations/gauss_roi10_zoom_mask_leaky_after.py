@@ -64,7 +64,7 @@ train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL
                                                                    transform_params=train_transformation_params,
                                                                    patient_ids=train_valid_ids['train'],
                                                                    labels_path=TRAIN_LABELS_PATH,
-                                                                   slice2roi_path='pkl_train_slice2roi.pkl',
+                                                                   slice2roi_path='pkl_train_slice2roi_10.pkl',
                                                                    full_batch=True, random=True, infinite=True,
                                                                    data_prep_fun=data_prep_fun)
 
@@ -73,14 +73,14 @@ valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL
                                                                    transform_params=valid_transformation_params,
                                                                    patient_ids=train_valid_ids['valid'],
                                                                    labels_path=TRAIN_LABELS_PATH,
-                                                                   slice2roi_path='pkl_train_slice2roi.pkl',
+                                                                   slice2roi_path='pkl_train_slice2roi_10.pkl',
                                                                    full_batch=False, random=False, infinite=False,
                                                                    data_prep_fun=data_prep_fun)
 
 test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL_VALIDATE_DATA_PATH,
                                                                   batch_size=chunk_size,
                                                                   transform_params=test_transformation_params,
-                                                                  slice2roi_path='pkl_validate_slice2roi.pkl',
+                                                                  slice2roi_path='pkl_validate_slice2roi_10.pkl',
                                                                   full_batch=False, random=False, infinite=False,
                                                                   data_prep_fun=data_prep_fun)
 

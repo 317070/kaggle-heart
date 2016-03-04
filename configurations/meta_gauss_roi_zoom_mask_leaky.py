@@ -17,7 +17,6 @@ patch_size = subconfig().patch_size
 train_transformation_params = subconfig().train_transformation_params
 valid_transformation_params = subconfig().valid_transformation_params
 test_transformation_params = subconfig().test_transformation_params
-data_prep_fun = subconfig().data_prep_fun
 
 batch_size = 8
 nbatches_chunk = 2
@@ -31,8 +30,7 @@ train_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_TRAIN_D
                                                            patient_ids=train_valid_ids['train'],
                                                            labels_path=TRAIN_LABELS_PATH,
                                                            slice2roi_path='pkl_train_slice2roi.pkl',
-                                                           full_batch=True, random=True, infinite=True, min_slices=5,
-                                                           data_prep_fun=data_prep_fun)
+                                                           full_batch=True, random=True, infinite=True, min_slices=5)
 
 valid_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_TRAIN_DATA_PATH,
                                                            batch_size=chunk_size,
@@ -41,14 +39,13 @@ valid_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_TRAIN_D
                                                            labels_path=TRAIN_LABELS_PATH,
                                                            slice2roi_path='pkl_train_slice2roi.pkl',
                                                            full_batch=False, random=False, infinite=False,
-                                                           min_slices=5, data_prep_fun=data_prep_fun)
+                                                           min_slices=5)
 
 test_data_iterator = data_iterators.PatientsDataGenerator(data_path=PKL_VALIDATE_DATA_PATH,
                                                           batch_size=chunk_size,
                                                           transform_params=test_transformation_params,
                                                           slice2roi_path='pkl_validate_slice2roi.pkl',
-                                                          full_batch=False, random=False, infinite=False, min_slices=5,
-                                                          data_prep_fun=data_prep_fun)
+                                                          full_batch=False, random=False, infinite=False, min_slices=5)
 
 # find maximum number of slices
 nslices = max(train_data_iterator.nslices,

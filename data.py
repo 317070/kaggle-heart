@@ -7,7 +7,7 @@ from scipy.fftpack import fftn, ifftn
 from skimage.feature import peak_local_max, canny
 from skimage.transform import hough_circle
 import skimage.draw
-import compressed_cache
+# import compressed_cache
 from configuration import config
 import utils
 import skimage.exposure, skimage.filters
@@ -27,12 +27,12 @@ def read_labels(file_path):
     return id2labels
 
 
-@compressed_cache.memoize()
+# @compressed_cache.memoize()
 def read_slice(path):
     return pickle.load(open(path))['data']
 
 
-@compressed_cache.memoize()
+# @compressed_cache.memoize()
 def read_fft_slice(path):
     d = pickle.load(open(path))['data']
     ff1 = fftn(d)
@@ -43,7 +43,7 @@ def read_fft_slice(path):
     return d
 
 
-@compressed_cache.memoize()
+# @compressed_cache.memoize()
 def read_metadata(path):
     d = pickle.load(open(path))['metadata'][0]
     metadata = {k: d[k] for k in ['PixelSpacing', 'ImageOrientationPatient', 'ImagePositionPatient', 'SliceLocation',

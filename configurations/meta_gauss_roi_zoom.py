@@ -9,7 +9,7 @@ import utils_heart
 from pathfinder import PKL_TRAIN_DATA_PATH, TRAIN_LABELS_PATH, PKL_VALIDATE_DATA_PATH
 import utils
 
-caching = 'memory'
+caching = None
 restart_from_save = None
 
 rng = subconfig().rng
@@ -17,9 +17,7 @@ patch_size = subconfig().patch_size
 train_transformation_params = subconfig().train_transformation_params
 valid_transformation_params = subconfig().valid_transformation_params
 test_transformation_params = subconfig().test_transformation_params
-train_transformation_params['normalized_slice_pos'] = False
-valid_transformation_params['normalized_slice_pos'] = False
-test_transformation_params['normalized_slice_pos'] = False
+
 
 batch_size = 8
 nbatches_chunk = 2

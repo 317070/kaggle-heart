@@ -36,13 +36,7 @@ class SliceNormRescaleDataGenerator(object):
         self.id2labels = data.read_labels(labels_path) if labels_path else None
         self.transformation_params = transform_params
         self.data_prep_fun = data_prep_fun
-        if slice2roi_path:
-            if not os.path.isfile(slice2roi_path):
-                print 'Generating ROI'
-                self.slice2roi = slice2roi.get_slice2roi(data_path)
-            self.slice2roi = utils.load_pkl(slice2roi_path)
-        else:
-            self.slice2roi = None
+        self.slice2roi = utils.load_pkl(slice2roi_path) if slice2roi_path else None
 
     def generate(self):
         while True:
@@ -122,13 +116,7 @@ class PatientsDataGenerator(object):
         self.infinite = infinite
         self.transformation_params = transform_params
         self.data_prep_fun = data_prep_fun
-        if slice2roi_path:
-            if not os.path.isfile(slice2roi_path):
-                print 'Generating ROI'
-                self.slice2roi = slice2roi.get_slice2roi(data_path)
-            self.slice2roi = utils.load_pkl(slice2roi_path)
-        else:
-            self.slice2roi = None
+        self.slice2roi = utils.load_pkl(slice2roi_path) if slice2roi_path else None
 
     def generate(self):
         while True:

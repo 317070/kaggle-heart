@@ -50,9 +50,6 @@ test_transformation_params = {
     'sequence_shift': False
 }
 
-data_prep_fun = data.transform_norm_rescale_after
-
-
 batch_size = 32
 nbatches_chunk = 16
 chunk_size = batch_size * nbatches_chunk
@@ -65,8 +62,7 @@ train_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL
                                                                    patient_ids=train_valid_ids['train'],
                                                                    labels_path=TRAIN_LABELS_PATH,
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
-                                                                   full_batch=True, random=True, infinite=True,
-                                                                   data_prep_fun=data_prep_fun)
+                                                                   full_batch=True, random=True, infinite=True)
 
 valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL_TRAIN_DATA_PATH,
                                                                    batch_size=chunk_size,
@@ -74,15 +70,13 @@ valid_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL
                                                                    patient_ids=train_valid_ids['valid'],
                                                                    labels_path=TRAIN_LABELS_PATH,
                                                                    slice2roi_path='pkl_train_slice2roi.pkl',
-                                                                   full_batch=False, random=False, infinite=False,
-                                                                   data_prep_fun=data_prep_fun)
+                                                                   full_batch=False, random=False, infinite=False)
 
 test_data_iterator = data_iterators.SliceNormRescaleDataGenerator(data_path=PKL_VALIDATE_DATA_PATH,
                                                                   batch_size=chunk_size,
                                                                   transform_params=test_transformation_params,
                                                                   slice2roi_path='pkl_validate_slice2roi.pkl',
-                                                                  full_batch=False, random=False, infinite=False,
-                                                                  data_prep_fun=data_prep_fun)
+                                                                  full_batch=False, random=False, infinite=False)
 
 nchunks_per_epoch = train_data_iterator.nsamples / chunk_size
 max_nchunks = nchunks_per_epoch * 150

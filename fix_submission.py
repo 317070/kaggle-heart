@@ -11,7 +11,7 @@ import utils_heart
 # submission_name1 = sys.argv[1]
 # submission_name2 = sys.argv[2]
 # submission_path1 = 'final_submission-all_except_ira_00115_fixed.csv'
-submission_path2 = 'meta_gauss_roi_zoom_mask_leaky_after-geit-20160303-214039-test-50-arithmetic.csv'
+submission_path2 = 'final_submission-1457129444.05.csv'
 submission_path1 = 'final_submission-1456939840.96.csv'
 
 

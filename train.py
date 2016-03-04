@@ -7,6 +7,7 @@ import numpy as np
 import string
 from data_loader import get_lenght_of_set, get_number_of_validation_samples, validation_patients_indices, NUM_TRAIN_PATIENTS
 import data_loader
+from paths import MODEL_PATH, LOGS_PATH
 from predict import predict_model
 import utils
 import cPickle as pickle
@@ -26,7 +27,7 @@ from theano.compile.nanguardmode import NanGuardMode
 import buffering
 
 def train_model(expid):
-    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % expid
+    metadata_path = MODEL_PATH + "%s.pkl" % expid
 
     if theano.config.optimizer != "fast_run":
         print "WARNING: not running in fast mode!"
@@ -50,7 +51,7 @@ def train_model(expid):
 
     if "pretrained" in interface_layers:
         for config_name, layers_dict in interface_layers["pretrained"].iteritems():
-            pretrained_metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % config_name.split('.')[1]
+            pretrained_metadata_path = MODEL_PATH + "%s.pkl" % config_name.split('.')[1]
             pretrained_resume_metadata = np.load(pretrained_metadata_path)
             pretrained_top_layer = lasagne.layers.MergeLayer(
                 incomings = layers_dict.values()
@@ -351,14 +352,15 @@ if __name__ == "__main__":
 
     expid = utils.generate_expid(args.config)
 
-    with print_to_file("/mnt/storage/metadata/kaggle-heart/logs/%s.log" % expid):
+    log_file = LOGS_PATH + "%s.log" % expid
+    with print_to_file(log_file):
 
         print "Running configuration:", config().__name__
         print "Current git version:", utils.get_git_revision_hash()
 
         train_model(expid)
-        print "log saved to '%s'" % ("/mnt/storage/metadata/kaggle-heart/logs/%s.log" % expid)
+        print "log saved to '%s'" % log_file
         predict_model(expid)
-        print "log saved to '%s'" % ("/mnt/storage/metadata/kaggle-heart/logs/%s.log" % expid)
+        print "log saved to '%s'" % log_file
 
 

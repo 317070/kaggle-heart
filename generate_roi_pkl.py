@@ -7,6 +7,8 @@ from scipy.fftpack import fftn, ifftn
 from skimage.feature import peak_local_max, canny
 from skimage.transform import hough_circle
 import cPickle as pickle
+from paths import TRAIN_DATA_PATH, LOGS_PATH, PKL_TRAIN_DATA_PATH, PKL_TEST_DATA_PATH
+from paths import TEST_DATA_PATH
 
 
 def orthogonal_projection_on_slice(percentual_coordinate, source_metadata, target_metadata):
@@ -55,10 +57,28 @@ def orthogonal_projection_on_slice(percentual_coordinate, source_metadata, targe
                                [0,0,0,1]]), point)
     return point[:2,0]  # percentual coordinate as well
 
+#joni
+minradius = 15
+maxradius = 65
+
+kernel_width = 5
+center_margin = 8
+num_peaks = 10
+num_circles = 10  # 20
+radstep = 2
+
+#ira
+minradius_mm=25
+maxradius_mm=45
+kernel_width=5
+center_margin=8
+num_peaks=10
+num_circles=20
+radstep=2
 
 
-def extract_roi(data, pixel_spacing, minradius_mm=25, maxradius_mm=45, kernel_width=5, center_margin=8, num_peaks=10,
-                num_circles=20, radstep=2):
+def extract_roi(data, pixel_spacing, minradius_mm=15, maxradius_mm=65, kernel_width=5, center_margin=8, num_peaks=10,
+                num_circles=10, radstep=2):
     """
     Returns center and radii of ROI region in (i,j) format
     """
@@ -83,6 +103,7 @@ def extract_roi(data, pixel_spacing, minradius_mm=25, maxradius_mm=45, kernel_wi
         fh = np.absolute(ifftn(ff1[1, :, :]))
         fh[fh < 0.1 * np.max(fh)] = 0.0
         image = 1. * fh / np.max(fh)
+
 
         # find hough circles and detect two radii
         edges = canny(image, sigma=3)
@@ -252,7 +273,7 @@ def plot_roi(slice_group, roi_center, roi_radii):
 
 
 def get_slice2roi(data_path, plot=False):
-    patient_paths = sorted(glob.glob(data_path + '/*/study'))
+    patient_paths = sorted(glob.glob(data_path + '*/study'))
     slice2roi = {}
     for p in patient_paths:
         patient_data = get_patient_data(p)
@@ -332,7 +353,7 @@ def get_slice2roi(data_path, plot=False):
             slice2roi[pid][sid] = {'roi_center': tuple(ch2_result_center), 'roi_radii': (ch2_result_radius, ch2_result_radius)}
 
 
-    filename = data_path.split('/')[-1] + '_slice2roi.pkl'
+    filename = data_path.split('/')[-1] + '_slice2roi_joni.pkl'
     with open(filename, 'w') as f:
         pickle.dump(slice2roi, f)
     print 'saved to ', filename
@@ -347,9 +368,10 @@ if __name__ == '__main__':
     #                      required=True)
     args = parser.parse_args()
 
-    data_paths = ['/mnt/storage/data/dsb15_pkl/pkl_train', '/mnt/storage/data/dsb15_pkl/pkl_validate']
-    with print_to_file("/mnt/storage/metadata/kaggle-heart/logs/generate_roi.log"):
+    data_paths = [PKL_TRAIN_DATA_PATH, PKL_TEST_DATA_PATH]
+    log_path = LOGS_PATH + "generate_roi.log"
+    with print_to_file(log_path):
         for d in data_paths:
             get_slice2roi(d, plot=True)
-        print "log saved to '%s'" % ("/mnt/storage/metadata/kaggle-heart/logs/generate_roi.log")
+        print "log saved to '%s'" % log_path
 

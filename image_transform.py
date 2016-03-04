@@ -1,7 +1,6 @@
 """
 take in a numpy tensor, and reshape last 2 dimensions as images to fit the desired shape
 """
-import multiprocessing as mp
 import numpy as np
 import skimage.io
 import skimage.transform
@@ -17,6 +16,7 @@ NO_AUGMENT_PARAMS = {
     "skew_x": 0.0,
     "skew_y": 0.0,
     "translate_x": 0.0,
+    "translate_y": 0.0,
     "flip_vert": 0.0,
     "roll_time": 0.0,
     "flip_time": 0.0,

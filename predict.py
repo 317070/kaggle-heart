@@ -13,6 +13,9 @@ import numpy as np
 import string
 from data_loader import get_number_of_test_batches, validation_patients_indices, train_patients_indices, regular_labels
 import data_loader
+from paths import MODEL_PATH
+from paths import INTERMEDIATE_PREDICTIONS_PATH
+from paths import SUBMISSION_PATH
 import theano_printer
 import utils
 import theano.tensor as T
@@ -23,9 +26,9 @@ from utils import CRSP
 from postprocess import make_monotone_distribution, test_if_valid_distribution
 
 def predict_model(expid, mfile=None):
-    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % (expid if not mfile else mfile)
-    prediction_path = "/mnt/storage/metadata/kaggle-heart/predictions/%s.pkl" % expid
-    submission_path = "/mnt/storage/metadata/kaggle-heart/submissions/%s.csv" % expid
+    metadata_path = MODEL_PATH + "%s.pkl" % (expid if not mfile else mfile)
+    prediction_path = INTERMEDIATE_PREDICTIONS_PATH + "%s.pkl" % expid
+    submission_path = SUBMISSION_PATH + "%s.csv" % expid
 
     if theano.config.optimizer != "fast_run":
         print "WARNING: not running in fast mode!"
@@ -132,10 +135,10 @@ def predict_model(expid, mfile=None):
 
                     kaggle_systole = kaggle_systoles[idx:idx+1,:]
                     kaggle_diastole = kaggle_diastoles[idx:idx+1,:]
-
+                    assert np.isfinite(kaggle_systole).all() and np.isfinite(kaggle_systole).all()
                     kaggle_systole = classification_correction[b*config().batch_size + idx](kaggle_systole)
                     kaggle_diastole = classification_correction[b*config().batch_size + idx](kaggle_diastole)
-
+                    assert np.isfinite(kaggle_systole).all() and np.isfinite(kaggle_systole).all()
                     patient_data["systole"] =  np.concatenate((patient_data["systole"], kaggle_systole ),axis=0)
                     patient_data["diastole"] = np.concatenate((patient_data["diastole"], kaggle_diastole ),axis=0)
 
@@ -165,6 +168,8 @@ def predict_model(expid, mfile=None):
                     already_printed = True
                 prediction["systole_average"] = make_monotone_distribution(prediction["systole_average"])
                 prediction["diastole_average"] = make_monotone_distribution(prediction["diastole_average"])
+                test_if_valid_distribution(prediction["systole_average"])
+                test_if_valid_distribution(prediction["diastole_average"])
 
 
     print "Calculating training and validation set scores for reference"

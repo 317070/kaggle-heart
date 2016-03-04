@@ -4,6 +4,7 @@ import glob
 import re
 from log import print_to_file
 import cPickle as pickle
+from paths import LOGS_PATH, TRAIN_DATA_PATH, TEST_DATA_PATH
 
 
 def read_slice(path):
@@ -63,7 +64,7 @@ def get_patient_data(patient_data_path):
 
 
 def get_metadata(data_path):
-    patient_paths = sorted(glob.glob(data_path + '/*/study'))
+    patient_paths = sorted(glob.glob(data_path + '*/study'))
     metadata_dict = {}
     for p in patient_paths:
         patient_data, pid = get_patient_data(p)
@@ -87,9 +88,10 @@ if __name__ == '__main__':
     #                      required=True)
     args = parser.parse_args()
 
-    data_paths = ['/mnt/storage/data/dsb15_pkl/pkl_train', '/mnt/storage/data/dsb15_pkl/pkl_validate']
-    with print_to_file("/mnt/storage/metadata/kaggle-heart/logs/generate_metadata.log"):
+    data_paths = [TRAIN_DATA_PATH, TEST_DATA_PATH]
+    log_path = LOGS_PATH + "generate_metadata.log"
+    with print_to_file(log_path):
         for d in data_paths:
             get_metadata(d)
-        print "log saved to '%s'" % ("/mnt/storage/metadata/kaggle-heart/logs/generate_metadata.log")
+        print "log saved to '%s'" % log_path
 

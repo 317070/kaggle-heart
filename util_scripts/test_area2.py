@@ -16,9 +16,8 @@ def volume(a1, a2, h):
 def compute_mu(mu1, mu2, h):
   return volume(mu1, mu2, h)
 
-def compute_sigma(sigma1, sigma2, h):
-  return h*8*(sigma1**2 + sigma2**2)*np.pi/4
-
+def compute_sigma(sigma1, mu1, sigma2, mu2, h):
+  return h*np.sqrt(sigma1**2*sigma2**2 + sigma1**2*mu2**2 + sigma2**2*mu1**2)*np.pi/4
 # sample X and Y
 s1 = np.random.normal(mu1, sigma1, N_samples)
 s2 = np.random.normal(mu2, sigma2, N_samples)
@@ -31,7 +30,7 @@ count, bins, ignored = plt.hist(v, 100, normed=True)
 
 # Compute and plot approx of Z
 mu = compute_mu(mu1, mu2, h)
-sigma = compute_sigma(sigma1, sigma2, h)
+sigma = compute_sigma(sigma1, mu1, sigma2, mu2, h)
 print sigma
 
 plt.plot(

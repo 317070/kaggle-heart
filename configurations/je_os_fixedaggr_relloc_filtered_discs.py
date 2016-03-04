@@ -31,7 +31,7 @@ caching = None
 validate_every = 20
 validate_train_set = True
 save_every = 20
-restart_from_save = False
+restart_from_save = True
 
 dump_network_loaded_data = False
 
@@ -40,14 +40,13 @@ dump_network_loaded_data = False
 batch_size = 8
 sunny_batch_size = 4
 batches_per_chunk = 8
-num_epochs_train = 400
+num_epochs_train = 200
 
 # - learning rate and method
 base_lr = 0.0001
 learning_rate_schedule = {
     0: base_lr,
-    9*num_epochs_train/10: base_lr/10,
-    19*num_epochs_train/20: base_lr/100,
+    8*num_epochs_train/10: base_lr/10,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates

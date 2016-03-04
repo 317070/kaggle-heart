@@ -274,7 +274,10 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                     pixel_spacing=metadata["PixelSpacing"],
                     shift_center=shift_center[::-1])[0]
                 for slicedata, metadata, shift_center in zip(data, metadata_tag, shift_centers)]
-            zoom_factor = augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+            if augmentation_params is not None:
+                zoom_factor = augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+            else:
+                zoom_factor = 1.0
 
             # Clean data further
             patient_3d_tensors = [

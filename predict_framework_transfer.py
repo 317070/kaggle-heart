@@ -32,7 +32,8 @@ set_configuration(config_name)
 # predictions paths
 jonas_prediction_path = PREDICTIONS_PATH + '/ira_%s.pkl' % config().__name__
 prediction_dir = utils.get_dir_path('predictions', MODEL_PATH)
-valid_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'valid', n_tta_iterations, mean)
+valid_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (
+metadata['experiment_id'], 'valid', n_tta_iterations, mean)
 test_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'test', n_tta_iterations, mean)
 
 # submissions paths
@@ -147,12 +148,23 @@ print '\npredictions saved to %s' % test_prediction_path
 utils.save_submission(avg_patient_predictions, submission_path)
 print ' submission saved to %s' % submission_path
 
-with open(jonas_prediction_path, 'w') as f:
-    pickle.dump({
-        'metadata_path': metadata_path,
-        'prediction_path': test_prediction_path,
-        'submission_path': submission_path,
-        'configuration_file': config().__name__,
-        'git_revision_hash': utils.get_git_revision_hash(),
-        'predictions': predictions
-    }, f, pickle.HIGHEST_PROTOCOL)
+try:
+    with open(jonas_prediction_path, 'w') as f:
+        pickle.dump({
+            'metadata_path': metadata_path,
+            'prediction_path': test_prediction_path,
+            'submission_path': submission_path,
+            'configuration_file': config().__name__,
+            'git_revision_hash': utils.get_git_revision_hash(),
+            'predictions': predictions
+        }, f, pickle.HIGHEST_PROTOCOL)
+except:
+    with open('ira_%s.pkl' % config().__name__, 'w') as f:
+        pickle.dump({
+            'metadata_path': metadata_path,
+            'prediction_path': test_prediction_path,
+            'submission_path': submission_path,
+            'configuration_file': config().__name__,
+            'git_revision_hash': utils.get_git_revision_hash(),
+            'predictions': predictions
+        }, f, pickle.HIGHEST_PROTOCOL)

@@ -2,7 +2,6 @@ from collections import defaultdict
 from scipy.stats import norm
 import numpy as np
 import scipy.stats
-import lasagne as nn
 
 
 def make_monotone_cdf(cdf):

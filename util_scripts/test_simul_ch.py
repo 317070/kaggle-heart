@@ -26,8 +26,8 @@ def merge_dicts(dicts):
     return res
 
 _HOUGH_ROI_PATHS = (
-    os.path.expanduser('~/storage/data/dsb15_pkl/pkl_train_slice2roi.pkl'),
-    os.path.expanduser('~/storage/data/dsb15_pkl/pkl_validate_slice2roi.pkl'),
+    os.path.expanduser('/mnt/storage/data/dsb15_pkl/pkl_train_slice2roi.pkl'),
+    os.path.expanduser('/mnt/storage/data/dsb15_pkl/pkl_validate_slice2roi.pkl'),
 )
 _hough_rois = merge_dicts(map(_load_file, _HOUGH_ROI_PATHS))
 
@@ -184,7 +184,7 @@ def get_chan_transformations(ch2_metadata=None,
         ch2_metadata = ch4_metadata
     else:
         has_both_chans = True
-
+    #print has_both_chans
 
     F2 = np.array(ch2_metadata["ImageOrientationPatient"]).reshape( (2,3) )[::-1,:]
     F4 = np.array(ch4_metadata["ImageOrientationPatient"]).reshape( (2,3) )[::-1,:]
@@ -231,6 +231,13 @@ def get_chan_transformations(ch2_metadata=None,
     ch2_bottom_point = point_projection_on_slice(bottom_point, ch2_metadata)
     n = np.array([ch2_bottom_point[1] - ch2_top_point[1], ch2_top_point[0] - ch2_bottom_point[0]])
     ch2_third_point = ch2_top_point + n/2
+    #print np.sum(n*n)
+    if False:#np.sum(n*n)<1 and has_both_chans:
+        return get_chan_transformations(ch2_metadata=None,
+                                        ch4_metadata=ch4_metadata,
+                                        top_point_metadata=top_point_metadata,
+                                        bottom_point_metadata=bottom_point_metadata,
+                                        output_width = output_width)
 
     A = np.array([[ch2_top_point[0], ch2_top_point[1], 1, 0, 0, 0 ],
                   [0, 0, 0, ch2_top_point[0], ch2_top_point[1], 1],
@@ -253,6 +260,13 @@ def get_chan_transformations(ch2_metadata=None,
     ch4_bottom_point = point_projection_on_slice(bottom_point, ch4_metadata)
     n = np.array([ch4_bottom_point[1] - ch4_top_point[1], ch4_top_point[0] - ch4_bottom_point[0]])
     ch4_third_point = ch4_top_point + n/2
+    #print np.sum(n*n)
+    if np.sum(n*n)<1 and has_both_chans:
+        return get_chan_transformations(ch2_metadata=ch2_metadata,
+                                         ch4_metadata=None,
+                                         top_point_metadata=top_point_metadata,
+                                         bottom_point_metadata=bottom_point_metadata,
+                                         output_width = output_width)
 
     A = np.array([[ch4_top_point[0], ch4_top_point[1], 1, 0, 0, 0 ],
                   [0, 0, 0, ch4_top_point[0], ch4_top_point[1], 1],
@@ -277,7 +291,7 @@ def get_chan_transformations(ch2_metadata=None,
 
 if __name__ == "__main__":
 
-    for patient_id in xrange(561, 562):
+    for patient_id in xrange(611, 612):
         print "Looking for the pickle files..."
         files = sorted(glob.glob(os.path.expanduser("~/storage/data/dsb15_pkl/pkl_validate/%d/study/*.pkl" % patient_id)))
 
@@ -333,12 +347,12 @@ if __name__ == "__main__":
         #f.canvas.manager.resize(*f.canvas.manager.window.maxsize())
 
         ch4_result = fast_warp(ch4_data[0], trf_4ch, output_shape=(OUTPUT_SIZE, OUTPUT_SIZE))
-        ch4_result[50,:] = 0
+        #ch4_result[50,:] = 0
         ax1.imshow(ch4_result)
         ax1.set_aspect('equal')
 
         ch2_result = fast_warp(ch2_data[0], trf_2ch, output_shape=(OUTPUT_SIZE, OUTPUT_SIZE))
-        ch2_result[50,:] = 0
+        #ch2_result[50,:] = 0
         ax2.imshow(ch2_result)
         ax2.set_aspect('equal')
 

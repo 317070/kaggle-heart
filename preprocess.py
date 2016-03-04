@@ -27,6 +27,7 @@ DEFAULT_AUGMENTATION_PARAMETERS = {
     "flip_vert": [0, 0],
     "roll_time": [0, 0],
     "flip_time": [0, 0],
+    "change_brightness": [0, 0],
 }
 
 quasi_random_generator = None
@@ -50,16 +51,54 @@ def sample_augmentation_parameters():
             newdict["flip_time"] = augm["flip_time"]
         augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **newdict)
     else:
-        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **config().augmentation_params)
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **augm)
 
     if quasi_random_generator is None:
-        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
                                                                                   permutation='Braaten-Weller')
     res = dict()
     try:
         sample = quasi_random_generator.next()
     except ValueError:
-        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(config().augmentation_params),
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
+                                                                                  permutation='Braaten-Weller')
+        sample = quasi_random_generator.next()
+
+    for rand, (key, (a, b)) in izip(sample, augmentation_params.iteritems()):
+        #res[key] = config().rng.uniform(a,b)
+        res[key] = a + rand*(b-a)
+    return res
+
+
+def sample_test_augmentation_parameters():
+    global quasi_random_generator
+
+    augm = config().augmentation_params_test if hasattr(config(), 'augmentation_params_test') else config().augmentation_params
+    if "translation" in augm:
+        newdict = dict()
+        if "translation" in augm:
+            newdict["translate_x"] = augm["translation"]
+            newdict["translate_y"] = augm["translation"]
+        if "shear" in augm:
+            newdict["shear"] = augm["shear"]
+        if "flip_vert" in augm:
+            newdict["flip_vert"] = augm["flip_vert"]
+        if "roll_time" in augm:
+            newdict["roll_time"] = augm["roll_time"]
+        if "flip_time" in augm:
+            newdict["flip_time"] = augm["flip_time"]
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **newdict)
+    else:
+        augmentation_params = dict(DEFAULT_AUGMENTATION_PARAMETERS, **augm)
+
+    if quasi_random_generator is None:
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
+                                                                                  permutation='Braaten-Weller')
+    res = dict()
+    try:
+        sample = quasi_random_generator.next()
+    except ValueError:
+        quasi_random_generator = quasi_random.scrambled_halton_sequence_generator(dimension=len(augmentation_params),
                                                                                   permutation='Braaten-Weller')
         sample = quasi_random_generator.next()
 
@@ -102,9 +141,9 @@ def put_in_the_middle(target_tensor, data_tensor, pad_better=False, is_padded=No
         if target_indices[0].start:
             for i in xrange(0, target_indices[0].start):
                 target_tensor[i] = data_tensor[0]
-        if target_indices[0].stop:        
+        if target_indices[0].stop:
             for i in xrange(target_indices[0].stop, len(target_tensor)):
-                target_tensor[i] = data_tensor[-1]             
+                target_tensor[i] = data_tensor[-1]
 
 
 def sunny_preprocess(chunk_x, img, chunk_y, lbl):
@@ -151,7 +190,8 @@ def _make_4d_tensor(tensors):
 
 def preprocess_normscale(patient_data, result, index, augment=True,
                          metadata=None,
-                         normscale_resize_and_augment_function=normscale_resize_and_augment):
+                         normscale_resize_and_augment_function=normscale_resize_and_augment,
+                         testaug=False):
     """Normalizes scale and augments the data.
 
     Args:
@@ -162,7 +202,13 @@ def preprocess_normscale(patient_data, result, index, augment=True,
         augment: flag indicating wheter augmentation is needed.
         metadata: metadata belonging to the patient data.
     """
-    augmentation_params = sample_augmentation_parameters() if augment else None
+    if augment:
+        if testaug:
+            augmentation_params = sample_test_augmentation_parameters()
+        else:
+            augmentation_params = sample_augmentation_parameters()
+    else:
+        augmentation_params = None
 
     # Iterate over different sorts of data
     for tag, data in patient_data.iteritems():
@@ -178,7 +224,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             data = clean_images(
                 [patient_data[tag]], metadata=metadata_tag,
                 cleaning_processes=cleaning_processes)
-            
+
             # Augment and extract patch
             # Decide which roi to use.
             shift_center = (None, None)
@@ -190,14 +236,22 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 augment=augmentation_params,
                 pixel_spacing=metadata_tag["PixelSpacing"],
                 shift_center=shift_center[::-1])[0]
-            zoom_factor = augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+
+            if augmentation_params is not None:
+                zoom_factor = augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+            else:
+                zoom_factor = 1.0
+                
             # Clean data further
             patient_3d_tensor = clean_images(
                 patient_3d_tensor, metadata=metadata_tag,
                 cleaning_processes=cleaning_processes_post)
-            
+
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
+
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_3d_tensor = augment_brightness(patient_3d_tensor, augmentation_params["change_brightness"])
 
             put_in_the_middle(result[tag][index], patient_3d_tensor, True)
 
@@ -228,6 +282,9 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 for patient_3d_tensor, metadata in zip(patient_3d_tensors, metadata_tag)]
 
             patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
+
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_4d_tensor = augment_brightness(patient_4d_tensor, augmentation_params["change_brightness"])
 
             if "area_per_pixel:sax" in result:
                 raise NotImplementedError()
@@ -265,7 +322,10 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                     shift_center=shift_center[::-1])[0]
                 for slicedata, metadata, shift_center in zip(data, metadata_tag, shift_centers)]
 
-            zoom_factor = augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+            if augmentation_params is not None:
+                zoom_factor = augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+            else:
+                zoom_factor = 1.0
 
             # Clean data further
             patient_3d_tensors = [
@@ -273,6 +333,9 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 for patient_3d_tensor, metadata in zip(patient_3d_tensors, metadata_tag)]
 
             patient_4d_tensor = _make_4d_tensor(patient_3d_tensors)
+
+            if augmentation_params and not augmentation_params.get("change_brightness", 0) == 0:
+                patient_4d_tensor = augment_brightness(patient_4d_tensor, augmentation_params["change_brightness"])
 
             # Augment sax order
             if augmentation_params and augmentation_params.get("flip_sax", 0) > 0.5:
@@ -282,16 +345,16 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             # Put data (images and metadata) in right location
             put_in_the_middle(result[tag][index], patient_4d_tensor, True)
 
-
-            is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
             if "sliced:data:sax:locations" in result:
                 eps_location = 1e-7
+                is_padded = np.array([False]*len(result["sliced:data:sax:locations"][index]))
                 put_in_the_middle(result["sliced:data:sax:locations"][index], slice_locations + eps_location, True, is_padded)
 
             if "sliced:data:sax:distances" in result:
                 eps_location = 1e-7
                 sorted_distances.append(0.0)  # is easier for correct padding
-                put_in_the_middle(result["sliced:data:sax:distances"][index], sorted_distances + eps_location, True, is_padded)
+                is_padded = np.array([False]*len(result["sliced:data:sax:distances"][index]))
+                put_in_the_middle(result["sliced:data:sax:distances"][index], np.array(sorted_distances) + eps_location, True, is_padded)
 
             if "sliced:data:sax:is_not_padded" in result:
                 result["sliced:data:sax:is_not_padded"][index] = np.logical_not(is_padded)
@@ -380,7 +443,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
         return lambda x: x, lambda x: x
 
 
-def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None):
+def preprocess_with_augmentation(patient_data, result, index, augment=True, metadata=None, testaug=False):
     """
     Load the resulting data, augment it if needed, and put it in result at the correct index
     :param patient_data:
@@ -790,3 +853,214 @@ def get_chan_transformations(ch2_metadata=None,
     ch4_form_fix  = skimage.transform.ProjectiveTransform(matrix=tform_matrix)
 
     return ch2_form_fix, ch4_form_fix
+
+def augment_brightness(patient_tensor, brightness_adjustment):
+#    print "augmenting", brightness_adjustment
+    return np.clip(patient_tensor + brightness_adjustment * np.mean(patient_tensor), 0, 1)
+
+
+def orthogonal_projection_on_slice(percentual_coordinate, source_metadata, target_metadata):
+    point = np.array([[percentual_coordinate[0]],
+                      [percentual_coordinate[1]],
+                      [0],
+                      [1]])
+    image_size = [source_metadata["Rows"], source_metadata["Columns"]]
+    point = np.dot(np.array(  [[image_size[0],0,0,0],
+                               [0,image_size[1],0,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    pixel_spacing = source_metadata["PixelSpacing"]
+    point = np.dot(np.array(  [[pixel_spacing[0],0,0,0],
+                               [0,pixel_spacing[1],0,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    Fa = np.array(source_metadata["ImageOrientationPatient"]).reshape( (2,3) )[::-1,:]
+    posa = source_metadata["ImagePositionPatient"]
+    point = np.dot(np.array(  [[Fa[0,0],Fa[1,0],0,posa[0]],
+                               [Fa[0,1],Fa[1,1],0,posa[1]],
+                               [Fa[0,2],Fa[1,2],0,posa[2]],
+                               [0,0,0,1]]), point)
+    posb = target_metadata["ImagePositionPatient"]
+    point = np.dot(np.array(  [[1,0,0,-posb[0]],
+                               [0,1,0,-posb[1]],
+                               [0,0,1,-posb[2]],
+                               [0,0,0,1]]), point)
+    Fb = np.array(target_metadata["ImageOrientationPatient"]).reshape( (2,3) )[::-1,:]
+    ff0 = np.sqrt(np.sum(Fb[0,:]*Fb[0,:]))
+    ff1 = np.sqrt(np.sum(Fb[1,:]*Fb[1,:]))
+
+    point = np.dot(np.array(  [[Fb[0,0]/ff0,Fb[0,1]/ff0,Fb[0,2]/ff0,0],
+                               [Fb[1,0]/ff1,Fb[1,1]/ff1,Fb[1,2]/ff1,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    pixel_spacing = target_metadata["PixelSpacing"]
+    point = np.dot(np.array(  [[1./pixel_spacing[0],0,0,0],
+                               [0,1./pixel_spacing[1],0,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    image_size = [target_metadata["Rows"], target_metadata["Columns"]]
+    point = np.dot(np.array(  [[1./image_size[0],0,0,0],
+                               [0,1./image_size[1],0,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    return point[:2,0]  # percentual coordinate as well
+
+
+def patient_coor_from_slice(percentual_coordinate, source_metadata):
+    point = np.array([[percentual_coordinate[0]],
+                      [percentual_coordinate[1]],
+                      [0],
+                      [1]])
+    image_size = [source_metadata["Rows"], source_metadata["Columns"]]
+    point = np.dot(np.array(  [[image_size[0],0,0,0],
+                               [0,image_size[1],0,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    pixel_spacing = source_metadata["PixelSpacing"]
+    point = np.dot(np.array(  [[pixel_spacing[0],0,0,0],
+                               [0,pixel_spacing[1],0,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    Fa = np.array(source_metadata["ImageOrientationPatient"]).reshape( (2,3) )[::-1,:]
+    posa = source_metadata["ImagePositionPatient"]
+    point = np.dot(np.array(  [[Fa[0,0],Fa[1,0],0,posa[0]],
+                               [Fa[0,1],Fa[1,1],0,posa[1]],
+                               [Fa[0,2],Fa[1,2],0,posa[2]],
+                               [0,0,0,1]]), point)
+
+    return point[:3,0]  # patient coordinate
+
+
+def point_projection_on_slice(point, target_metadata):
+    point = np.array([[point[0]],
+                      [point[1]],
+                      [point[2]],
+                      [1]])
+    posb = target_metadata["ImagePositionPatient"]
+    point = np.dot(np.array(  [[1,0,0,-posb[0]],
+                               [0,1,0,-posb[1]],
+                               [0,0,1,-posb[2]],
+                               [0,0,0,1]]), point)
+    Fb = np.array(target_metadata["ImageOrientationPatient"]).reshape( (2,3) )[::-1,:]
+    ff0 = np.sqrt(np.sum(Fb[0,:]*Fb[0,:]))
+    ff1 = np.sqrt(np.sum(Fb[1,:]*Fb[1,:]))
+
+    point = np.dot(np.array(  [[Fb[0,0]/ff0,Fb[0,1]/ff0,Fb[0,2]/ff0,0],
+                               [Fb[1,0]/ff1,Fb[1,1]/ff1,Fb[1,2]/ff1,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    pixel_spacing = target_metadata["PixelSpacing"]
+    point = np.dot(np.array(  [[1./pixel_spacing[0],0,0,0],
+                               [0,1./pixel_spacing[1],0,0],
+                               [0,0,0,0],
+                               [0,0,0,1]]), point)
+    return point[:2,0]  # percentual coordinate as well
+
+
+
+def get_chan_transformations(ch2_metadata=None,
+                             ch4_metadata=None,
+                             top_point_metadata=None,
+                             bottom_point_metadata=None,
+                             output_width = 100):
+
+    has_both_chans = False
+    if ch2_metadata is None and ch4_metadata is None:
+        raise "Need at least one of these slices"
+    elif ch2_metadata and ch4_metadata is None:
+        ch4_metadata = ch2_metadata
+    elif ch4_metadata and ch2_metadata is None:
+        ch2_metadata = ch4_metadata
+    else:
+        has_both_chans = True
+
+
+    F2 = np.array(ch2_metadata["ImageOrientationPatient"]).reshape( (2,3) )[::-1,:]
+    F4 = np.array(ch4_metadata["ImageOrientationPatient"]).reshape( (2,3) )[::-1,:]
+
+    n2 = np.cross(F2[0,:], F2[1,:])
+    n4 = np.cross(F4[0,:], F4[1,:])
+
+    b2 = np.sum(n2 * np.array(ch2_metadata["ImagePositionPatient"]))
+    b4 = np.sum(n4 * np.array(ch4_metadata["ImagePositionPatient"]))
+
+    # find top and bottom of my view
+    top_point = patient_coor_from_slice(top_point_metadata["hough_roi"], top_point_metadata)
+    bottom_point = patient_coor_from_slice(bottom_point_metadata["hough_roi"], bottom_point_metadata)
+
+    # if it has both chan's: middle line is the common line!
+    if has_both_chans:
+        F5 = np.cross(n2, n4)
+        A = np.array([n2, n4])
+        b = np.array([b2, b4])
+        #print A, b
+        P, rnorm, rank, s = np.linalg.lstsq(A,b)
+        #print P, rnorm, rank, s
+
+        # find top and bottom on the line
+        A = np.array([F5]).T
+        b = np.array(top_point)
+        #print A,b
+        sc, rnorm, rank, s = np.linalg.lstsq(A,b)
+        #print sc, rnorm, rank, s
+
+        top_point = sc[0] * F5 + P
+
+        A = np.array([F5]).T
+        b = np.array(bottom_point)
+        #print A,b
+        sc, rnorm, rank, s = np.linalg.lstsq(A,b)
+        #print sc, rnorm, rank, s
+
+        bottom_point = sc[0] * F5 + P
+
+    ## FIND THE affine transformation ch2 needs:
+
+    ch2_top_point = point_projection_on_slice(top_point, ch2_metadata)
+    ch2_bottom_point = point_projection_on_slice(bottom_point, ch2_metadata)
+    n = np.array([ch2_bottom_point[1] - ch2_top_point[1], ch2_top_point[0] - ch2_bottom_point[0]])
+    ch2_third_point = ch2_top_point + n/2
+
+    A = np.array([[ch2_top_point[0], ch2_top_point[1], 1, 0, 0, 0 ],
+                  [0, 0, 0, ch2_top_point[0], ch2_top_point[1], 1],
+                  [ch2_bottom_point[0], ch2_bottom_point[1], 1, 0, 0, 0 ],
+                  [0, 0, 0, ch2_bottom_point[0], ch2_bottom_point[1], 1],
+                  [ch2_third_point[0], ch2_third_point[1], 1, 0, 0, 0 ],
+                  [0, 0, 0, ch2_third_point[0], ch2_third_point[1], 1],])
+    b = np.array([0,0.5*output_width,output_width,0.5*output_width,0,0])
+    #print A,b
+    sc, rnorm, rank, s = np.linalg.lstsq(A,b)
+    #print sc, rnorm, rank, s
+    # these need to be mixed up a little, because we have non-standard x-y-order
+    tform_matrix = np.linalg.inv(np.array([[sc[4], sc[3], sc[5]],
+                                           [sc[1], sc[0], sc[2]],
+                                           [    0,     0,    1]]))
+    ch2_form_fix  = skimage.transform.ProjectiveTransform(matrix=tform_matrix)
+
+    # same for ch4
+    ch4_top_point = point_projection_on_slice(top_point, ch4_metadata)
+    ch4_bottom_point = point_projection_on_slice(bottom_point, ch4_metadata)
+    n = np.array([ch4_bottom_point[1] - ch4_top_point[1], ch4_top_point[0] - ch4_bottom_point[0]])
+    ch4_third_point = ch4_top_point + n/2
+
+    A = np.array([[ch4_top_point[0], ch4_top_point[1], 1, 0, 0, 0 ],
+                  [0, 0, 0, ch4_top_point[0], ch4_top_point[1], 1],
+                  [ch4_bottom_point[0], ch4_bottom_point[1], 1, 0, 0, 0 ],
+                  [0, 0, 0, ch4_bottom_point[0], ch4_bottom_point[1], 1],
+                  [ch4_third_point[0], ch4_third_point[1], 1, 0, 0, 0 ],
+                  [0, 0, 0, ch4_third_point[0], ch4_third_point[1], 1],])
+    b = np.array([0,0.5*output_width,output_width,0.5*output_width,0,0])
+    #print A,b
+    sc, rnorm, rank, s = np.linalg.lstsq(A,b)
+    #print sc, rnorm, rank, s
+    # these need to be mixed up a little, because we have non-standard x-y-order
+    tform_matrix = np.linalg.inv(np.array([[sc[4], sc[3], sc[5]],
+                                           [sc[1], sc[0], sc[2]],
+                                           [    0,     0,    1]]))
+    ch4_form_fix  = skimage.transform.ProjectiveTransform(matrix=tform_matrix)
+
+    return ch2_form_fix, ch4_form_fix
+
+def augment_brightness(patient_tensor, brightness_adjustment):
+#    print "augmenting", brightness_adjustment
+    return np.clip(patient_tensor + brightness_adjustment * np.mean(patient_tensor), 0, 1)

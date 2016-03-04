@@ -245,11 +245,11 @@ def geometric_average(x, eps=1e-7):
     return geom_av
 
 
-def norm_prod(x):
+def norm_prod(x, eps=1e-7):
     """Computes the product and renormalises over the first dimension of a matrix.
     """
     # Convert to log domain
-    x_log = np.log(x)
+    x_log = np.log(x + eps)
     # Compute the mean
     geom_sum_log = np.sum(x_log, axis=0)
     # Go back to normal domain and renormalise

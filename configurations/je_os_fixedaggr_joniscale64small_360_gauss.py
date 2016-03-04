@@ -39,7 +39,7 @@ dump_network_loaded_data = False
 batch_size = 8
 sunny_batch_size = 4
 batches_per_chunk = 16
-num_epochs_train = 200 
+num_epochs_train = 200
 
 # - learning rate and method
 base_lr = 0.0001
@@ -69,7 +69,7 @@ use_hough_roi = True
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
-        image_transform.normscale_resize_and_augment_2, 
+        image_transform.normscale_resize_and_augment_2,
         normalised_patch_size=(64,64)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
@@ -84,6 +84,12 @@ create_eval_valid_gen = functools.partial(data_loader.generate_validation_batch,
 create_eval_train_gen = functools.partial(data_loader.generate_validation_batch, set="train")
 create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
 
+def filter_samples(folders):
+    # don't use patients who don't have mre than 6 slices
+    return [
+        folder for folder in folders
+        if data_loader.compute_nr_slices(folder) > 6]
+
 # Input sizes
 image_size = 64
 nr_slices = 20
@@ -92,10 +98,10 @@ data_sizes = {
     "sliced:data:sax:locations": (batch_size, nr_slices),
     "sliced:data:sax:is_not_padded": (batch_size, nr_slices),
     "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
-    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), 
+    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size),
-    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), 
+    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size),
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
@@ -189,7 +195,7 @@ def build_model():
     ldsys2drop = nn.layers.dropout(ldsys2, p=0.5)
     l_sys_mu = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(10.0), nonlinearity=None)
     l_sys_sigma = nn.layers.DenseLayer(ldsys2drop, num_units=1, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(3.), nonlinearity=lb_softplus(.1))
-    
+
     # Diastole Dense layers
     lddia1 = nn.layers.DenseLayer(l5, num_units=512, W=nn.init.Orthogonal("relu"), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 

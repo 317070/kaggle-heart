@@ -113,7 +113,7 @@ def orthogonal_projection_on_slice(percentual_coordinate, source_metadata, targe
 
 
 
-for patient_id in xrange(595,600):
+for patient_id in xrange(700,701):
     print "Looking for the pickle files..."
     files = sorted(glob.glob(os.path.expanduser("/data/dsb15_pkl/pkl_validate/%d/study/*.pkl" % patient_id)))
 

@@ -251,6 +251,53 @@ class JeroenLayerDists(lasagne.layers.MergeLayer):
             sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
 
 
+class JeroenLayerDiscs(lasagne.layers.MergeLayer):
+    """Uses better discs instead of pyramids
+    """
+    def __init__(self, incomings, rescale_input=1.0, **kwargs):
+        super(JeroenLayerDiscs, self).__init__(incomings, **kwargs)
+        self.rescale_input = rescale_input
+
+    def get_output_shape_for(self, input_shapes):
+        return (input_shapes[0][0], 2)
+
+    def get_output_for(self, inputs, **kwargs):
+        mu_area, sigma_area, is_not_padded, slicedists = inputs
+
+        # Rescale input
+        mu_area = mu_area / self.rescale_input
+        sigma_area = sigma_area / self.rescale_input
+
+        # For each slice pair, compute if both of them are valid
+        is_pair_not_padded = is_not_padded[:, :-1] + is_not_padded[:, 1:] > 1.5
+
+        # Compute the distance between slices
+        h = slicedists[:, :-1]
+
+        # Compute mu for each slice pair
+        m1 = mu_area[:, :-1]
+        m2 = mu_area[:, 1:]
+        eps = 1e-2
+        mu_volumes = (m1 + m2) * h / 2.0
+        mu_volumes = mu_volumes * is_pair_not_padded
+
+        # Compute sigma for each slice pair
+        s1 = sigma_area[:, :-1]
+        s2 = sigma_area[:, 1:]
+        sigma_volumes = h * T.sqrt(s1**2 + s2**2 + eps) / 2.0
+        sigma_volumes = sigma_volumes * is_pair_not_padded
+
+        # Compute mu and sigma per patient
+        mu_volume_patient = T.sum(mu_volumes, axis=1)
+        sigma_volume_patient = T.sqrt(T.clip(T.sum(sigma_volumes**2, axis=1), eps, utils.maxfloat))
+
+        # Concat and return
+        return T.concatenate([
+            mu_volume_patient.dimshuffle(0, 'x'),
+            sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
+
+
+
 class WeightedMeanLayer(lasagne.layers.MergeLayer):
     """This layer doesn't overfit; it already knows what to do.
 
@@ -340,70 +387,3 @@ def repeat(input, repeats, axis):
     pattern.insert(axis, "x")
     # print shape_ones, pattern
     return ones * input.dimshuffle(*pattern)
-
-
-
-
-class IraLayer(lasagne.layers.MergeLayer):
-    def __init__(self, l_4ch_mu, l_4ch_sigma, l_2ch_mu, l_2ch_sigma, trainable_scale=False, **kwargs):
-        super(IraLayer, self).__init__([l_4ch_mu, l_4ch_sigma, l_2ch_mu, l_2ch_sigma], **kwargs)
-
-        if trainable_scale:
-            self.W_mu = self.add_param(lasagne.init.Constant(-2.3), (1,), name="W")
-            self.b_mu = self.add_param(lasagne.init.Constant(-20.), (1,), name="b")
-
-            self.W_sigma = self.add_param(lasagne.init.Constant(-2.3), (1,), name="W")
-            self.b_sigma = self.add_param(lasagne.init.Constant(-20.), (1,), name="b")
-
-        self.trainable_scale = trainable_scale
-
-    def get_output_shape_for(self, input_shapes):
-        return input_shapes[0][0], 600, 2
-
-    def get_output_for(self, inputs, **kwargs):
-        eps = 1e-7
-        mu_a, sigma_a, mu_b, sigma_b = inputs
-
-        # Rescale input
-        if self.trainable_scale:
-            mu_a = mu_a * T.exp(self.W_mu[0]) + T.exp(self.b_mu[0])
-            sigma_a = sigma_a * T.exp(self.W_sigma[0]) + T.exp(self.b_sigma[0])
-
-            mu_b = mu_b * T.exp(self.W_mu[0]) + T.exp(self.b_mu[0])
-            sigma_b = sigma_b * T.exp(self.W_sigma[0]) + T.exp(self.b_sigma[0])
-
-        # Compute the distance between slices
-        h = 0.1  # mm to cm
-
-        # Compute mu for each slice pair
-        mu_volumes = mu_a * mu_b * h
-        #  (batch, time, height)
-
-        # Compute sigma for each slice pair
-        var_a = sigma_a ** 2
-        var_b = sigma_b ** 2
-        var_volumes = (var_a * var_b + var_a * mu_b ** 2 + var_b * mu_a ** 2) * h ** 2
-        #  (batch, time, height)
-
-        # Compute mu and sigma per patient
-
-        mu_volume_patient = np.pi / 4. * T.sum(mu_volumes, axis=2)
-        #  (batch, time)
-
-        sigma_volume_patient = np.pi / 4. * T.sqrt(T.clip(T.sum(var_volumes, axis=2), eps, utils.maxfloat))
-        sigma_volume_patient = T.clip(sigma_volume_patient, eps, utils.maxfloat)
-        #  (batch, time)
-
-        x_axis = theano.shared(np.arange(0, 600, dtype='float32')).dimshuffle('x', 'x', 0)
-        x = (x_axis - mu_volume_patient.dimshuffle(0, 1, 'x')) / (sigma_volume_patient.dimshuffle(0, 1, 'x') )
-        prediction_matrix = (T.erf(x) + 1)/2
-
-        #  (batch, time, 600)
-
-        # max because distribution of smaller one will lie higher
-        l_systole = T.max(prediction_matrix, axis=1)
-        l_diastole = T.min(prediction_matrix, axis=1)
-        #  (batch, 600)
-
-        return T.concatenate([l_systole.dimshuffle(0, 1, 'x'),
-                              l_diastole.dimshuffle(0, 1, 'x')], axis=2)

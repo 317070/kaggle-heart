@@ -36,16 +36,17 @@ dump_network_loaded_data = False
 
 # Training (schedule) parameters
 # - batch sizes
-batch_size = 8
+batch_size = 4
 sunny_batch_size = 4
-batches_per_chunk = 16
-num_epochs_train = 120 
+batches_per_chunk = 32
+num_epochs_train = 150 
 
 # - learning rate and method
 base_lr = 0.0001
 learning_rate_schedule = {
     0: base_lr,
-    9*num_epochs_train/10: base_lr/10,
+    8*num_epochs_train/10: base_lr/10,
+    19*num_epochs_train/20: base_lr/100,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -57,27 +58,17 @@ cleaning_processes_post = [
     functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
-    "rotation": (-180, 180),
+    "rotate": (-180, 180),
     "shear": (0, 0),
-    "translation": (-8, 8),
+    "zoom_x": (0.75, 1.25),
+    "zoom_y": (0.75, 1.25),
+    "skew_x": (-10, 10),
+    "skew_y": (-10, 10),
+    "translate_x": (-8, 8),
+    "translate_y": (-8, 8),
     "flip_vert": (0, 1),
     "roll_time": (0, 0),
-    "flip_time": (0, 0),
-    "zoom_x": (.75, 1.25),
-    "zoom_y": (.75, 1.25),
-    "change_brightness": (-0.3, 0.3),
-}
-
-augmentation_params_test = {
-    "rotation": (-180, 180),
-    "shear": (0, 0),
-    "translation": (-8, 8),
-    "flip_vert": (0, 1),
-    "roll_time": (0, 0),
-    "flip_time": (0, 0),
-    "zoom_x": (.80, 1.20),
-    "zoom_y": (.80, 1.20),
-    "change_brightness": (-0.2, 0.2),
+    "flip_time": (0, 0)
 }
 
 use_hough_roi = True
@@ -85,7 +76,7 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(80,80)))
+        normalised_patch_size=(64,64)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -101,19 +92,20 @@ create_test_gen = functools.partial(data_loader.generate_test_batch, set=["valid
 
 def filter_samples(folders):
     # don't use patients who don't have mre than 6 slices
-    return [
-        folder for folder in folders
-        if data_loader.compute_nr_slices(folder) > 6]
+    import glob
+    return folders
 
 # Input sizes
 image_size = 64
-nr_slices = 20
+nr_slices = 22
 data_sizes = {
     "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:sax:locations": (batch_size, nr_slices),
     "sliced:data:sax:is_not_padded": (batch_size, nr_slices),
     "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
-    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), 
+    "sliced:data:singleslice:2ch": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:singleslice:4ch": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
+    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size),
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), 
@@ -135,7 +127,7 @@ def build_objective(interface_layers):
 # Testing
 postprocess = postprocess.postprocess
 test_time_augmentations = 100  # More augmentations since a we only use single slices
-#tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
+tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 
 # nonlinearity putting a lower bound on it's output
@@ -163,6 +155,16 @@ rnn_layer = functools.partial(nn.layers.RecurrentLayer,
 # Architecture
 def build_model():
 
+    import j6_2ch_gauss, j6_4ch_gauss
+    meta_2ch = j6_2ch_gauss.build_model()
+    meta_4ch = j6_4ch_gauss.build_model()
+
+    l_meta_2ch_systole = nn.layers.DenseLayer(meta_2ch["meta_outputs"]["systole"], num_units=64, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l_meta_2ch_diastole = nn.layers.DenseLayer(meta_2ch["meta_outputs"]["diastole"], num_units=64, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+
+    l_meta_4ch_systole = nn.layers.DenseLayer(meta_4ch["meta_outputs"]["systole"], num_units=64, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l_meta_4ch_diastole = nn.layers.DenseLayer(meta_4ch["meta_outputs"]["diastole"], num_units=64, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+
     #################
     # Regular model #
     #################
@@ -178,15 +180,17 @@ def build_model():
     # Convolutional layers and some dense layers are defined in a submodel
     l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
 
-    import je_ss_jonisc80small_360_gauss_longer_augzoombright
-    submodel = je_ss_jonisc80small_360_gauss_longer_augzoombright.build_model(l0_slices)
+    import je_ss_jonisc64small_360_gauss_longer
+    submodel = je_ss_jonisc64small_360_gauss_longer.build_model(l0_slices)
 
     # Systole Dense layers
     l_sys_mu = submodel["meta_outputs"]["systole:mu"]
     l_sys_sigma = submodel["meta_outputs"]["systole:sigma"]
+    l_sys_meta =  submodel["meta_outputs"]["systole"]
     # Diastole Dense layers
     l_dia_mu = submodel["meta_outputs"]["diastole:mu"]
     l_dia_sigma = submodel["meta_outputs"]["diastole:sigma"]
+    l_dia_meta =  submodel["meta_outputs"]["diastole"]
 
     # AGGREGATE SLICES PER PATIENT
     l_scaled_slice_locations = layers.TrainableScaleLayer(lin_slice_locations, scale=nn.init.Constant(0.1), trainable=False)
@@ -198,6 +202,15 @@ def build_model():
 
     l_systole = layers.MuSigmaErfLayer(l_pat_sys_aggr_mu_sigma)
 
+    l_sys_meta = nn.layers.DenseLayer(nn.layers.ReshapeLayer(l_sys_meta, (-1, nr_slices, 512)), num_units=64, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+
+    l_meta_systole = nn.layers.ConcatLayer([l_meta_2ch_systole, l_meta_4ch_systole, l_sys_meta])
+    l_weights = nn.layers.DenseLayer(l_meta_systole, num_units=512, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l_weight_mean = nn.layers.DenseLayer(l_weights, num_units=3, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
+    l_weight_certainty = nn.layers.DenseLayer(l_weights, num_units=1, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
+    l_weighted_mean = layers.WeightedMeanLayer(l_weight_mean, [l_systole, meta_2ch["outputs"]["systole"], meta_4ch["outputs"]["systole"]])
+    systole_output = layers.IncreaseCertaintyLayer(l_weight_certainty, l_weighted_mean)
+
     # Diastole
     l_pat_dia_ss_mu = nn.layers.ReshapeLayer(l_dia_mu, (-1, nr_slices))
     l_pat_dia_ss_sigma = nn.layers.ReshapeLayer(l_dia_sigma, (-1, nr_slices))
@@ -205,17 +218,29 @@ def build_model():
 
     l_diastole = layers.MuSigmaErfLayer(l_pat_dia_aggr_mu_sigma)
 
+    l_dia_meta = nn.layers.DenseLayer(nn.layers.ReshapeLayer(l_dia_meta, (-1, nr_slices, 512)), num_units=64, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
 
-    submodels = [submodel]
+    l_meta_diastole = nn.layers.ConcatLayer([l_meta_2ch_diastole, l_meta_4ch_diastole, l_dia_meta])
+    l_weights = nn.layers.DenseLayer(l_meta_diastole, num_units=512, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.rectify)
+    l_weight_mean = nn.layers.DenseLayer(l_weights, num_units=3, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
+    l_weight_certainty = nn.layers.DenseLayer(l_weights, num_units=1, W=nn.init.Orthogonal(), b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.identity)
+    l_weighted_mean = layers.WeightedMeanLayer(l_weight_mean, [l_diastole, meta_2ch["outputs"]["diastole"], meta_4ch["outputs"]["diastole"]])
+    diastole_output = layers.IncreaseCertaintyLayer(l_weight_certainty, l_weighted_mean)
+
+    submodels = [submodel, meta_2ch, meta_4ch]
+
+
     return {
-        "inputs":{
+        "inputs":dict({
             "sliced:data:sax": l0,
             "sliced:data:sax:is_not_padded": lin_slice_mask,
             "sliced:data:sax:locations": lin_slice_locations,
-        },
+        }, **{ k: v for d in [model["inputs"] for model in [meta_2ch, meta_4ch]]
+               for k, v in d.items() }
+        ),
         "outputs": {
-            "systole": l_systole,
-            "diastole": l_diastole,
+            "systole": systole_output,
+            "diastole": diastole_output,
         },
         "regularizable": dict(
             {},
@@ -225,7 +250,17 @@ def build_model():
                 for k, v in d.items() }
         ),
         "pretrained":{
-            je_ss_jonisc80small_360_gauss_longer_augzoombright.__name__: submodel["outputs"],
-        }
+            je_ss_jonisc64small_360_gauss_longer.__name__: submodel["outputs"],
+            j6_2ch_gauss.__name__: meta_2ch["outputs"],
+            j6_4ch_gauss.__name__: meta_4ch["outputs"],
+        },
+        #"cutoff_gradients": [
+        #] + [ v for d in [model["meta_outputs"] for model in [meta_2ch, meta_4ch] if "meta_outputs" in model]
+        #       for v in d.values() ]
     }
+
+
+
+
+
 

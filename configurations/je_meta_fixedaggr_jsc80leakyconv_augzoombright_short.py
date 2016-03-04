@@ -29,23 +29,23 @@ caching = None
 # Save and validation frequency
 validate_every = 20
 validate_train_set = True
-save_every = 20
-restart_from_save = True
+save_every = 5
+restart_from_save = False
 
 dump_network_loaded_data = False
 
 # Training (schedule) parameters
 # - batch sizes
-batch_size = 8
+batch_size = 1
 sunny_batch_size = 4
-batches_per_chunk = 16
-num_epochs_train = 120 
+batches_per_chunk = 32 *4
+num_epochs_train = 62
 
 # - learning rate and method
-base_lr = 0.0001
+base_lr = 0.00003
 learning_rate_schedule = {
     0: base_lr,
-    9*num_epochs_train/10: base_lr/10,
+    45: base_lr/10,
 }
 momentum = 0.9
 build_updates = updates.build_adam_updates
@@ -84,7 +84,7 @@ use_hough_roi = True
 preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess.preprocess_normscale,
     normscale_resize_and_augment_function=functools.partial(
-        image_transform.normscale_resize_and_augment_2, 
+        image_transform.normscale_resize_and_augment_2,
         normalised_patch_size=(80,80)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
@@ -107,16 +107,16 @@ def filter_samples(folders):
 
 # Input sizes
 image_size = 64
-nr_slices = 20
+nr_slices = 22
 data_sizes = {
     "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:sax:locations": (batch_size, nr_slices),
     "sliced:data:sax:is_not_padded": (batch_size, nr_slices),
     "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
-    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), 
+    "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size),
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size),
-    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), 
+    "sliced:data:ax": (batch_size, 30, 15, image_size, image_size),
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
     # TBC with the metadata
@@ -135,7 +135,7 @@ def build_objective(interface_layers):
 # Testing
 postprocess = postprocess.postprocess
 test_time_augmentations = 100  # More augmentations since a we only use single slices
-#tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
+tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 
 # nonlinearity putting a lower bound on it's output
@@ -178,8 +178,8 @@ def build_model():
     # Convolutional layers and some dense layers are defined in a submodel
     l0_slices = nn.layers.ReshapeLayer(l0, (-1, [2], [3], [4]))
 
-    import je_ss_jonisc80small_360_gauss_longer_augzoombright
-    submodel = je_ss_jonisc80small_360_gauss_longer_augzoombright.build_model(l0_slices)
+    import je_ss_jonisc80_leaky_convroll_augzoombright
+    submodel = je_ss_jonisc80_leaky_convroll_augzoombright.build_model(l0_slices)
 
     # Systole Dense layers
     l_sys_mu = submodel["meta_outputs"]["systole:mu"]
@@ -225,7 +225,12 @@ def build_model():
                 for k, v in d.items() }
         ),
         "pretrained":{
-            je_ss_jonisc80small_360_gauss_longer_augzoombright.__name__: submodel["outputs"],
+            je_ss_jonisc80_leaky_convroll_augzoombright.__name__: submodel["outputs"],
         }
     }
+
+
+
+
+
 

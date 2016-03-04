@@ -19,6 +19,7 @@ import theano.tensor as T
 
 import buffering
 import data_loader
+from paths import MODEL_PATH
 import theano_printer
 import utils
 
@@ -51,7 +52,7 @@ def _check_slicemodel(input_layers):
 
 
 def predict_slice_model(expid, outfile, mfile=None):
-    metadata_path = "/mnt/storage/metadata/kaggle-heart/train/%s.pkl" % (expid if not mfile else mfile)
+    metadata_path = MODEL_PATH + "%s.pkl" % (expid if not mfile else mfile)
 
     if theano.config.optimizer != "fast_run":
         print "WARNING: not running in fast mode!"

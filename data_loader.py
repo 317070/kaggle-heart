@@ -11,6 +11,8 @@ import numpy as np
 
 import configuration
 import disk_access
+from paths import TEMP_FILES_PATH, PKL_TRAIN_DATA_PATH, TRAIN_PATIENT_IDS
+from paths import PKL_TEST_DATA_PATH
 import utils
 import validation_set
 
@@ -23,13 +25,14 @@ print "Loading data"
 # Regular data #
 ################
 # We don't load the regular data directly into memory, since it's too big.
-_DATA_FOLDER = os.path.join("/data", "dsb15_pkl")
-_TRAIN_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_train")
-_TEST_DATA_FOLDER = os.path.join(_DATA_FOLDER, "pkl_validate")
-_TRAIN_LABELS_PATH = os.path.join(_DATA_FOLDER, "train.pkl")
+_DATA_FOLDER = TEMP_FILES_PATH
+
+_TRAIN_DATA_FOLDER = PKL_TRAIN_DATA_PATH
+_TEST_DATA_FOLDER = PKL_TEST_DATA_PATH
+_TRAIN_LABELS_PATH = os.path.join(TEMP_FILES_PATH, "train.pkl")
 
 # TODO: don't make this hardcoded!
-ALL_TRAIN_PATIENT_IDS = range(1, 501)
+ALL_TRAIN_PATIENT_IDS = range(TRAIN_PATIENT_IDS[0], TRAIN_PATIENT_IDS[1] + 1)
 
 def _extract_id_from_path(path):
     return int(re.search(r'/(\d+)/', path).group(1))
@@ -106,6 +109,9 @@ patient_folders = {
     "test": test_patient_folders,
 }
 
+def get_patient_id(folder):
+    return _extract_id_from_path(folder)
+
 id_to_index_map = _construct_id_to_index_map(patient_folders)
 num_patients = {set:len(patient_folders[set]) for set in patient_folders}
 NUM_TRAIN_PATIENTS = num_patients['train']
@@ -166,8 +172,8 @@ sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indi
 ###########################
 
 _HOUGH_ROI_PATHS = (
-    '/data/dsb15_pkl/pkl_train_slice2roi.pkl',
-    '/data/dsb15_pkl/pkl_validate_slice2roi.pkl',)
+    TEMP_FILES_PATH + 'pkl_train_slice2roi.pkl',
+    TEMP_FILES_PATH + 'pkl_validate_slice2roi.pkl',)
 _hough_rois = utils.merge_dicts(map(_load_file, _HOUGH_ROI_PATHS))
 
 
@@ -298,6 +304,20 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                     for j in xrange(patient_result[tag].shape[0]-1):
                         patient_result[tag][j] -= patient_result[tag][j+1]
                     patient_result[tag] = np.delete(patient_result[tag],-1,0)
+            elif tag.startswith("sliced:data:chanzoom:4ch"):
+                pass # done by the next one
+            elif tag.startswith("sliced:data:chanzoom:2ch"):
+                l_4ch = [sax for sax in files if "4ch" in sax]
+                l_2ch = [sax for sax in files if "2ch" in sax]
+                patient_result[tag] = [disk_access.load_data_from_file(l_4ch[0]) if l_4ch else None,
+                                       disk_access.load_data_from_file(l_2ch[0]) if l_2ch else None]
+                metadatas_result[tag] = [load_clean_metadata(l_4ch[0]) if l_4ch else None,
+                                         load_clean_metadata(l_2ch[0]) if l_2ch else None,
+                                         None]
+
+
+                l = [sax for sax in files if "sax" in sax]
+                metadatas_result[tag][2] = [load_clean_metadata(f) for f in l]
 
             elif tag.startswith("sliced:data:randomslices"):
                 l = [sax for sax in files if "sax" in sax]

@@ -69,10 +69,13 @@ all_patient_models = get_all_models(PATIENT_MODEL_ORDERED_SLICES_NAMES)
 
 
 for path in all_patient_models:
+    print
     print "Loading %s" % os.path.basename(path) 
     metadata = np.load(path)
     flag_edited = fix_metadata(metadata)
     if flag_edited:
-      print "Changed model %s" % os.path.basename(path)
+        print "Changed model %s" % os.path.basename(path)
+        assert not fix_metadata(metadata)
+        dump_prediction(metadata, path)
 
 

@@ -42,7 +42,7 @@ batches_per_chunk = 16
 num_epochs_train = 300 
 
 # - learning rate and method
-base_lr = 1
+base_lr = 0.001
 learning_rate_schedule = {
     0: base_lr,
     9*num_epochs_train/10: base_lr/10,

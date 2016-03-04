@@ -44,16 +44,20 @@ preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
     preprocess_normscale,
     normscale_resize_and_augment_function=partial(
         image_transform.normscale_resize_and_augment_2, 
-        normalised_patch_size=(128,128)))
+        normalised_patch_size=(80 ,80)))
 #preprocess_train = preprocess_normscale
 preprocess_validation = preprocess  # no augmentation
 preprocess_test = preprocess_with_augmentation  # no augmentation
 test_time_augmentations = 10
 augmentation_params = {
-    "rotation": (0, 0),
+    "rotate": (0, 0),
     "shear": (0, 0),
-    "translation": (0, 0),
+    "translate_x": (0, 0),
+    "translate_y": (0, 0),
     "flip_vert": (0, 0),
+    "zoom_x": (.75, 1.25),
+    "zoom_y": (.75, 1.25),
+    "change_brightness": (-0.3, 0.3),
 }
 
 cleaning_processes = [
@@ -64,8 +68,12 @@ cleaning_processes_post = [
 build_updates = build_adam_updates
 postprocess = postprocess
 
+nr_slices = 20
 data_sizes = {
-    "sliced:data:randomslices": (batch_size, 8, 30, image_size, image_size),
+    "sliced:data:randomslices": (batch_size, nr_slices, 30, image_size, image_size),
+    "sliced:data:sax:locations": (batch_size, nr_slices),
+    "sliced:data:sax:is_not_padded": (batch_size, nr_slices),
+    "sliced:data:sax": (batch_size, nr_slices, 30, image_size, image_size),
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
     "sliced:data:ax:noswitch": (batch_size, 15, 30, image_size, image_size), # 30 time steps, 20 mri_slices, 100 px wide, 100 px high,
     "area_per_pixel:sax": (batch_size, ),

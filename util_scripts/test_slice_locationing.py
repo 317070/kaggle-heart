@@ -76,14 +76,31 @@ def slice_location_finder(metadata_dict):
             scalar = np.inner(v1, v2)
             data["relative_position"] = scalar
 
-    return datadict
+    sorted_indices = [key for key in sorted(datadict.iterkeys(), key=lambda x: datadict[x]["relative_position"])]
+
+    sorted_distances = []
+    for i in xrange(len(sorted_indices)-1):
+        res = []
+        for d1, d2 in [(datadict[sorted_indices[i]], datadict[sorted_indices[i+1]]),
+                       (datadict[sorted_indices[i+1]], datadict[sorted_indices[i]])]:
+            F = np.array(d1["orientation"]).reshape( (2,3) )
+            n = np.cross(F[0,:], F[1,:])
+            n = n/np.sqrt(np.sum(n*n))
+            p = d2["middle_pixel_position"] - d1["position"]
+            distance = np.abs(np.sum(n*p))
+            res.append(distance)
+        sorted_distances.append(np.mean(res))
+
+    print sorted_distances
+
+    return datadict, sorted_indices, sorted_distances
 
 
 
 if __name__ == '__main__':
     import glob, os
     import cPickle as pickle
-    folder_list = glob.glob(os.path.expanduser('~/test/*/') )
+    folder_list = glob.glob(os.path.expanduser('~/storage/data/dsb15_pkl/pkl_train/444/') )
 
     folder_list = sorted(folder_list)
 

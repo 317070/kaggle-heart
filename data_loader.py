@@ -191,14 +191,14 @@ def _enhance_metadata(metadata, patient_id, slice_name):
     roi_center = list(_hough_rois[str(patient_id)][slice_name]['roi_center'])
     if not roi_center == (None, None):
         roi_center[0] = float(roi_center[0]) / metadata['Rows']
-        roi_center[1] = float(roi_center[1]) / metadata['Columns'] 
+        roi_center[1] = float(roi_center[1]) / metadata['Columns']
     metadata['hough_roi'] = tuple(roi_center)
     metadata['hough_roi_radii'] = _hough_rois[str(patient_id)][slice_name]['roi_radii']
     _tag_enhanced(metadata)
 
 
 def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
-                     set="train", preprocess_function=None):
+                     set="train", preprocess_function=None, testaug=False):
     """
     return a dict with the desired data matched to the required tags
     :param wanted_data_tags:
@@ -220,6 +220,7 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         OUTPUT_DATA_SIZE_TYPE = {
             "systole": (matrix_size, "float32"),
             "diastole": (matrix_size, "float32"),
+            "average": (matrix_size, "float32"),
             "systole:onehot": (matrix_size, "float32"),
             "diastole:onehot": (matrix_size, "float32"),
             "systole:class_weight": (matrix_size, "float32"),
@@ -242,6 +243,10 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 chunk_shape[0] = chunk_shape[0] * _config().batches_per_chunk
                 chunk_shape = tuple(chunk_shape)
                 result["input"][tag] = np.zeros(chunk_shape, dtype="float32")
+
+        if "classification_correction_function" in wanted_output_tags:
+            result["output"]["classification_correction_function"] = [lambda x:x] * no_samples
+
         return result
 
     result = initialise_empty()
@@ -277,7 +282,8 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 else:
                     l = [sax for sax in files if "sax" in sax]
                 if not l:
-                    print "Warning: patient %d has no images of this type" % id
+                    if hasattr(_config(), 'check_inputs') and _config().check_inputs:
+                        print "Warning: patient %d has no images of this type" % id
                     continue
                 if "middle" in tag:
                     # Sort sax files, based on the integer in their name
@@ -300,7 +306,22 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in chosen_files]
                 metadatas_result[tag] = [load_clean_metadata(f) for f in chosen_files]
 
-            elif tag.startswith("sliced:data:ax"):
+            elif tag.startswith("sliced:data:sax:locations"):
+                pass  # will be filled in by sliced:data:sax
+
+            elif tag.startswith("sliced:data:sax:distances"):
+                pass  # will be filled in by sliced:data:sax
+
+            elif tag.startswith("sliced:data:sax:is_not_padded"):
+                pass  # will be filled in by sliced:data:sax
+
+            elif tag.startswith("sliced:data:sax:distances"):
+                pass  # will be filled in by the next one
+
+            elif tag.startswith("sliced:data:sax:distances"):
+                pass  # will be filled in by the next one
+
+            elif tag.startswith("sliced:data:sax"):
                 patient_result[tag] = [disk_access.load_data_from_file(f) for f in files if "sax" in f]
                 metadatas_result[tag] = [load_clean_metadata(f) for f in files if "sax" in f]
 
@@ -322,10 +343,14 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
             elif tag.startswith("sliced:meta"):
                 # get the key used in the pickle
                 key = tag[len("slided:meta:"):]
-                patient_result[tag] = disk_access.load_metadata_from_file(files[0])[0][key]
+                metadata_field = disk_access.load_metadata_from_file(files[0])[0][key]
+                patient_result[tag] = metadata_field
             # add others when needed
 
-        preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result)
+        label_correction_function, classification_correction_function = preprocess_function(patient_result, result=result["input"], index=i, metadata=metadatas_result, testaug=True)
+
+        if "classification_correction_function" in wanted_output_tags:
+            result["output"]["classification_correction_function"][i] = classification_correction_function
 
         # load the labels
         if "patients" in wanted_output_tags:
@@ -337,13 +362,15 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
         # only read labels, when we actually have them
         if id in regular_labels[:, 0]:
             assert regular_labels[id-1, 0]==id
-            V_systole = regular_labels[id-1, 1]
-            V_diastole = regular_labels[id-1, 2]
+            V_systole = label_correction_function(regular_labels[id-1, 1])
+            V_diastole = label_correction_function(regular_labels[id-1, 2])
 
             if "systole" in wanted_output_tags:
                 result["output"]["systole"][i][int(np.ceil(V_systole)):] = 1.0
             if "diastole" in wanted_output_tags:
                 result["output"]["diastole"][i][int(np.ceil(V_diastole)):] = 1.0
+            if "average" in wanted_output_tags:
+                result["output"]["average"][i][int(np.ceil((V_diastole + V_systole)/2.0)):] = 1.0
 
             if "systole:onehot" in wanted_output_tags:
                 result["output"]["systole:onehot"][i][int(np.ceil(V_systole))] = 1.0
@@ -366,8 +393,10 @@ def get_patient_data(indices, wanted_input_tags, wanted_output_tags,
 
 
     # Check if any of the inputs or outputs are still empty!
-    if not hasattr(_config(), 'check_inputs') or _config().check_inputs:
+    if hasattr(_config(), 'check_inputs') and _config().check_inputs:
         for key, value in itertools.chain(result["input"].iteritems(), result["output"].iteritems()):
+            if key=="classification_correction_function":
+                continue
             if not np.any(value): #there are only zeros in value
                 raise Exception("there is an empty value at key %s" % key)
             if not np.isfinite(value).all(): #there are NaN's or infinites somewhere
@@ -411,6 +440,11 @@ def get_sunny_patient_data(indices, set="train"):
             "segmentation": sunny_label_chunk,
         }
     }
+
+
+def compute_nr_slices(patient_folder):
+    files = _in_folder(patient_folder)
+    return len([sax for sax in files if "sax" in sax])
 
 
 def generate_train_batch(required_input_keys, required_output_keys):
@@ -509,7 +543,8 @@ def generate_test_batch(required_input_keys, required_output_keys, augmentation=
             indices = [indices_for_this_set[i] for i in test_sample_numbers if i<len(indices_for_this_set)]
             kaggle_data = get_patient_data(indices, input_keys_to_do, output_keys_to_do,
                                            set=set,
-                                           preprocess_function=_config().preprocess_test)
+                                           preprocess_function=_config().preprocess_test,
+                                           testaug=True)
 
             yield kaggle_data
 

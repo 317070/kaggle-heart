@@ -1,25 +1,26 @@
 """
 take in a numpy tensor, and reshape last 2 dimensions as images to fit the desired shape
 """
-import glob
-import os
 import multiprocessing as mp
 import numpy as np
 import skimage.io
 import skimage.transform
-import utils
-
+from custom_warnings import deprecated
 
 
 tform_identity = skimage.transform.AffineTransform()
 NO_AUGMENT_PARAMS = {
-    "zoom": (1.0, 1.0),
-    "rotation": 0.0,
+    "zoom_x": 1.0,
+    "zoom_y": 1.0,
+    "rotate": 0.0,
     "shear": 0.0,
-    "translation": (0.0, 0.0),
-    "flip_vert": 0,
-    "roll_time": 0,
-    "flip_time": 0,
+    "skew_x": 0.0,
+    "skew_y": 0.0,
+    "translate_x": 0.0,
+    "flip_vert": 0.0,
+    "roll_time": 0.0,
+    "flip_time": 0.0,
+    "change_brightness": 0.0,
 }
 
 def resize_to_make_it_fit(images, output_shape=(50, 50)):
@@ -77,13 +78,8 @@ def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
             build_shift_center_transform(
                 normalised_shape, shift_center, normalised_patch_size))
 
-        augment_tform = build_augmentation_transform(
-            zoom=(1.0, 1.0),    # No zooming to preserve scale!
-            rotation=augment["rotation"],
-            shear=augment["shear"],
-            translation=augment["translation"],
-            flip_vert=augment["flip_vert"]>.5,
-        )
+        # zooming is OK
+        augment_tform = build_augmentation_transform(**augment)
 
         patch_scale = max(
             normalised_patch_size[0]/output_shape[0],
@@ -144,17 +140,12 @@ def normscale_resize_and_augment_2(slices, output_shape=(50, 50), augment=None,
             build_shift_center_transform(
                 normalised_shape, shift_center, normalised_patch_size))
 
-        augment_tform = build_augmentation_transform(
-            zoom=(1.0, 1.0),    # No zooming to preserve scale!
-            rotation=augment["rotation"],
-            shear=augment["shear"],
-            translation=augment["translation"],
-            flip_vert=augment["flip_vert"]>.5,
-        )
+        augment_tform = build_augmentation_transform(**augment)
 
         patch_scale = max(
             float(normalised_patch_size[0])/output_shape[0],
             float(normalised_patch_size[1])/output_shape[1])
+
         tform_patch_scale = build_rescale_transform(
             patch_scale, normalised_patch_size, target_shape=output_shape)
 
@@ -312,27 +303,48 @@ def build_shift_center_transform(image_shape, center_location, patch_size):
         skimage.transform.SimilarityTransform(translation=translation_uncenter))
 
 
-def build_augmentation_transform(zoom=(1.0, 1.0), rotation=0, shear=0, translation=(0, 0), flip=False, flip_vert=False):
-    if flip:
+def build_augmentation_transform(zoom_x=1.0,
+                                 zoom_y=1.0,
+                                 skew_x=0,
+                                 skew_y=0,
+                                 rotate=0,
+                                 shear=0,
+                                 translate_x=0,
+                                 translate_y=0,
+                                 flip=False,
+                                 flip_vert=False,
+                                 **kwargs):
+
+    #print "Not performed transformations:", kwargs.keys()
+
+    if flip > 0.5:
         shear += 180
-        rotation += 180
+        rotate += 180
         # shear by 180 degrees is equivalent to rotation by 180 degrees + flip.
         # So after that we rotate it another 180 degrees to get just the flip.
 
-    if flip_vert:
+    if flip_vert > 0.5:
         shear += 180
 
-    tform_augment = skimage.transform.AffineTransform(scale=(1/zoom[0], 1/zoom[1]), rotation=np.deg2rad(rotation), shear=np.deg2rad(shear), translation=translation)
-    return tform_augment
+    tform_augment = skimage.transform.AffineTransform(scale=(1/zoom_x, 1/zoom_y), rotation=np.deg2rad(rotate), shear=np.deg2rad(shear), translation=(translate_x, translate_y))
+    skew_x = np.deg2rad(skew_x)
+    skew_y = np.deg2rad(skew_y)
+    tform_skew = skimage.transform.ProjectiveTransform(matrix=np.array([[np.tan(skew_x)*np.tan(skew_y) + 1, np.tan(skew_x), 0],
+                                                                        [np.tan(skew_y), 1, 0],
+                                                                        [0, 0, 1]]))
+    return tform_skew + tform_augment
 
-
-def random_perturbation_transform(zoom_range, rotation_range, shear_range, translation_range, do_flip=True, allow_stretch=False, rng=np.random):
+@deprecated
+def random_perturbation_transform(zoom_range=[1.0, 1.0], rotation_range=[0.0, 0.0], skew_x_range=[0.0, 0.0], skew_y_range=[0.0, 0.0], shear_range=[0.0, 0.0], translation_range=[0.0, 0.0], do_flip=True, allow_stretch=False, rng=np.random):
     shift_x = rng.uniform(*translation_range)
     shift_y = rng.uniform(*translation_range)
-    translation = (shift_x, shift_y)
+    translate = (shift_x, shift_y)
 
-    rotation = rng.uniform(*rotation_range)
+    rotate = rng.uniform(*rotation_range)
     shear = rng.uniform(*shear_range)
+
+    skew_x = rng.uniform(*skew_x_range)
+    skew_y = rng.uniform(*skew_y_range)
 
     if do_flip:
         flip = (rng.randint(2) > 0) # flip half of the time
@@ -355,9 +367,18 @@ def random_perturbation_transform(zoom_range, rotation_range, shear_range, trans
         zoom_x = zoom_y = np.exp(rng.uniform(*log_zoom_range))
     # the range should be multiplicatively symmetric, so [1/1.1, 1.1] instead of [0.9, 1.1] makes more sense.
 
-    return build_augmentation_transform((zoom_x, zoom_y), rotation, shear, translation, flip)
+    return build_augmentation_transform(zoom_x=zoom_x,
+                                        zoom_y=zoom_y,
+                                        skew_x=skew_x,
+                                        skew_y=skew_y,
+                                        rotate=rotate,
+                                        shear=shear,
+                                        translate_x=translate[0],
+                                        translate_y=translate[1],
+                                        flip=flip
+                                        )
 
-
+@deprecated
 def perturb(img, augmentation_params, target_shape=(50, 50), rng=np.random):
     # # DEBUG: draw a border to see where the image ends up
     # img[0, :] = 0.5
@@ -371,7 +392,7 @@ def perturb(img, augmentation_params, target_shape=(50, 50), rng=np.random):
     return fast_warp(img, tform_centering + tform_augment, output_shape=target_shape, mode='constant').astype('float32')
 
 ## RESCALING
-
+@deprecated
 def perturb_rescaled(img, scale, augmentation_params, target_shape=(50, 50), rng=np.random):
     """
     scale is a DOWNSCALING factor.
@@ -383,6 +404,7 @@ def perturb_rescaled(img, scale, augmentation_params, target_shape=(50, 50), rng
     return fast_warp(img, tform_rescale + tform_augment, output_shape=target_shape, mode='constant').astype('float32')
 
 # for test-time augmentation
+@deprecated
 def perturb_rescaled_fixed(img, scale, tform_augment, target_shape=(50, 50)):
     """
     scale is a DOWNSCALING factor.

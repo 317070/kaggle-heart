@@ -205,5 +205,9 @@ def build_model():
             lddia3mu: l2_weight_out,
             lddia3sigma: l2_weight_out,
         },
+        "meta_outputs": {
+            "systole": ldsys2,
+            "diastole": lddia2,
+        }
     }
 

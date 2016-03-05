@@ -30,7 +30,7 @@ caching = None
 validate_every = 10
 validate_train_set = True
 save_every = 10
-restart_from_save = True
+restart_from_save = False
 
 # Training (schedule) parameters
 # - batch sizes
@@ -58,8 +58,8 @@ cleaning_processes_post = [
 augmentation_params = {
     "rotate": (-180, 180),
     "shear": (0, 0),
-    "zoom_x": (0.95, 1.05),
-    "zoom_y": (0.95, 1.05),
+    "zoom_x": (0.66, 0.66),
+    "zoom_y": (0.66, 0.66),
     "skew_x": (-10, 10),
     "skew_y": (-10, 10),
     "translate": (-8, 8),

@@ -95,7 +95,7 @@ def get_patient_average_heaviside_predictions(batch_predictions, batch_patient_i
     return patient2cdf
 
 
-def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean='geometric'):
+def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean='arithmetic'):
     """
 
     :param batch_predictions: cdf predictions per slice

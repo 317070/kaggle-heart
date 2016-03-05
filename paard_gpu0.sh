@@ -1,8 +1,10 @@
 #!/bin/bash
 
-#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py gauss_roi_zoom_mask_leaky
-#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train_meta.py meta_gauss_roi_zoom_mask_leaky
+#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py gauss_roi10_big_leaky_after_seqshift
+#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train_meta.py meta_gauss_roi10_big_leaky_after_seqshift
+#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py meta_gauss_roi10_big_leaky_after_seqshift 50 arithmetic
 
-#paard
-THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict.py gauss_roi_zoom_mask_leaky valid 1
-THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict.py gauss_roi10_zoom_mask_leaky_after valid 1
+
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py gauss_roi10_maxout
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train_meta.py meta_gauss_roi10_maxout
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py meta_gauss_roi10_maxout 50 arithmetic

@@ -149,8 +149,7 @@ if set == 'test':
     if n_tta_iterations == 1:
         test_data_iterator.transformation_params = config().valid_transformation_params
     else:
-        test_data_iterator.transformation_params = config().train_transformation_params
-    test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
+        test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
     print 'n test: %d' % test_data_iterator.nsamples
     print 'tta iteration:',

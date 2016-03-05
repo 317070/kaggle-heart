@@ -402,8 +402,7 @@ def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIO
                     #prediction["diastole_average"] = None
 
         validation_dict = {}
-        for patient_ids, set_name in [(validation_patients_indices, "validation"),
-                                          (train_patients_indices,  "train")]:
+        for patient_ids, set_name in [(validation_patients_indices, "validation")]:
             errors = []
             for patient in patient_ids:
                 prediction = predictions[patient-1]

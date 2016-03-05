@@ -1,6 +1,6 @@
-import json
+import json, os
 
-with open('SETTINGS.json') as data_file:
+with open(os.path.dirname(os.path.realpath(__file__)) + '/SETTINGS.json') as data_file:
     PATHS = json.load(data_file)
 
 TRAIN_DATA_PATH = PATHS["TRAIN_DATA_PATH"]

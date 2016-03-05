@@ -247,6 +247,27 @@ def optimize_expert_weights(expert_predictions,
         return expert_weights_result, average_loss, optimal_params  # (NUM_EXPERTS,)
 
 
+def geomav(x, *args, **kwargs):
+    x = x[0]
+    if len(x) == 0:
+        return np.zeros(600)
+    res = np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
+    return res[None,:,:]
+
+
+def normalav(x, *args, **kwargs):
+    x = x[0]
+    if len(x) == 0:
+        return np.zeros(600)
+    return np.mean(x, axis=0)[None,:,:]
+
+
+def prodav(x, *args, **kwargs):
+    x = x[0]
+    if len(x) == 0:
+        return np.zeros(600)
+    return np.cumsum(utils.norm_prod(utils.cdf_to_pdf(x)))[None,:,:]
+
 
 def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
     weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights)
@@ -264,6 +285,51 @@ def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weight
     else:
         res = np.cumsum(np.sum(pdf * weights, axis=(0,1)) / np.sum(weights, axis=(0,1)))
     return res
+
+
+
+def get_validate_crps(predictions, labels):
+    errors = []
+    for patient in validation_patients_indices:
+        prediction = predictions[patient-1]
+        if "systole_average" in prediction and prediction["systole_average"] is not None:
+            assert patient == labels[patient-1, 0]
+            error = utils.CRSP(prediction["systole_average"], labels[patient-1, 1])
+            errors.append(error)
+            error = utils.CRSP(prediction["diastole_average"], labels[patient-1, 2])
+            errors.append(error)
+    if len(errors)>0:
+        errors = np.array(errors)
+        estimated_CRSP = np.mean(errors)
+
+    return estimated_CRSP
+
+
+def calculate_tta_average(predictions, average_method, average_systole, average_diastole):
+    already_printed = False
+    for prediction in predictions:
+        if prediction["systole"].size>0 and prediction["diastole"].size>0:
+            assert np.isfinite(prediction["systole"][None,:,:]).all()
+            assert np.isfinite(prediction["diastole"][None,:,:]).all()
+            prediction["systole_average"] = average_method(prediction["systole"][None,:,:], average=average_systole)
+            prediction["diastole_average"] = average_method(prediction["diastole"][None,:,:], average=average_diastole)
+            try:
+                test_if_valid_distribution(prediction["systole_average"])
+                test_if_valid_distribution(prediction["diastole_average"])
+            except:
+                if not already_printed:
+                    print "WARNING: These distributions are not distributions"
+                    already_printed = True
+                prediction["systole_average"] = make_monotone_distribution(prediction["systole_average"])
+                prediction["diastole_average"] = make_monotone_distribution(prediction["diastole_average"])
+                test_if_valid_distribution(prediction["systole_average"])
+                test_if_valid_distribution(prediction["diastole_average"])
+        else:
+            # average distributions get zero weight later on
+            #prediction["systole_average"] = average_systole
+            #prediction["diastole_average"] = average_diastole
+            prediction["systole_average"] = None
+            prediction["diastole_average"] = None
 
 
 
@@ -376,30 +442,21 @@ def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIO
             predictions = pickle.load(f)['predictions']
 
         if redo_tta:
-            already_printed = False
-            for prediction in predictions:
-                if prediction["systole"].size>0 and prediction["diastole"].size>0:
-                    assert np.isfinite(prediction["systole"][None,:,:]).all()
-                    assert np.isfinite(prediction["diastole"][None,:,:]).all()
-                    prediction["systole_average"] = average_method(prediction["systole"][None,:,:], average=average_systole)
-                    prediction["diastole_average"] = average_method(prediction["diastole"][None,:,:], average=average_diastole)
-                    try:
-                        test_if_valid_distribution(prediction["systole_average"])
-                        test_if_valid_distribution(prediction["diastole_average"])
-                    except:
-                        if not already_printed:
-                            print "WARNING: These distributions are not distributions"
-                            already_printed = True
-                        prediction["systole_average"] = make_monotone_distribution(prediction["systole_average"])
-                        prediction["diastole_average"] = make_monotone_distribution(prediction["diastole_average"])
-                        test_if_valid_distribution(prediction["systole_average"])
-                        test_if_valid_distribution(prediction["diastole_average"])
-                else:
-                    # average distributions get zero weight later on
-                    prediction["systole_average"] = average_systole
-                    prediction["diastole_average"] = average_diastole
-                    #prediction["systole_average"] = None
-                    #prediction["diastole_average"] = None
+            best_average_method = None
+            best_average_crps = utils.maxfloat
+            for average_method in [geomav,
+                                   normalav,
+                                   prodav,
+                                   weighted_average_method]:
+                calculate_tta_average(predictions, average_method, average_systole, average_diastole)
+                crps = get_validate_crps(predictions, regular_labels)
+                print average_method.__name__,"->",crps
+                if crps<best_average_crps:
+                    best_average_method = average_method
+                    best_average_crps = crps
+            print "picked method",average_method.__name__
+            calculate_tta_average(predictions, best_average_method, average_systole, average_diastole)
+
 
         validation_dict = {}
         for patient_ids, set_name in [(validation_patients_indices, "validation"),

@@ -10,7 +10,9 @@ import skimage.draw
 # import compressed_cache
 from configuration import config
 import utils
+import data_prep_ch
 import skimage.exposure, skimage.filters
+import os
 
 
 def read_labels(file_path):
@@ -350,6 +352,80 @@ def transform_norm_rescale_after(data, metadata, transformation, roi=None, rando
         targets_zoom_factor = 1.
 
     return out_data, targets_zoom_factor
+
+
+def transform_ch(data_ch2, metadata_ch2, data_ch4, metadata_ch4, saxslice2metadata, transformation, sax2roi=None,
+                 random_augmentation_params=None):
+    patch_size = transformation['patch_size']
+    out_shape = (30,) + patch_size
+    out_data_ch2 = np.zeros(out_shape, dtype='float32')
+    out_data_ch4 = np.zeros(out_shape, dtype='float32')
+
+    # if random_augmentation_params=None -> sample new params
+    # if the transformation implies no augmentations then random_augmentation_params remains None
+    if not random_augmentation_params:
+        random_augmentation_params = sample_augmentation_parameters(transformation)
+
+    datadict, sorted_indices, sorted_distances = data_prep_ch.slice_location_finder_jonas(saxslice2metadata)
+
+    top_point_enhanced_metadata = saxslice2metadata[sorted_indices[0]]
+    roi_center = sax2roi[sorted_indices[0]]['roi_center'] if sax2roi else None
+    roi_radii = sax2roi[sorted_indices[0]]['roi_radii'] if sax2roi else None
+    data_prep_ch._enhance_metadata(top_point_enhanced_metadata, roi_center, roi_radii)
+
+    bottom_point_enhanced_metadata = saxslice2metadata[sorted_indices[-1]]
+    roi_center = sax2roi[sorted_indices[-1]]['roi_center'] if sax2roi else None
+    roi_radii = sax2roi[sorted_indices[-1]]['roi_radii'] if sax2roi else None
+    data_prep_ch._enhance_metadata(bottom_point_enhanced_metadata, roi_center, roi_radii)
+
+    trf_2ch, trf_4ch = data_prep_ch.get_chan_transformations(
+        ch2_metadata=metadata_ch2,
+        ch4_metadata=metadata_ch4,
+        top_point_metadata=top_point_enhanced_metadata,
+        bottom_point_metadata=bottom_point_enhanced_metadata,
+        output_width=patch_size[1])
+
+    for ch, ch_out, transform, metadata in [(data_ch4, out_data_ch4, trf_4ch, metadata_ch4),
+                                            (data_ch2, out_data_ch2, trf_2ch, metadata_ch2)]:
+        tform_shift_center, tform_shift_uncenter = build_center_uncenter_transforms(patch_size)
+        zoom_factor = np.sqrt(np.abs(np.linalg.det(transform.params[:2, :2])) * np.prod(metadata["PixelSpacing"]))
+        normalise_zoom_transform = build_augmentation_transform(zoom=(1./zoom_factor, 1./zoom_factor))
+        if random_augmentation_params:
+            augment_tform = build_augmentation_transform(rotation=random_augmentation_params.rotation,
+                                                         shear=random_augmentation_params.shear,
+                                                         translation=random_augmentation_params.translation,
+                                                         flip_x=random_augmentation_params.flip_x,
+                                                         flip_y=random_augmentation_params.flip_y,
+                                                         zoom=random_augmentation_params.zoom)
+
+            total_tform = tform_shift_uncenter + augment_tform + normalise_zoom_transform + tform_shift_center + transform
+        else:
+            total_tform = tform_shift_uncenter + normalise_zoom_transform + tform_shift_center + transform
+
+        for i in xrange(ch.shape[0]):
+            ch_out[i] = fast_warp(ch[i], total_tform, output_shape=patch_size)
+
+        normalize_contrast_zmuv(ch_out)
+
+        # if the sequence is < 30 timesteps, copy last image
+        if ch.shape[0] < out_shape[0]:
+            for j in xrange(ch_out.shape[0], out_shape[0]):
+                ch_out[j] = ch_out[j - 1]
+
+        # if > 30, remove images
+        if ch.shape[0] > out_shape[0]:
+            ch_out = ch_out[:30]
+
+        # shift the sequence for a number of time steps
+        if random_augmentation_params:
+            ch_out = np.roll(ch_out, random_augmentation_params.sequence_shift, axis=0)
+
+    if random_augmentation_params:
+        targets_zoom_factor = random_augmentation_params.zoom[0] * random_augmentation_params.zoom[1]
+    else:
+        targets_zoom_factor = 1.
+
+    return out_data_ch2, out_data_ch4, targets_zoom_factor
 
 
 def make_roi_mask(img_shape, roi_center, roi_radii):

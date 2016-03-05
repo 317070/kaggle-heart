@@ -12,9 +12,10 @@ import utils_heart
 # submission_name2 = sys.argv[2]
 # submission_path1 = 'final_submission-all_except_ira_00115_fixed.csv'
 # submission_path2 = 'final_submission-1457129444.05.csv'
-submission_path_meta = 'meta_final_submission-1457129444.05.csv'
-submission_path_ss = 'ss_final_submission-1456912945.83.csv'
-submission_path_mix = 'mix_final_submission-1457131640.42.csv'
+submission_path_meta = 'submissions/meta_ira_6.csv'
+submission_path_ss = 'submissions/ss_ira_6.csv'
+submission_path_mix = 'submissions/mix_ira_6.csv'
+fixed_submission_path = 'submissions/fixed_submission_ira_6.csv'
 
 
 # submissions paths
@@ -30,7 +31,10 @@ def read_submission(file_path):
         row = l.split(',')
         pid, target = row[0].split('_')
         cdf_string = row[1:]
-        cdf = None if all(x == '' for x in cdf_string[:-1]) else np.float64(cdf_string)
+        if all(x == '' for x in cdf_string[:-1]) or all(x == 'nan' for x in cdf_string[:-1]):
+            cdf = None
+        else:
+            cdf = np.float64(cdf_string)
         pid = int(pid)
         if target == 'Systole':
             pid2cdf0[pid] = cdf
@@ -72,4 +76,4 @@ fixed_predictions = {}
 for pid in patient_ids:
     fixed_predictions[pid] = [pid2cdf0_fixed[pid], pid2cdf1_fixed[pid]]
 
-utils.save_submission(fixed_predictions, 'fixed_submission.csv')
+utils.save_submission(fixed_predictions, fixed_submission_path)

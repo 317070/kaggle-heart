@@ -21,10 +21,10 @@ slice2roi = utils.load_pkl('../pkl_train_slice2roi_10.pkl')
 slice2roi_valid = utils.load_pkl('../pkl_validate_slice2roi_10.pkl')
 slice2roi.update(slice2roi_valid)
 
-patient_path = sorted(glob.glob(data_path + '/634/study'))
+patient_path = sorted(glob.glob(data_path + '/*/study'))
 for p in patient_path:
     print p
-    spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
+    spaths = sorted(glob.glob(p + '/2ch_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))
     slicepath2metadata = {}
     for s in spaths:
         d = data_test.read_slice(s)

@@ -3,7 +3,7 @@ import skimage.transform
 import re
 
 
-def slice_location_finder(metadata_dict):
+def slice_location_finder_jonas(metadata_dict):
     """
     :param metadata_dict: dict with arbitrary keys, and metadata values
     :return: dict with "relative_position" and "middle_pixel_position" (and others)
@@ -78,8 +78,6 @@ def slice_location_finder(metadata_dict):
             distance = np.abs(np.sum(n * p))
             res.append(distance)
         sorted_distances.append(np.mean(res))
-
-    print sorted_distances
 
     return datadict, sorted_indices, sorted_distances
 
@@ -282,3 +280,13 @@ def orthogonal_projection_on_slice(percentual_coordinate, source_metadata, targe
                              [0, 0, 0, 0],
                              [0, 0, 0, 1]]), point)
     return point[:2, 0]  # percentual coordinate as well
+
+
+def _enhance_metadata(metadata, roi_center, roi_radii):
+    # Add hough roi metadata using relative coordinates
+    new_roi_center = [0,0]
+    if roi_center is not None:
+        new_roi_center[0] = float(roi_center[0]) / metadata['Rows']
+        new_roi_center[1] = float(roi_center[1]) / metadata['Columns']
+    metadata['hough_roi'] = tuple(new_roi_center)
+    metadata['hough_roi_radii'] = roi_radii

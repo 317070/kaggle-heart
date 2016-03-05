@@ -383,18 +383,20 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 )
 
             ch4_3d_patient_tensor, ch2_3d_patient_tensor = [], []
+            ch4_data = data[0]
+            ch2_data = data[1]
+            if ch4_data is None and ch2_data is not None:
+                ch4_data = ch2_data
+                ch4_metadata = ch2_metadata
+            if ch2_data is None and ch4_data is not None:
+                ch2_data = ch4_data
+                ch2_metadata = ch4_metadata
 
-            if data[0] is None and data[1] is not None:
-                data[0] = data[1]
-            if data[1] is None and data[0] is not None:
-                data[1] = data[0]
-
-            for ch, ch_result, transform, metadata in [(data[0], ch4_3d_patient_tensor, trf_4ch, ch4_metadata),
-                                                        (data[1], ch2_3d_patient_tensor, trf_2ch, ch2_metadata)]:
-                if augmentation_params:
-                    tform_shift_center, tform_shift_uncenter = build_center_uncenter_transforms(desired_shape[-2:])
-                    zoom_factor = np.abs(np.linalg.det(transform.params[:2,:2])) * np.prod(metadata["PixelSpacing"])
-                    normalise_zoom_transform = build_augmentation_transform(zoom_x=1./zoom_factor, zoom_y=1./zoom_factor)
+            for ch, ch_result, transform, metadata in [(ch4_data, ch4_3d_patient_tensor, trf_4ch, ch4_metadata),
+                                                        (ch2_data, ch2_3d_patient_tensor, trf_2ch, ch2_metadata)]:
+                tform_shift_center, tform_shift_uncenter = build_center_uncenter_transforms(desired_shape[-2:])
+                zoom_factor = np.abs(np.linalg.det(transform.params[:2,:2])) * np.prod(metadata["PixelSpacing"])
+                normalise_zoom_transform = build_augmentation_transform(zoom_x=1./zoom_factor, zoom_y=1./zoom_factor)
                 if augmentation_params:
                     augment_tform = build_augmentation_transform(**augmentation_params)
                     total_tform = tform_shift_uncenter + augment_tform + normalise_zoom_transform + tform_shift_center + transform

@@ -25,11 +25,14 @@ def merge_dicts(dicts):
         res.update(d)
     return res
 
-_HOUGH_ROI_PATHS = (
-    os.path.expanduser('/mnt/storage/data/dsb15_pkl/pkl_train_slice2roi.pkl'),
-    os.path.expanduser('/mnt/storage/data/dsb15_pkl/pkl_validate_slice2roi.pkl'),
-)
-_hough_rois = merge_dicts(map(_load_file, _HOUGH_ROI_PATHS))
+try:
+    _HOUGH_ROI_PATHS = (
+        os.path.expanduser('/mnt/storage/data/dsb15_pkl/pkl_train_slice2roi.pkl'),
+        os.path.expanduser('/mnt/storage/data/dsb15_pkl/pkl_validate_slice2roi.pkl'),
+    )
+    _hough_rois = merge_dicts(map(_load_file, _HOUGH_ROI_PATHS))
+except:
+    pass
 
 def _enhance_metadata(metadata, patient_id, slice_name):
     # Add hough roi metadata using relative coordinates

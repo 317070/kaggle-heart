@@ -11,7 +11,7 @@ import numpy as np
 
 import configuration
 import disk_access
-from paths import TEMP_FILES_PATH, PKL_TRAIN_DATA_PATH, TRAIN_PATIENT_IDS
+from paths import TEMP_FILES_PATH, PKL_TRAIN_DATA_PATH, TRAIN_PATIENT_IDS, TEST_PATIENT_IDS
 from paths import PKL_TEST_DATA_PATH
 import utils
 import validation_set
@@ -102,6 +102,7 @@ train_patient_folders, validation_patient_folders, validation_patients_indices, 
     _split_train_val(_find_patient_folders(_TRAIN_DATA_FOLDER)))
 # Find test patients
 test_patient_folders = _find_patient_folders(_TEST_DATA_FOLDER)
+test_patients_indices =  range(TEST_PATIENT_IDS[0], TEST_PATIENT_IDS[1] + 1)
 # Aggregate in a dict
 patient_folders = {
     "train": train_patient_folders,

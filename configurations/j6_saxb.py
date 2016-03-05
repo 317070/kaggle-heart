@@ -29,7 +29,7 @@ caching = None
 # Save and validation frequency
 validate_every = 10
 validate_train_set = True
-save_every = 10
+save_every = 1000
 restart_from_save = False
 
 # Training (schedule) parameters
@@ -56,26 +56,20 @@ cleaning_processes_post = [
     functools.partial(preprocess.normalize_contrast_zmuv, z=2)]
 
 augmentation_params = {
-    "rotate": (0, 0),
+    "rotation": (-180, 180),
     "shear": (0, 0),
-    "zoom_x": (1.0, 1.0),
-    "zoom_y": (1.0, 1.0),
-    "skew_x": (-10, 10),
-    "skew_y": (-10, 10),
-    "translate": (-8, 8),
+    "translation": (-8, 8),
     "flip_vert": (0, 1),
     "roll_time": (0, 0),
-    "flip_time": (0, 0)
+    "flip_time": (0, 0),
 }
 
-def filter_samples(folders):
-    # don't use patients who don't have more than 6 slices
-    return [
-        folder for folder in folders
-        if data_loader.compute_nr_slices(folder) > 6]
-
-
-preprocess_train = functools.partial(preprocess.preprocess_normscale)
+use_hough_roi = True  # use roi to center patches
+preprocess_train = functools.partial(  # normscale_resize_and_augment has a bug
+    preprocess.preprocess_normscale,
+    normscale_resize_and_augment_function=functools.partial(
+        image_transform.normscale_resize_and_augment_2, 
+        normalised_patch_size=(128,128)))
 preprocess_validation = functools.partial(preprocess_train, augment=False)
 preprocess_test = preprocess_train
 
@@ -95,8 +89,6 @@ data_sizes = {
     "sliced:data:singleslice:difference:middle": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice:difference": (batch_size, 29, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:singleslice": (batch_size, 30, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
-    "sliced:data:chanzoom:4ch": (batch_size, 30, image_size, image_size), # 30 time steps, 100 px wide, 100 px high,
-    "sliced:data:chanzoom:2ch": (batch_size, 30, image_size, image_size), # 30 time steps, 100 px wide, 100 px high,
     "sliced:data:ax": (batch_size, 30, 15, image_size, image_size), # 30 time steps, 30 mri_slices, 100 px wide, 100 px high,
     "sliced:data:shape": (batch_size, 2,),
     "sunny": (sunny_batch_size, 1, image_size, image_size)
@@ -119,28 +111,33 @@ test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture
-def build_model():
+def build_model(input_layer = None):
 
     #################
     # Regular model #
     #################
-    l_4ch = nn.layers.InputLayer(data_sizes["sliced:data:chanzoom:4ch"])
-    l_2ch = nn.layers.InputLayer(data_sizes["sliced:data:chanzoom:2ch"])
+    input_size = data_sizes["sliced:data:singleslice"]
 
-    l0 = nn.layers.concat([l_4ch, l_2ch], axis=1)
+    if input_layer:
+        l0 = input_layer
+    else:
+        l0 = nn.layers.InputLayer(input_size)
 
     l1a = nn.layers.dnn.Conv2DDNNLayer(l0,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1b = nn.layers.dnn.Conv2DDNNLayer(l1a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=64, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l1 = nn.layers.dnn.MaxPool2DDNNLayer(l1b, pool_size=(2,2), stride=(2,2))
+    print l1.output_shape
 
     l2a = nn.layers.dnn.Conv2DDNNLayer(l1,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l2b = nn.layers.dnn.Conv2DDNNLayer(l2a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=128, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l2 = nn.layers.dnn.MaxPool2DDNNLayer(l2b, pool_size=(2,2), stride=(2,2))
+    print l2.output_shape
 
     l3a = nn.layers.dnn.Conv2DDNNLayer(l2,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l3b = nn.layers.dnn.Conv2DDNNLayer(l3a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l3c = nn.layers.dnn.Conv2DDNNLayer(l3b, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=256, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l3 = nn.layers.dnn.MaxPool2DDNNLayer(l3c, pool_size=(2,2), stride=(2,2))
+    print l3.output_shape
 
     l4a = nn.layers.dnn.Conv2DDNNLayer(l3,  W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
     l4b = nn.layers.dnn.Conv2DDNNLayer(l4a, W=nn.init.Orthogonal("relu"), filter_size=(3,3), num_filters=512, stride=(1,1), pad="same", nonlinearity=nn.nonlinearities.rectify)
@@ -181,8 +178,7 @@ def build_model():
 
     return {
         "inputs":{
-            "sliced:data:chanzoom:4ch": l_4ch,
-            "sliced:data:chanzoom:2ch": l_2ch,
+            "sliced:data:singleslice": l0
         },
         "outputs": {
             "systole": l_systole,

@@ -1,4 +1,5 @@
 import cPickle as pickle
+from scipy.special import erf
 import glob
 import os
 import matplotlib.pyplot as plt
@@ -24,6 +25,7 @@ from skimage.feature import peak_local_max
 
 from scipy.signal import butter, lfilter, freqz
 from image_transform import fast_warp
+from paths import TRAIN_PATIENT_IDS
 from util_scripts.test_simul_ch import get_chan_transformations, clean_metadata
 from util_scripts.test_simul_ch import _enhance_metadata
 from util_scripts.test_slice_locationing import slice_location_finder
@@ -711,151 +713,208 @@ def best_component_ch(labeled_image):
     return bestregions, best_classes
 
 
+def numpy_mu_sigma_erf(mu_erf, sigma_erf, eps=1e-7):
+    x_axis = np.arange(0, 600, dtype='float32')
+    mu_erf = np.tile(mu_erf, (600,))
+    sigma_erf = np.tile(sigma_erf, (600,))
+    sigma_erf += eps
+
+    x = (x_axis - mu_erf) / (sigma_erf * np.sqrt(2))
+    return (erf(x) + 1)/2
+
 
 if __name__ == "__main__":
-    DATA_PATH = "/data/dsb15_pkl/"
+    DATA_PATH = "/home/oncilladock/"
     do_plot = False
     labels = pickle.load(open(DATA_PATH+"train.pkl"))
 
     data_dump = []
+    if not os.path.isfile("segmentation.pkl"):
+        for patient_id in xrange(1, 701):
+            print "Looking for the pickle files..."
+            if patient_id<=TRAIN_PATIENT_IDS[1]:
+                files = sorted(glob.glob(os.path.expanduser(DATA_PATH+"pkl_train/%d/study/*.pkl" % patient_id)))
+            else:
+                files = sorted(glob.glob(os.path.expanduser(DATA_PATH+"pkl_validate/%d/study/*.pkl" % patient_id)))
 
-    for patient_id in xrange(1, 501):
-        print "Looking for the pickle files..."
-        files = sorted(glob.glob(os.path.expanduser(DATA_PATH+"pkl_train/%d/study/*.pkl" % patient_id)))
+            ch2_file = [f for f in files if "2ch" in f][0]
+            if len([f for f in files if "4ch" in f]) > 0:
+                has_ch4 = True
+                ch4_file = [f for f in files if "4ch" in f][0]
+            else:
+                has_ch4 = False
+                ch4_file = ch2_file
 
-        ch2_file = [f for f in files if "2ch" in f][0]
-        if len([f for f in files if "4ch" in f]) > 0:
-            has_ch4 = True
-            ch4_file = [f for f in files if "4ch" in f][0]
-        else:
-            has_ch4 = False
-            ch4_file = ch2_file
+            sax_files = [f for f in files if "sax" in f]
+            print "%d sax files" % len(sax_files)
 
-        sax_files = [f for f in files if "sax" in f]
-        print "%d sax files" % len(sax_files)
+            ch2_metadata = clean_metadata(pickle.load(open(ch2_file))["metadata"][0])
+            ch4_metadata = clean_metadata(pickle.load(open(ch4_file))["metadata"][0])
 
-        ch2_metadata = clean_metadata(pickle.load(open(ch2_file))["metadata"][0])
-        ch4_metadata = clean_metadata(pickle.load(open(ch4_file))["metadata"][0])
+            ch2_data = pickle.load(open(ch2_file))["data"]
+            ch4_data = pickle.load(open(ch4_file))["data"]
 
-        ch2_data = pickle.load(open(ch2_file))["data"]
-        ch4_data = pickle.load(open(ch4_file))["data"]
+            metadata_dict = dict()
+            for file in files:
+                if "sax" in file:
+                    all_data = pickle.load(open(file,"r"))
+                    metadata_dict[file] = all_data['metadata'][0]
+            datadict, sorted_indices, sorted_distances = slice_location_finder(metadata_dict)
 
-        metadata_dict = dict()
-        for file in files:
-            if "sax" in file:
-                all_data = pickle.load(open(file,"r"))
-                metadata_dict[file] = all_data['metadata'][0]
-        datadict, sorted_indices, sorted_distances = slice_location_finder(metadata_dict)
+            # find top and bottom of my view
 
-        # find top and bottom of my view
+            top_point_enhanced_metadata = datadict[sorted_indices[0]]["middle_pixel_position"]
+            bottom_point_enhanced_metadata = datadict[sorted_indices[-1]]["middle_pixel_position"]
 
-        top_point_enhanced_metadata = datadict[sorted_indices[0]]["middle_pixel_position"]
-        bottom_point_enhanced_metadata = datadict[sorted_indices[-1]]["middle_pixel_position"]
+            top_point_enhanced_metadata = pickle.load(open(sorted_indices[0],"r"))['metadata'][0]
+            _enhance_metadata(top_point_enhanced_metadata, patient_id, slice_name = os.path.basename(sorted_indices[0]))
 
-        top_point_enhanced_metadata = pickle.load(open(sorted_indices[0],"r"))['metadata'][0]
-        _enhance_metadata(top_point_enhanced_metadata, patient_id, slice_name = os.path.basename(sorted_indices[0]))
+            bottom_point_enhanced_metadata = pickle.load(open(sorted_indices[-1],"r"))['metadata'][0]
+            _enhance_metadata(bottom_point_enhanced_metadata, patient_id, slice_name = os.path.basename(sorted_indices[-1]))
 
-        bottom_point_enhanced_metadata = pickle.load(open(sorted_indices[-1],"r"))['metadata'][0]
-        _enhance_metadata(bottom_point_enhanced_metadata, patient_id, slice_name = os.path.basename(sorted_indices[-1]))
+            OUTPUT_SIZE = 100
 
-        OUTPUT_SIZE = 100
+            trf_2ch, trf_4ch = get_chan_transformations(
+                ch2_metadata=ch2_metadata,
+                ch4_metadata=ch4_metadata if has_ch4 else None,
+                top_point_metadata = top_point_enhanced_metadata,
+                bottom_point_metadata = bottom_point_enhanced_metadata,
+                output_width=OUTPUT_SIZE
+                )
 
-        trf_2ch, trf_4ch = get_chan_transformations(
-            ch2_metadata=ch2_metadata,
-            ch4_metadata=ch4_metadata if has_ch4 else None,
-            top_point_metadata = top_point_enhanced_metadata,
-            bottom_point_metadata = bottom_point_enhanced_metadata,
-            output_width=OUTPUT_SIZE
-            )
+            ch4_result = np.array([fast_warp(ch4, trf_4ch, output_shape=(OUTPUT_SIZE, OUTPUT_SIZE)) for ch4 in ch4_data])
 
-        ch4_result = np.array([fast_warp(ch4, trf_4ch, output_shape=(OUTPUT_SIZE, OUTPUT_SIZE)) for ch4 in ch4_data])
+            ch2_result = np.array([fast_warp(ch2, trf_2ch, output_shape=(OUTPUT_SIZE, OUTPUT_SIZE)) for ch2 in ch2_data])
 
-        ch2_result = np.array([fast_warp(ch2, trf_2ch, output_shape=(OUTPUT_SIZE, OUTPUT_SIZE)) for ch2 in ch2_data])
+            segmodel = extract_segmentation_model(ch2_result)
+            ch2_binary, sm = segment_sequence(ch2_result, segmodel = segmodel)
 
-        segmodel = extract_segmentation_model(ch2_result)
-        ch2_binary, sm = segment_sequence(ch2_result, segmodel = segmodel)
+            ch2_regions, dum1, dum2 = extract_binary_regions(ch2_binary)
+            #regions = split_up_binary_regions(regions, opening_param = 1, mshape = disk(3))#opening_param = 5)
+            ch2_bestregions, ch2_bestindices = best_component_ch(ch2_regions)
+            #ch2_bestregions = cut_superfluous_parts(ch2_bestregions, ch2_regions, ch2_bestindices)
 
-        ch2_regions, dum1, dum2 = extract_binary_regions(ch2_binary)
-        #regions = split_up_binary_regions(regions, opening_param = 1, mshape = disk(3))#opening_param = 5)
-        ch2_bestregions, ch2_bestindices = best_component_ch(ch2_regions)
-        #ch2_bestregions = cut_superfluous_parts(ch2_bestregions, ch2_regions, ch2_bestindices)
+            segmodel = extract_segmentation_model(ch4_result)
+            ch4_binary, sm = segment_sequence(ch4_result, segmodel = segmodel)
+            ch4_regions, dum1, dum2 = extract_binary_regions(ch4_binary)
+            #regions = split_up_binary_regions(regions, opening_param = 1, mshape = disk(3))#opening_param = 5)
+            ch4_bestregions, ch4_bestindices = best_component_ch(ch4_regions)
+            #ch4_bestregions = cut_superfluous_parts(ch4_bestregions, ch4_regions, ch4_bestindices)
 
-        segmodel = extract_segmentation_model(ch4_result)
-        ch4_binary, sm = segment_sequence(ch4_result, segmodel = segmodel)
-        ch4_regions, dum1, dum2 = extract_binary_regions(ch4_binary)
-        #regions = split_up_binary_regions(regions, opening_param = 1, mshape = disk(3))#opening_param = 5)
-        ch4_bestregions, ch4_bestindices = best_component_ch(ch4_regions)
-        #ch4_bestregions = cut_superfluous_parts(ch4_bestregions, ch4_regions, ch4_bestindices)
+            volume = np.pi/4./1000. * np.sum(np.sum(ch2_bestregions, axis=-1) * np.sum(ch4_bestregions, axis=-1), axis=-1)
+            systole_est, diastole_est = np.min(volume,axis=0), np.max(volume,axis=0) # in square pixels
+            # how much is one pixel^3?
+            correction_factor = np.sqrt(np.abs(np.linalg.det(trf_4ch.params[:2,:2]))) * np.abs(np.linalg.det(trf_2ch.params[:2,:2])) * ch2_metadata["PixelSpacing"][0]**3
 
-        volume = np.pi/4./1000. * np.sum(np.sum(ch2_bestregions, axis=-1) * np.sum(ch4_bestregions, axis=-1), axis=-1)
-        systole_est, diastole_est = np.min(volume,axis=0), np.max(volume,axis=0) # in square pixels
-        # how much is one pixel^3?
-        correction_factor = np.sqrt(np.abs(np.linalg.det(trf_4ch.params[:2,:2]))) * np.abs(np.linalg.det(trf_2ch.params[:2,:2])) * ch2_metadata["PixelSpacing"][0]**3
+            systole_est = systole_est * correction_factor
+            diastole_est = diastole_est * correction_factor
 
-        systole_est = systole_est * correction_factor
-        diastole_est = diastole_est * correction_factor
+            print "******************************"
+            print "patient:", patient_id
+            print systole_est, diastole_est
+            if patient_id-1<len(labels):
+                print labels[patient_id-1,1], labels[patient_id-1,2]
+                data_dump.append([systole_est, diastole_est, labels[patient_id-1,1], labels[patient_id-1,2]])
+            else:
+                data_dump.append([systole_est, diastole_est, None, None])
+            print "******************************"
+            pickle.dump(data_dump, open("segmentation.pkl", "wb"))
 
-        print "******************************"
-        print "patient:", patient_id
-        print systole_est, diastole_est
-        print labels[patient_id-1,1], labels[patient_id-1,2]
-        data_dump.append([systole_est, diastole_est, labels[patient_id-1,1], labels[patient_id-1,2]])
-        print "******************************"
-        pickle.dump(data_dump, open("segmentation.pkl", "wb"))
+            if do_plot:
+                fig = plt.figure()
+                plt.subplot(221)
+                def init_out1():
+                    im1.set_data(ch2_bestregions[0])
 
-        if do_plot:
-            fig = plt.figure()
-            plt.subplot(221)
-            def init_out1():
-                im1.set_data(ch2_bestregions[0])
+                def animate_out1(i):
+                    im1.set_data(ch2_bestregions[i])
+                    return im1
 
-            def animate_out1(i):
-                im1.set_data(ch2_bestregions[i])
-                return im1
+                im1 = fig.gca().imshow(ch2_bestregions[0])
+                fig.gca().set_aspect('equal')
+                anim1 = animation.FuncAnimation(fig, animate_out1, init_func=init_out1, frames=30, interval=50)
 
-            im1 = fig.gca().imshow(ch2_bestregions[0])
-            fig.gca().set_aspect('equal')
-            anim1 = animation.FuncAnimation(fig, animate_out1, init_func=init_out1, frames=30, interval=50)
+                plt.subplot(222)
 
-            plt.subplot(222)
+                def init_out2():
+                    im2.set_data(ch4_bestregions[0])
 
-            def init_out2():
-                im2.set_data(ch4_bestregions[0])
+                def animate_out2(i):
+                    im2.set_data(ch4_bestregions[i])
+                    return im2
 
-            def animate_out2(i):
-                im2.set_data(ch4_bestregions[i])
-                return im2
+                im2 = fig.gca().imshow(ch4_bestregions[0])
+                fig.gca().set_aspect('equal')
+                anim2 = animation.FuncAnimation(fig, animate_out2, init_func=init_out2, frames=30, interval=50)
 
-            im2 = fig.gca().imshow(ch4_bestregions[0])
-            fig.gca().set_aspect('equal')
-            anim2 = animation.FuncAnimation(fig, animate_out2, init_func=init_out2, frames=30, interval=50)
+                plt.subplot(223)
 
-            plt.subplot(223)
+                def init_out3():
+                    im3.set_data(ch2_result[0])
 
-            def init_out3():
-                im3.set_data(ch2_result[0])
+                def animate_out3(i):
+                    im3.set_data(ch2_result[i])
+                    return im3
+                ch2_result[:,:,50] = 0
+                im3 = fig.gca().imshow(ch2_result[0])
+                fig.gca().set_aspect('equal')
+                anim3 = animation.FuncAnimation(fig, animate_out3, init_func=init_out3, frames=30, interval=50)
 
-            def animate_out3(i):
-                im3.set_data(ch2_result[i])
-                return im3
-            ch2_result[:,:,50] = 0
-            im3 = fig.gca().imshow(ch2_result[0])
-            fig.gca().set_aspect('equal')
-            anim3 = animation.FuncAnimation(fig, animate_out3, init_func=init_out3, frames=30, interval=50)
+                plt.subplot(224)
 
-            plt.subplot(224)
+                def init_out4():
+                    im4.set_data(ch4_result[0])
 
-            def init_out4():
-                im4.set_data(ch4_result[0])
+                def animate_out4(i):
+                    im4.set_data(ch4_result[i])
+                    return im4
 
-            def animate_out4(i):
-                im4.set_data(ch4_result[i])
-                return im4
+                ch4_result[:,:,50] = 0
+                im4 = fig.gca().imshow(ch4_result[0])
+                fig.gca().set_aspect('equal')
+                anim4 = animation.FuncAnimation(fig, animate_out4, init_func=init_out4, frames=30, interval=50)
 
-            ch4_result[:,:,50] = 0
-            im4 = fig.gca().imshow(ch4_result[0])
-            fig.gca().set_aspect('equal')
-            anim4 = animation.FuncAnimation(fig, animate_out4, init_func=init_out4, frames=30, interval=50)
+                plt.show()
+    else:
+        data_dump = pickle.load(open("segmentation.pkl", "rb"))
 
-            plt.show()
+    data_dump = np.array(data_dump)
+
+    predictions = [{"patient": i+1,
+                    "systole": np.zeros((0,600)),
+                    "diastole": np.zeros((0,600))
+                    } for i in xrange(700)]
+
+    data_dump[data_dump > 600] = 600
+    data_dump[data_dump < 0] = 0
+
+    params = np.polyfit(data_dump[:,0], data_dump[:,2], 1)
+    data_dump[:,0] = data_dump[:,0]*params[0]+params[1]
+    error = np.abs(data_dump[:,0] - data_dump[:,2])
+    params_error = np.polyfit(data_dump[:,0], error, 1)
+
+    for i,v in enumerate(data_dump[:,0]):
+        predictions[i]["systole"] = numpy_mu_sigma_erf(v, np.sqrt(params_error[0]*v+params_error[1]))[None,:]
+
+    params = np.polyfit(data_dump[:,1], data_dump[:,3], 1)
+    data_dump[:,1] = data_dump[:,1]*params[0]+params[1]
+    error = np.abs(data_dump[:,1] - data_dump[:,3])
+    params_error = np.polyfit(data_dump[:,1], error, 1)
+
+    for i,v in enumerate(data_dump[:,1]):
+        predictions[i]["diastole"] = numpy_mu_sigma_erf(v, np.sqrt(params_error[0]*v+params_error[1]))[None,:]
+
+
+    # calculate CRPS
+    crps = []
+    for pred, label in zip(predictions[:500],labels):
+        assert pred["patient"]==label[0]
+        target_sys = np.zeros( (600,) , dtype='float32')
+        target_sys[int(np.ceil(label[1])):] = 1  # don't forget to ceil!
+        crps.append(np.mean( (pred["systole"][0] - target_sys)**2 ))
+        target_dia = np.zeros( (600,) , dtype='float32')
+        target_dia[int(np.ceil(label[2])):] = 1  # don't forget to ceil!
+        crps.append(np.mean( (pred["diastole"][0] - target_dia)**2 ))
+
+    print "crps:", np.mean(crps)
 

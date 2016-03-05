@@ -383,26 +383,33 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 )
 
             ch4_3d_patient_tensor, ch2_3d_patient_tensor = [], []
+            ch4_data = data[0]
+            ch2_data = data[1]
+            if ch4_data is None and ch2_data is not None:
+                ch4_data = ch2_data
+                ch4_metadata = ch2_metadata
+            if ch2_data is None and ch4_data is not None:
+                ch2_data = ch4_data
+                ch2_metadata = ch4_metadata
 
-            if data[0] is None and data[1] is not None:
-                data[0] = data[1]
-            if data[1] is None and data[0] is not None:
-                data[1] = data[0]
-
-            for ch, ch_result, transform in [(data[0], ch4_3d_patient_tensor, trf_4ch),
-                                             (data[1], ch2_3d_patient_tensor, trf_2ch)]:
+            for ch, ch_result, transform, metadata in [(ch4_data, ch4_3d_patient_tensor, trf_4ch, ch4_metadata),
+                                                        (ch2_data, ch2_3d_patient_tensor, trf_2ch, ch2_metadata)]:
+                tform_shift_center, tform_shift_uncenter = build_center_uncenter_transforms(desired_shape[-2:])
+                zoom_factor = np.sqrt(np.abs(np.linalg.det(transform.params[:2,:2])) * np.prod(metadata["PixelSpacing"]))
+                normalise_zoom_transform = build_augmentation_transform(zoom_x=zoom_factor, zoom_y=zoom_factor)
                 if augmentation_params:
-                    tform_shift_center, tform_shift_uncenter = build_center_uncenter_transforms(desired_shape[-2:])
                     augment_tform = build_augmentation_transform(**augmentation_params)
-                    total_tform = tform_shift_uncenter + augment_tform + tform_shift_center + transform
+                    total_tform = tform_shift_uncenter + augment_tform + normalise_zoom_transform + tform_shift_center + transform
                 else:
-                    total_tform = transform
-                ch_result[:] = [fast_warp(c, total_tform, output_shape=desired_shape[-2:]) for c in ch]
+                    total_tform = tform_shift_uncenter + normalise_zoom_transform + tform_shift_center + transform
 
-                zoom_factor = np.abs(np.linalg.det(total_tform.params[:2,:2]))
+                ch_result[:] = [fast_warp(c, total_tform, output_shape=desired_shape[-2:]) for c in ch]
                 # print "zoom factor:", zoom_factor
 
-            zoom_factor = zoom_factor * np.prod(ch2_metadata["PixelSpacing"])
+            if augmentation_params is not None:
+                zoom_factor = augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+            else:
+                zoom_factor = 1.0
             # Clean data further
             ch4_3d_patient_tensor = clean_images(np.array([ch4_3d_patient_tensor]), metadata=ch4_metadata, cleaning_processes=cleaning_processes_post)[0]
             ch2_3d_patient_tensor = clean_images(np.array([ch2_3d_patient_tensor]), metadata=ch2_metadata, cleaning_processes=cleaning_processes_post)[0]

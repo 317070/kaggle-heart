@@ -395,8 +395,8 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             for ch, ch_result, transform, metadata in [(ch4_data, ch4_3d_patient_tensor, trf_4ch, ch4_metadata),
                                                         (ch2_data, ch2_3d_patient_tensor, trf_2ch, ch2_metadata)]:
                 tform_shift_center, tform_shift_uncenter = build_center_uncenter_transforms(desired_shape[-2:])
-                zoom_factor = np.abs(np.linalg.det(transform.params[:2,:2])) * np.prod(metadata["PixelSpacing"])
-                normalise_zoom_transform = build_augmentation_transform(zoom_x=1./zoom_factor, zoom_y=1./zoom_factor)
+                zoom_factor = np.sqrt(np.abs(np.linalg.det(transform.params[:2,:2])) * np.prod(metadata["PixelSpacing"]))
+                normalise_zoom_transform = build_augmentation_transform(zoom_x=zoom_factor, zoom_y=zoom_factor)
                 if augmentation_params:
                     augment_tform = build_augmentation_transform(**augmentation_params)
                     total_tform = tform_shift_uncenter + augment_tform + normalise_zoom_transform + tform_shift_center + transform

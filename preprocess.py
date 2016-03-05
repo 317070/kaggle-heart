@@ -404,7 +404,10 @@ def preprocess_normscale(patient_data, result, index, augment=True,
                 ch_result[:] = [fast_warp(c, total_tform, output_shape=desired_shape[-2:]) for c in ch]
                 # print "zoom factor:", zoom_factor
 
-            zoom_factor = 1.0
+            if augmentation_params is not None:
+                zoom_factor = augmentation_params["zoom_x"] * augmentation_params["zoom_y"]
+            else:
+                zoom_factor = 1.0
             # Clean data further
             ch4_3d_patient_tensor = clean_images(np.array([ch4_3d_patient_tensor]), metadata=ch4_metadata, cleaning_processes=cleaning_processes_post)[0]
             ch2_3d_patient_tensor = clean_images(np.array([ch2_3d_patient_tensor]), metadata=ch2_metadata, cleaning_processes=cleaning_processes_post)[0]

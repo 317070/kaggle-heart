@@ -1,4 +1,9 @@
 
+# TODO:
+# - disagreement and retrain
+# - import and export weights and averaging method
+# - nice interface
+
 import cPickle as pickle
 import csv
 import glob
@@ -15,18 +20,30 @@ import utils
 
 
 METADATAS_LOCATION = 'metadatas.pkl'
-RELOAD_METADATAS = False
+RELOAD_METADATAS = True
 DO_XVAL = True
 
 PREDICTIONS_PATH = "/mnt/storage/metadata/kaggle-heart/predictions/"
 SUBMISSION_PATH = "/mnt/storage/metadata/kaggle-heart/submissions/"
 
+PRINT_FOLDS = False
 PRINT_EVERY = 1000  # Print itermediate results during training
-LEARNING_RATE = 10  # Learning rate of gradient descend
-NR_EPOCHS = 100
-C = 0.0001  # L1 regularisation parameters
+LEARNING_RATE = 1  # Learning rate of gradient descend
+NR_EPOCHS = 200
+C_reg1 = 0.0000  # L1 regularisation parameters
+C_reg2 = 0.0000  # L2 regularisation parameters
 
+EPS_TOP = 0.0001
 SELECT_TOP = 10  # Nr of models to select
+
+OUTLIER_THRESHOLD = 0.02
+
+print C_reg1
+print C_reg2
+
+
+###### LOADING PREDICTION FILES ########
+#======================================#
 
 
 def filter_jeroen_patientmodels(filename):
@@ -79,6 +96,9 @@ FILTERS_TO_USE = ALL_MODELS_EXCEPT_CRAPPY_ONES_FILTERS
 
 
 def _get_all_prediction_files():
+    """Returns all the prediction files in the predictions folder.
+    The files are filtered first.
+    """
     # Get all of them
     all_files = glob.glob(PREDICTIONS_PATH + '*')
     # And filter them
@@ -106,12 +126,15 @@ def _construct_all_patient_ids():
     return all_patient_ids
 
 
+# This map contains the ids for all patients in the train, test and validation split
 all_patient_ids = _construct_all_patient_ids()
 
 
 def load_prediction_file(path):
     try:
-        return np.load(path)
+        m = np.load(path)
+        m['path'] = path
+        return m
     except:
         return False
 
@@ -144,27 +167,80 @@ def _compute_pats_not_predicted(metadata):
     return pats_not_predicted, pats_predicted
 
 
-## AVERAGING
-def geomav(x):
+##### TTA AVERAGING ######
+#========================#
+
+
+average_systole = postprocess.make_monotone_distribution(np.mean(np.array([utils.cumulative_one_hot(v) for v in data_loader.regular_labels[:,1]]), axis=0))
+average_diastole = postprocess.make_monotone_distribution(np.mean(np.array([utils.cumulative_one_hot(v) for v in data_loader.regular_labels[:,2]]), axis=0))
+
+
+def generate_information_weight_matrix(expert_predictions, average_distribution, eps=1e-14, KL_weight = 1.0, cross_entropy_weight=1.0, expert_weights=None):
+    pdf = utils.cdf_to_pdf(expert_predictions)
+    average_pdf = utils.cdf_to_pdf(average_distribution)
+    average_pdf[average_pdf<=0] = np.min(average_pdf[average_pdf>0])/2  # KL is not defined when Q=0 and P is not
+    inside = pdf * (np.log(pdf) - np.log(average_pdf[None,None,:]))
+    inside[pdf<=0] = 0  # (xlog(x) of zero is zero)
+    KL_distance_from_average = np.sum(inside, axis=2)  # (NUM_EXPERTS, NUM_VALIDATIONS)
+    assert np.isfinite(KL_distance_from_average).all()
+
+    clipped_predictions = np.clip(expert_predictions, 0.0, 1.0)
+    cross_entropy_per_sample = - (    average_distribution[None,None,:]  * np.log(   clipped_predictions+eps) +\
+                                  (1.-average_distribution[None,None,:]) * np.log(1.-clipped_predictions+eps) )
+
+    cross_entropy_per_sample[cross_entropy_per_sample<0] = 0  # (NUM_EXPERTS, NUM_VALIDATIONS, 600)
+    assert np.isfinite(cross_entropy_per_sample).all()
+    if expert_weights is None:
+        weights = cross_entropy_weight*cross_entropy_per_sample + KL_weight*KL_distance_from_average[:,:,None]  #+  # <- is too big?
+    else:
+        weights = (cross_entropy_weight*cross_entropy_per_sample + KL_weight*KL_distance_from_average[:,:,None]) * expert_weights[:,None,None]  #+  # <- is too big?
+
+    #make sure the ones without predictions don't get weight, unless absolutely necessary
+    weights[np.where((expert_predictions == average_distribution[None,None,:]).all(axis=2))] = 1e-14
+    return weights
+
+
+def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
+    if len(prediction_matrix) == 0:
+        return np.zeros(600)
+    prediction_matrix = prediction_matrix[None, :, :]
+    weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights)
+    assert np.isfinite(weights).all()
+    pdf = utils.cdf_to_pdf(prediction_matrix)
+    if True:
+        x_log = np.log(pdf)
+        x_log[pdf<=0] = np.log(eps)
+        # Compute the mean
+        geom_av_log = np.sum(x_log * weights, axis=(0,1)) / (np.sum(weights, axis=(0,1)) + eps)
+        geom_av_log = geom_av_log - np.max(geom_av_log)  # stabilizes rounding errors?
+
+        geom_av = np.exp(geom_av_log)
+        res = np.cumsum(geom_av/np.sum(geom_av))
+    else:
+        res = np.cumsum(np.sum(pdf * weights, axis=(0,1)) / np.sum(weights, axis=(0,1)))
+    return res
+
+
+def geomav(x, **kwargs):
     if len(x) == 0:
         return np.zeros(600)
     res = np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
     return res
 
 
-def normalav(x):
+def normalav(x, **kwargs):
     if len(x) == 0:
         return np.zeros(600)
     return np.mean(x, axis=0)
 
 
-def prodav(x):
+def prodav(x, **kwargs):
     if len(x) == 0:
         return np.zeros(600)
     return np.cumsum(utils.norm_prod(utils.cdf_to_pdf(x)))
 
 
-AVERAGING_METHODS = (normalav, geomav, prodav)
+AVERAGING_METHODS = (normalav, geomav, weighted_average_method)
 
 
 def _validate_metadata(metadata, pats_predicted):
@@ -183,8 +259,8 @@ def _validate_metadata(metadata, pats_predicted):
 def _compute_tta(metadata, averaging_method):
     for prediction_pid in metadata['predictions']:
         pid = prediction_pid['patient']
-        prediction_pid["systole_average"] = averaging_method(prediction_pid["systole"])
-        prediction_pid["diastole_average"] = averaging_method(prediction_pid["diastole"])
+        prediction_pid["systole_average"] = averaging_method(prediction_pid["systole"], average=average_systole)
+        prediction_pid["diastole_average"] = averaging_method(prediction_pid["diastole"], average=average_diastole)
 
 
 def _compute_nr_ttas(metadata, pats_predicted):
@@ -199,8 +275,9 @@ def _make_valid_distributions(metadata):
         postprocess.test_if_valid_distribution(prediction["diastole_average"])
 
 
-def _add_tta_score_to_metadata(metadata, tta_score):
+def _add_tta_score_to_metadata(metadata, tta_score, best_method):
     metadata['tta_score'] = tta_score
+    metadata['best_method'] = best_method
 
 
 def _compute_best_tta(metadata, pats_predicted):
@@ -218,7 +295,7 @@ def _compute_best_tta(metadata, pats_predicted):
     _make_valid_distributions(metadata)
     tta_score = _validate_metadata(metadata, pats_predicted)
     print "    Choosing %s (%.5f)" % (best_method.func_name, tta_score)
-    _add_tta_score_to_metadata(metadata, tta_score)
+    _add_tta_score_to_metadata(metadata, tta_score, best_method)
 
 
 def _remove_ttas(metadata, tags_to_remove=('systole', 'diastole')):
@@ -229,6 +306,9 @@ def _remove_ttas(metadata, tags_to_remove=('systole', 'diastole')):
             if tag in prediction:
                 del prediction[tag]
 
+
+### LOADING AND PROCESSING PREDICTIONS ###
+#========================================#
 
 
 def _process_prediction_file(path):
@@ -281,8 +361,8 @@ def _load_and_process_metadata_files():
     return useful_files
 
 
-
-## ENSEMBLING
+######### ENSEMBLING #########
+#============================#
 
 
 def _create_prediction_matrix(metadatas):
@@ -317,7 +397,7 @@ def _get_train_val_test_ids():
     return np.array(sets)=="train", np.array(sets)=="validation", np.array(sets)=="test"
 
 
-def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix):
+def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix, eps=0.0, use_reg=True):
 
     nr_models = len(w_init)
     nr_patients = mask_matrix.shape[1]
@@ -325,7 +405,7 @@ def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix):
     learning_rate = LEARNING_RATE
     nr_epochs = NR_EPOCHS
 
-    print "      Compiling function"
+    if PRINT_FOLDS: print "      Compiling function"
 
     # Create theano expression
     # inputs:
@@ -340,25 +420,26 @@ def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix):
     av_preds = preds_weighted_masked.sum(axis=0) / tot_masked_weights.dimshuffle(0, 'x')
     # loss
     l1_loss = weights.sum()
-    loss = ((av_preds - targets)**2).mean() + C * l1_loss
+    l2_loss = (weights**2).sum()
+    loss = ((av_preds - targets)**2).mean() + use_reg * C_reg1 * l1_loss + use_reg * C_reg2 * l2_loss
 
     # Update function (keeping the weights normalised)
     grad_weights = theano.grad(loss, weights)
-    updated_weights = T.clip(weights - learning_rate * grad_weights, 0, 100)  # Dont allow weights smaller than 0
+    updated_weights = T.clip(weights - learning_rate * grad_weights, eps, 100)  # Dont allow weights smaller than 0
     updated_weights_normalised = updated_weights / updated_weights.sum()  # Renormalise
     updates = {weights: updated_weights_normalised}
     iter_train = theano.function([], loss, updates=updates)
 
     # Do training
-    print "      Training"
+    if PRINT_FOLDS: print "      Training"
     for iteration in xrange(nr_epochs):
         train_err = iter_train()
         w_value = weights.eval()
         if (iteration+1) % PRINT_EVERY == 0:
             print iteration
-            print "      train_error: %.4f, weights: %s" % (train_err, str((w_value*1000).astype('int32')))
+            if PRINT_FOLDS: print "      train_error: %.4f, weights: %s" % (train_err, str((w_value*1000).astype('int32')))
 
-    return np.array(weights.eval())  # Convert cudaNArray ot numpy if necessairy
+    return np.array(weights.eval())  # Convert cudaNArray to numpy if necessairy
 
 
 
@@ -377,11 +458,39 @@ def _eval_weights(weights, preds, targets, mask):
     return crps
 
 
-def _create_ensembles(metadatas):
+def _ensemble_result_to_metadata(slice_ensemble_results):
+    predictions = [
+        {
+            "patient": idx + 1,
+            "is_empty": False,
+            "systole_average": sys,
+            "diastole_average": dia,
+        } for idx, (sys, dia) in enumerate(zip(
+            slice_ensemble_results["predictions_systole"],
+            slice_ensemble_results["predictions_diastole"]))]
+
+    return {
+        "predictions": predictions,
+        "configuration_file": "slice_ensemble",
+    }
+
+
+def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None):
+
+    if outliers is not None and slice_ensemble_results is not None:
+        ensemble_metadata = _ensemble_result_to_metadata(slice_ensemble_results)
+        metadatas.append(ensemble_metadata)
+
     # aggregate predictions and targets
     mask, preds_sys, preds_dia = _create_prediction_matrix(metadatas)
     targets_sys, targets_dia = _create_label_matrix()
-    print mask.mean()
+
+    # take outliers into account
+    if outliers is not None and slice_ensemble_results is not None:
+        print "Taking outliers into account"
+        # remove outliers
+        mask = mask * np.logical_not(outliers)[np.newaxis, :]
+        mask[-1, :] = np.ones(mask[-1].shape)
 
     # initialise weights
     nr_models = len(metadatas)
@@ -395,94 +504,32 @@ def _create_ensembles(metadatas):
     preds_sys_val, preds_sys_test = preds_sys[:, val_idx, :], preds_sys[:, test_idx, :]
     preds_dia_val, preds_dia_test = preds_dia[:, val_idx, :], preds_dia[:, test_idx, :]
 
-    ## CREATE SYSTOLE AND DIASTOLE PREDICTION USING LOOXVAL
-    if DO_XVAL:
-        print "Making systole ensemble"
-        print "  Doing leave one patient out xval"
-        nr_val_patients = len(targets_sys_val)
-        train_errs_sys = []
-        val_errs_sys = []
-        w_iters_sys = []
-        for val_pid in xrange(nr_val_patients):
-            print "    - fold %d" % val_pid
-            w_iter = _find_weights(
-                w_init,
-                np.hstack((preds_sys_val[:, :val_pid], preds_sys_val[:, val_pid+1:])),
-                np.vstack((targets_sys_val[:val_pid], targets_sys_val[val_pid+1:])),
-                np.hstack((mask_val[:, :val_pid], mask_val[:, val_pid+1:])),
-                )
-            train_err = _eval_weights(
-                w_iter,
-                np.hstack((preds_sys_val[:, :val_pid], preds_sys_val[:, val_pid+1:])),
-                np.vstack((targets_sys_val[:val_pid], targets_sys_val[val_pid+1:])),
-                np.hstack((mask_val[:, :val_pid], mask_val[:, val_pid+1:])),
-                )
-            val_err = _eval_weights(w_iter,
-                preds_sys_val[:, val_pid:val_pid+1],
-                targets_sys_val[val_pid:val_pid+1],
-                mask_val[:, val_pid:val_pid+1],
-                )
-            print "      train_err: %.4f,  val_err: %.4f" % (train_err, val_err)
-            train_errs_sys.append(train_err)
-            val_errs_sys.append(val_err)
-            w_iters_sys.append(w_iter)
 
-        expected_systole_loss = np.mean(val_errs_sys)
-        print "  average train err: %.4f" % np.mean(train_errs_sys)
-        print "  average valid err: %.4f" % np.mean(val_errs_sys)
+    ## MAKE ENSEMBLE USING THE FULL VALIDATION SET
+    print "Fitting weights on the entire validation set"
+    w_sys = _find_weights(w_init, preds_sys_val, targets_sys_val, mask_val)
+    w_dia = _find_weights(w_init, preds_dia_val, targets_dia_val, mask_val)
 
-        print "Making diastole ensemble"
-        print "  Doing leave one patient out xval"
-        nr_val_patients = len(targets_dia_val)
-        train_errs_dia = []
-        val_errs_dia = []
-        w_iters_dia = []
-        for val_pid in xrange(nr_val_patients):
-            print "    - fold %d" % val_pid
-            w_iter = _find_weights(
-                w_init,
-                np.hstack((preds_dia_val[:, :val_pid], preds_dia_val[:, val_pid+1:])),
-                np.vstack((targets_dia_val[:val_pid], targets_dia_val[val_pid+1:])),
-                np.hstack((mask_val[:, :val_pid], mask_val[:, val_pid+1:])),
-                )
-            train_err = _eval_weights(
-                w_iter,
-                np.hstack((preds_dia_val[:, :val_pid], preds_dia_val[:, val_pid+1:])),
-                np.vstack((targets_dia_val[:val_pid], targets_dia_val[val_pid+1:])),
-                np.hstack((mask_val[:, :val_pid], mask_val[:, val_pid+1:])),
-                )
-            val_err = _eval_weights(w_iter,
-                preds_dia_val[:, val_pid:val_pid+1],
-                targets_dia_val[val_pid:val_pid+1],
-                mask_val[:, val_pid:val_pid+1],
-                )
-            print "      train_err: %.4f,  val_err: %.4f" % (train_err, val_err)
-            train_errs_dia.append(train_err)
-            val_errs_dia.append(val_err)
-            w_iters_dia.append(w_iter)
-
-        expected_diastole_loss = np.mean(val_errs_dia)
-        print "  average train err: %.4f" % np.mean(train_errs_dia)
-        print "  average valid err: %.4f" % np.mean(val_errs_dia)
-
-        ## MAKE ENSEMBLE USING THE FULL VALIDATION SET
-        print "Fitting weights on the entire validation set"
-        w_sys = _find_weights(w_init, preds_sys_val, targets_sys_val, mask_val)
-        w_dia = _find_weights(w_init, preds_dia_val, targets_dia_val, mask_val)
-
-        # Print the result
-        print
-        print "dia   sys "
-        sort_key = lambda x: - x[1] - x[2]
-        for metadata, weight_sys, weight_dia in sorted(zip(metadatas, w_sys, w_dia), key=sort_key):
-            print "%4.1f  %4.1f : %s" % (weight_sys*100, weight_dia*100, metadata["configuration_file"])
+    # Print the result
+    print
+    print "dia    sys "
+    sort_key = lambda x: - x[1] - x[2]
+    for metadata, weight_sys, weight_dia in sorted(zip(metadatas, w_sys, w_dia), key=sort_key):
+        print "%5.2f  %5.2f : %s" % (weight_sys*100, weight_dia*100, metadata["configuration_file"])
 
 
     ## SELECT THE TOP MODELS AND RETRAIN ONCE MORE
     print
     print "Selecting the top %d models and retraining" % SELECT_TOP
     sorted_models, sorted_w_sys, sorted_w_dia = zip(*sorted(zip(metadatas, w_sys, w_dia), key=sort_key))
-    top_models = sorted_models[:SELECT_TOP]
+    top_models = list(sorted_models[:SELECT_TOP])
+    sorted_w_sys = list(sorted_w_sys)
+    sorted_w_dia = list(sorted_w_dia)
+    if slice_ensemble_results is not None and not ensemble_metadata in top_models:
+        print "Forcing slice ensemble to be in the mix"
+        top_models[-1] = ensemble_metadata
+        sorted_w_sys[SELECT_TOP-1] = 0.0001
+        sorted_w_dia[SELECT_TOP-1] = 0.0001
 
     w_init_sys_top = np.array(sorted_w_sys[:SELECT_TOP]) / np.array(sorted_w_sys[:SELECT_TOP]).sum()
     w_init_dia_top = np.array(sorted_w_dia[:SELECT_TOP]) / np.array(sorted_w_dia[:SELECT_TOP]).sum()
@@ -492,18 +539,90 @@ def _create_ensembles(metadatas):
     preds_sys_top_val, preds_sys_top_test = preds_sys_top[:, val_idx, :], preds_sys_top[:, test_idx, :]
     preds_dia_top_val, preds_dia_top_test = preds_dia_top[:, val_idx, :], preds_dia_top[:, test_idx, :]
 
-    w_sys_top = _find_weights(w_init_sys_top, preds_sys_top_val, targets_sys_val, mask_top_val)
-    w_dia_top = _find_weights(w_init_dia_top, preds_dia_top_val, targets_dia_val, mask_top_val)
+    w_sys_top = _find_weights(w_init_sys_top, preds_sys_top_val, targets_sys_val, mask_top_val, eps=EPS_TOP)
+    w_dia_top = _find_weights(w_init_dia_top, preds_dia_top_val, targets_dia_val, mask_top_val, eps=EPS_TOP)
 
     sys_err = _eval_weights(w_sys_top, preds_sys_top_val, targets_sys_val, mask_top_val)
     dia_err = _eval_weights(w_dia_top, preds_dia_top_val, targets_dia_val, mask_top_val)
 
 
     print
-    print "dia   sys "
+    print "dia    sys "
     sort_key = lambda x: - x[1] - x[2]
     for metadata, weight_sys, weight_dia in zip(top_models, w_sys_top, w_dia_top):
-        print "%4.1f  %4.1f : %s" % (weight_sys*100, weight_dia*100, metadata["configuration_file"])
+        print "%5.2f  %5.2f : %s" % (weight_sys*100, weight_dia*100, metadata["configuration_file"])
+
+
+    ## LOOXVAL
+    if DO_XVAL:
+        print "  Doing leave one patient out xval (systole)"
+        nr_val_patients = len(targets_sys_val)
+        train_errs_sys = []
+        val_errs_sys = []
+        w_iters_sys = []
+        for val_pid in xrange(nr_val_patients):
+            if PRINT_FOLDS: print "    - fold %d" % val_pid
+            w_iter = _find_weights(
+                w_init_sys_top,
+                np.hstack((preds_sys_top_val[:, :val_pid], preds_sys_top_val[:, val_pid+1:])),
+                np.vstack((targets_sys_val[:val_pid], targets_sys_val[val_pid+1:])),
+                np.hstack((mask_top_val[:, :val_pid], mask_top_val[:, val_pid+1:])),
+                eps=EPS_TOP,
+                )
+            train_err = _eval_weights(
+                w_iter,
+                np.hstack((preds_sys_top_val[:, :val_pid], preds_sys_top_val[:, val_pid+1:])),
+                np.vstack((targets_sys_val[:val_pid], targets_sys_val[val_pid+1:])),
+                np.hstack((mask_top_val[:, :val_pid], mask_top_val[:, val_pid+1:])),
+                )
+            val_err = _eval_weights(w_iter,
+                preds_sys_top_val[:, val_pid:val_pid+1],
+                targets_sys_val[val_pid:val_pid+1],
+                mask_top_val[:, val_pid:val_pid+1],
+                )
+            if PRINT_FOLDS: print "      train_err: %.4f,  val_err: %.4f" % (train_err, val_err)
+            train_errs_sys.append(train_err)
+            val_errs_sys.append(val_err)
+            w_iters_sys.append(w_iter)
+
+        expected_systole_loss = np.mean(val_errs_sys)
+        print "  average train err: %.4f" % np.mean(train_errs_sys)
+        print "  average valid err: %.4f" % np.mean(val_errs_sys)
+
+        print "  Doing leave one patient out xval (diastole)"
+        nr_val_patients = len(targets_dia_val)
+        train_errs_dia = []
+        val_errs_dia = []
+        w_iters_dia = []
+        for val_pid in xrange(nr_val_patients):
+            if PRINT_FOLDS: print "    - fold %d" % val_pid
+            w_iter = _find_weights(
+                w_init_dia_top,
+                np.hstack((preds_dia_top_val[:, :val_pid], preds_dia_top_val[:, val_pid+1:])),
+                np.vstack((targets_dia_val[:val_pid], targets_dia_val[val_pid+1:])),
+                np.hstack((mask_top_val[:, :val_pid], mask_top_val[:, val_pid+1:])),
+                eps=EPS_TOP,
+                )
+            train_err = _eval_weights(
+                w_iter,
+                np.hstack((preds_dia_top_val[:, :val_pid], preds_dia_top_val[:, val_pid+1:])),
+                np.vstack((targets_dia_val[:val_pid], targets_dia_val[val_pid+1:])),
+                np.hstack((mask_top_val[:, :val_pid], mask_top_val[:, val_pid+1:])),
+                )
+            val_err = _eval_weights(w_iter,
+                preds_dia_top_val[:, val_pid:val_pid+1],
+                targets_dia_val[val_pid:val_pid+1],
+                mask_top_val[:, val_pid:val_pid+1],
+                )
+            if PRINT_FOLDS: print "      train_err: %.4f,  val_err: %.4f" % (train_err, val_err)
+            train_errs_dia.append(train_err)
+            val_errs_dia.append(val_err)
+            w_iters_dia.append(w_iter)
+
+        expected_diastole_loss = np.mean(val_errs_dia)
+        print "  average train err: %.4f" % np.mean(train_errs_dia)
+        print "  average valid err: %.4f" % np.mean(val_errs_dia)
+
 
 
     print "Final scores on the validation set:"
@@ -518,11 +637,55 @@ def _create_ensembles(metadatas):
 
 
     ## COMPUTE TEST PREDICTIONS
-    test_ids = np.where(test_idx)[0] + 1
     preds_sys = _compute_predictions_ensemble(w_sys_top, preds_sys_top_test, mask_top_test)
     preds_dia = _compute_predictions_ensemble(w_dia_top, preds_dia_top_test, mask_top_test)
 
-    submission_path = SUBMISSION_PATH + "final_submission-%s.csv" % time.time()
+
+    ## STORE RESULTS IN DICTS AND RETURN
+    weights = {
+        metadata["configuration_file"]: (weight_sys, weight_dia) for metadata, weight_sys, weight_dia in zip(top_models, w_sys_top, w_dia_top)
+    }
+
+    return {
+        "weights": weights,
+        "predictions_systole": _compute_predictions_ensemble(w_sys_top, preds_sys_top, mask_top),
+        "predictions_diastole": _compute_predictions_ensemble(w_dia_top, preds_dia_top, mask_top),
+    }
+
+
+def dump_metadatas(metadatas):
+    with open(METADATAS_LOCATION, 'w') as f:
+        pickle.dump(metadatas, f, pickle.HIGHEST_PROTOCOL)
+    print "metadatas file dumped"
+
+
+def load_metadatas():
+    metadatas = np.load(METADATAS_LOCATION)
+    print "Loaded metadatas file"
+    return metadatas
+
+
+def _filter_metadatas(metadatas, filters):
+    res = []
+    for m in metadatas:
+        filename = os.path.basename(m['path'])
+        use_file = True
+        for filt in filters:
+            if filt(filename):
+                use_file = False
+                break
+        if use_file:
+            res.append(m)
+    return res
+
+
+def dump_predictions(result_ensemble, submission_path):
+
+    _, _, test_idx = _get_train_val_test_ids()
+    test_ids = np.where(test_idx)[0] + 1
+
+    preds_sys = result_ensemble["predictions_systole"]
+    preds_dia = result_ensemble["predictions_diastole"]
     print "dumping submission file to %s" % submission_path
     with open(submission_path, 'w') as csvfile:
         csvwriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -535,28 +698,58 @@ def _create_ensembles(metadatas):
     print "submission file dumped"
 
 
+def compute_outliers(result_ensemble_everything, result_ensemble_slices, threshold=OUTLIER_THRESHOLD):
+    crps_sys = ((result_ensemble_everything["predictions_systole"] - result_ensemble_slices["predictions_systole"])**2).mean(axis=1)
+    crps_dia = ((result_ensemble_everything["predictions_diastole"] - result_ensemble_slices["predictions_diastole"])**2).mean(axis=1)
+    crps_av = 0.5*crps_sys + 0.5*crps_dia
 
-def dump_metadatas(metadatas):
-    with open(METADATAS_LOCATION, 'w') as f:
-        pickle.dump(metadatas, f, pickle.HIGHEST_PROTOCOL)
-    print "metadatas file dumped"
-
-def load_metadatas():
-    metadatas = np.load(METADATAS_LOCATION)
-    print "Loaded metadatas file"
-    return metadatas
-
-
+    is_outlier = crps_av > threshold
+    print "  outliers (%.4f): " % threshold, str(np.where(is_outlier)[0]+1)
+    return is_outlier
 
 
 def main():
+    # Load all metadatas
+    print
+    print "LOADING PREDICTION FILES"
+    print
     if RELOAD_METADATAS:
         metadatas = load_metadatas()
     else:
         metadatas = _load_and_process_metadata_files()
         dump_metadatas(metadatas)
-    _create_ensembles(metadatas)
+    metadatas_slices = _filter_metadatas(metadatas, ONLY_SLICE_MODELS_FILTERS)
 
+    # Create an ensemble of everything
+    print
+    print "CREATING ENSEMBLE (ALL)"
+    print
+    result_ensemble_everything = _create_ensembles(metadatas)
+
+    # Create an ensemble of only slicemodels
+    print
+    print "CREATING ENSEMBLE (SLICES)"
+    print
+    result_ensemble_slices = _create_ensembles(metadatas_slices)
+
+    # Compute outliers
+    print
+    print "COMPUTING OUTLIERS"
+    print
+    for t in (0.05, 0.04, 0.03, 0.02, 0.015, 0.01, 0.005):
+        compute_outliers(result_ensemble_slices, result_ensemble_everything, threshold=t)
+    outliers = compute_outliers(result_ensemble_slices, result_ensemble_everything)
+
+    # Retrain
+    print
+    print "CREATING ENSEMBLE (SLICE + ALL w/ outliers)"
+    print
+    result_ensemble_final = _create_ensembles(metadatas, outliers=outliers, slice_ensemble_results=result_ensemble_slices)
+
+    # Dump predictions
+    dump_predictions(result_ensemble_everything, PREDICTIONS_PATH + 'ensemble_w_outliers.' + str(time.time()) + '.pkl')
+    dump_predictions(result_ensemble_slices, PREDICTIONS_PATH + 'ensemble_slices.' + str(time.time()) + '.pkl')
+    dump_predictions(result_ensemble_final, PREDICTIONS_PATH + 'ensemble_final.' + str(time.time()) + '.pkl')
 
 if __name__ == '__main__':
     main()

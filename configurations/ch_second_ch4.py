@@ -108,7 +108,7 @@ def build_model():
     l_in_ch4 = nn.layers.InputLayer((None, 30) + patch_size)
     l_ins = [l_in_ch2, l_in_ch4]
 
-    l = conv3(l_in_ch2, num_filters=64)
+    l = conv3(l_in_ch4, num_filters=64)
     l = conv3(l, num_filters=64)
 
     l = max_pool(l)
@@ -134,8 +134,6 @@ def build_model():
     l = conv3(l, num_filters=512)
 
     l = max_pool(l)
-    l = nn.layers.ReshapeLayer(l, (2, -1, [1], [2], [3]))
-    l = nn.layers.DimshuffleLayer(l, (1, 2, 3, 4, 0))
 
     l_d01 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)

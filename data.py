@@ -317,6 +317,8 @@ def transform_norm_rescale_after(data, metadata, transformation, roi=None, rando
                                                      zoom=random_augmentation_params.zoom)
         total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale
 
+    print 'Jeroen', 1./np.sqrt(np.abs(np.linalg.det(total_tform.params[:2, :2])))
+    print 'Jeroen', metadata["PixelSpacing"]
     # apply transformation per image
     for i in xrange(data.shape[0]):
         out_data[i] = fast_warp(data[i], total_tform, output_shape=patch_size)
@@ -402,6 +404,8 @@ def transform_ch(data_ch2, metadata_ch2, data_ch4, metadata_ch4, saxslice2metada
         else:
             total_tform = tform_shift_uncenter + normalise_zoom_transform + tform_shift_center + transform
 
+        print 'JONAS', 1./np.sqrt(np.abs(np.linalg.det(total_tform.params[:2, :2])))
+        print 'JONAS', metadata["PixelSpacing"]
         for i in xrange(ch.shape[0]):
             ch_out[i] = fast_warp(ch[i], total_tform, output_shape=patch_size)
 

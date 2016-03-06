@@ -13,9 +13,9 @@ import utils_heart
 # submission_path1 = 'final_submission-all_except_ira_00115_fixed.csv'
 # submission_path2 = 'final_submission-1457129444.05.csv'
 submission_path_meta = 'submissions/meta_ira_6.csv'
-submission_path_ss = 'submissions/ss_ira_6.csv'
-submission_path_mix = 'submissions/mix_ira_6.csv'
-fixed_submission_path = 'submissions/fixed_submission_ira_6.csv'
+submission_path_ss = 'submissions/ss_final_submission-1457220052.92.csv'
+submission_path_mix = 'submissions/mix_final_submission-1457218324.95.csv'
+fixed_submission_path = 'submissions/fixed_submission_ira6_92.95.csv'
 
 
 # submissions paths
@@ -44,7 +44,7 @@ def read_submission(file_path):
     return pid2cdf0, pid2cdf1
 
 
-threshold = 0.02
+threshold = 0.04
 
 pid2cdf0_meta, pid2cdf1_meta = read_submission(submission_path_meta)
 pid2cdf0_ss, pid2cdf1_ss = read_submission(submission_path_ss)

@@ -60,7 +60,7 @@ Then, optimize the following models:
 > python train.py -c je_meta_joniscale64small_360
 
 
-And the following models:
+In the mean time, train the following models:
 > python train.py -c j6_4ch
 > python train.py -c j6_2ch
 > python train.py -c j6_4chb
@@ -82,7 +82,7 @@ Then the following meta models:
 > python train.py -c j7_jeroen_ch
 
 
-Also train the following models
+Also in the meantime, train these following models
 > python train.py gauss_roi_zoom_mask_leaky_after
 > python train.py gauss_roi_zoom_big
 > python train.py gauss_roi_zoom

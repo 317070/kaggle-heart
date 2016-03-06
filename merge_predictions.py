@@ -435,7 +435,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
             predictions = pickle.load(f)['predictions']
 
         if redo_tta:
-            best_average_method = None
+            best_average_method = normalav
             best_average_crps = utils.maxfloat
             for average_method in [geomav,
                                    normalav,

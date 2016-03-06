@@ -253,43 +253,6 @@ def optimize_expert_weights(expert_predictions,
         return expert_weights_result, average_loss, optimal_params  # (NUM_EXPERTS,)
 
 
-def geomav(x, *args, **kwargs):
-    x = x[0]
-    if len(x) == 0:
-        return np.zeros(600)
-    res = np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
-    return res
-
-
-def normalav(x, *args, **kwargs):
-    x = x[0]
-    if len(x) == 0:
-        return np.zeros(600)
-    return np.mean(x, axis=0)
-
-
-def prodav(x, *args, **kwargs):
-    x = x[0]
-    if len(x) == 0:
-        return np.zeros(600)
-    return np.cumsum(utils.norm_prod(utils.cdf_to_pdf(x)))
-
-
-def weighted_average_method(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
-    weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights, *args, **kwargs)
-    assert np.isfinite(weights).all()
-    pdf = utils.cdf_to_pdf(prediction_matrix)
-    x_log = np.log(pdf)
-    x_log[pdf<=0] = np.log(eps)
-    # Compute the mean
-    geom_av_log = np.sum(x_log * weights, axis=(0,1)) / (np.sum(weights, axis=(0,1)) + eps)
-    geom_av_log = geom_av_log - np.max(geom_av_log)  # stabilizes rounding errors?
-
-    geom_av = np.exp(geom_av_log)
-    res = np.cumsum(geom_av/np.sum(geom_av))
-    return res
-
-
 
 def get_validate_crps(predictions, labels):
     errors = []
@@ -347,8 +310,6 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
                                redo_tta = True):
 
     submission_path = SUBMISSION_PATH + "final_submission-%s.csv" % time.time()
-
-    average_method = weighted_average_method
 
     # calculate the average distribution
     regular_labels = _load_file(_TRAIN_LABELS_PATH)
@@ -409,14 +370,24 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_big.pkl")
         +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_mask_leaky.pkl")
         +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_mask_leaky_after.pkl")
-        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss.pkl")
-        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss_fixedagesex.pkl")
-        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
-        +glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright.pkl")
-        +glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright_betterdists.pkl")
+        +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi10_maxout-50.pkl")
+        +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_mask_highway-50.pkl")
+        +glob.glob(prediction_file_location+"ira_configurations.*")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss_fixedagesex.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright.pkl")
+        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright_betterdists.pkl")
     )
 
-    expert_pkl_files = fp_expert_pkl_files + ss_expert_pkl_files
+    everything = sorted([]
+        +glob.glob(prediction_file_location+"ira_configurations.*.pkl")
+        +glob.glob(prediction_file_location+"je_*.pkl")
+        +glob.glob(prediction_file_location+"j6*.pkl")
+        +glob.glob(prediction_file_location+"j7*.pkl")
+        +glob.glob(prediction_file_location+"j8*.pkl")
+    )
+    expert_pkl_files = everything #fp_expert_pkl_files #+ ss_expert_pkl_files
     """
     expert_pkl_files = sorted([]
         +glob.glob(prediction_file_location+"j6_2ch.pkl")
@@ -469,11 +440,14 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
             for average_method in [geomav,
                                    normalav,
                                    prodav,
-                                   weighted_average_method]:
+                                   weighted_arithm_method,
+                                   weighted_arithm_no_entr,
+                                   weighted_geom_method,
+                                   weighted_geom_no_entr]:
                 calculate_tta_average(predictions, average_method, average_systole, average_diastole)
 
                 crps = get_validate_crps(predictions, regular_labels)
-                print average_method.__name__,"->",crps
+                print string.rjust(average_method.__name__,25),"->",crps
                 if crps<best_average_crps:
                     best_average_method = average_method
                     best_average_crps = crps
@@ -561,7 +535,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         valid_labels=systole_valid_labels,
         expert_pkl_files=expert_pkl_files,
         expert_weight=systole_expert_weight,
-        disagreement_cutoff=0.01 # 0.01
+        disagreement_cutoff=0.001 # 0.01
     )
 
     generate_final_predictions(
@@ -576,7 +550,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         valid_labels=diastole_valid_labels,
         expert_pkl_files=expert_pkl_files,
         expert_weight=diastole_expert_weight,
-        disagreement_cutoff=0.015  # diastole has about 50% more error
+        disagreement_cutoff=0.0015  # diastole has about 50% more error
     )
 
     print
@@ -696,6 +670,8 @@ def generate_final_predictions(
         patient_id = final_prediction['patient']
         if patient_id in train_patients_indices:
             continue
+
+        print "   final prediction of patient %d" % patient_id
         reoptimized = False
         # get me the data for this patient
         # (NUM_EXPERTS, 600)
@@ -733,7 +709,6 @@ def generate_final_predictions(
             optimal_params_for_this_patient = optimal_params
 
 
-        print "   final prediction of patient %d" % patient_id
 
         while True: # do-while: break condition at the end
             last_mask_matrix = mask_matrix
@@ -819,6 +794,88 @@ def get_expert_disagreement(expert_predictions, expert_weights=None, cutoff=0.01
             cross_crps += np.mean((expert_predictions[i,:] - expert_predictions[j,:])**2)
     cross_crps /= (NUM_EXPERTS * (NUM_EXPERTS - 1)) / 2
     return cross_crps
+
+#############################################
+#                 AVERAGES
+#############################################
+
+
+def geomav(x, *args, **kwargs):
+    x = x[0]
+    if len(x) == 0:
+        return np.zeros(600)
+    res = np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
+    return res
+
+
+def normalav(x, *args, **kwargs):
+    x = x[0]
+    if len(x) == 0:
+        return np.zeros(600)
+    return np.mean(x, axis=0)
+
+
+def prodav(x, *args, **kwargs):
+    x = x[0]
+    if len(x) == 0:
+        return np.zeros(600)
+    return np.cumsum(utils.norm_prod(utils.cdf_to_pdf(x)))
+
+
+def weighted_geom_no_entr(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
+    if len(prediction_matrix.flatten()) == 0:
+        return np.zeros(600)
+    weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights, use_entropy=False, *args, **kwargs)
+    assert np.isfinite(weights).all()
+    pdf = utils.cdf_to_pdf(prediction_matrix)
+    x_log = np.log(pdf)
+    x_log[pdf<=0] = np.log(eps)
+    # Compute the mean
+    geom_av_log = np.sum(x_log * weights, axis=(0,1)) / (np.sum(weights, axis=(0,1)) + eps)
+    geom_av_log = geom_av_log - np.max(geom_av_log)  # stabilizes rounding errors?
+
+    geom_av = np.exp(geom_av_log)
+    res = np.cumsum(geom_av/np.sum(geom_av))
+    return res
+
+
+def weighted_geom_method(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
+    if len(prediction_matrix.flatten()) == 0:
+        return np.zeros(600)
+    weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights, *args, **kwargs)
+    assert np.isfinite(weights).all()
+    pdf = utils.cdf_to_pdf(prediction_matrix)
+    x_log = np.log(pdf)
+    x_log[pdf<=0] = np.log(eps)
+    # Compute the mean
+    geom_av_log = np.sum(x_log * weights, axis=(0,1)) / (np.sum(weights, axis=(0,1)) + eps)
+    geom_av_log = geom_av_log - np.max(geom_av_log)  # stabilizes rounding errors?
+
+    geom_av = np.exp(geom_av_log)
+    res = np.cumsum(geom_av/np.sum(geom_av))
+    return res
+
+
+def weighted_arithm_no_entr(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
+    if len(prediction_matrix.flatten()) == 0:
+        return np.zeros(600)
+    weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights, use_entropy=False, *args, **kwargs)
+    assert np.isfinite(weights).all()
+    res = np.sum(prediction_matrix * weights, axis=(0,1)) / (np.sum(weights, axis=(0,1)) + eps)
+    return res
+
+
+def weighted_arithm_method(prediction_matrix, average, eps=1e-14, expert_weights=None, *args, **kwargs):
+    if len(prediction_matrix.flatten()) == 0:
+        return np.zeros(600)
+    weights = generate_information_weight_matrix(prediction_matrix, average, expert_weights=expert_weights, *args, **kwargs)
+    assert np.isfinite(weights).all()
+    res = np.sum(prediction_matrix * weights, axis=(0,1)) / (np.sum(weights, axis=(0,1)) + eps)
+    return res
+
+
+
+
 
 
 

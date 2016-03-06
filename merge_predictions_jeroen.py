@@ -1,8 +1,8 @@
 
 # TODO:
-# - disagreement and retrain
 # - import and export weights and averaging method
 # - nice interface
+# - no validation sets
 
 import cPickle as pickle
 import csv
@@ -25,18 +25,20 @@ DO_XVAL = True
 
 PREDICTIONS_PATH = "/mnt/storage/metadata/kaggle-heart/predictions/"
 SUBMISSION_PATH = "/mnt/storage/metadata/kaggle-heart/submissions/"
+WEIGHTS_PATH = "/mnt/storage/metadata/kaggle-heart/ensemble-weights/"
 
 PRINT_FOLDS = False
 PRINT_EVERY = 1000  # Print itermediate results during training
 LEARNING_RATE = 1  # Learning rate of gradient descend
-NR_EPOCHS = 200
+NR_EPOCHS = 100
 C_reg1 = 0.0000  # L1 regularisation parameters
 C_reg2 = 0.0000  # L2 regularisation parameters
+GRAD_CLIP = 1
 
 EPS_TOP = 0.0001
 SELECT_TOP = 10  # Nr of models to select
 
-OUTLIER_THRESHOLD = 0.02
+OUTLIER_THRESHOLD = 0.015
 
 print C_reg1
 print C_reg2
@@ -425,8 +427,11 @@ def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix, eps=0.0, us
 
     # Update function (keeping the weights normalised)
     grad_weights = theano.grad(loss, weights)
-    updated_weights = T.clip(weights - learning_rate * grad_weights, eps, 100)  # Dont allow weights smaller than 0
-    updated_weights_normalised = updated_weights / updated_weights.sum()  # Renormalise
+    grad_weights_norm = (grad_weights ** 2).sum()
+    grad_weights = grad_weights * GRAD_CLIP / T.clip(grad_weights_norm, GRAD_CLIP, utils.maxfloat)
+    delta = T.clip(learning_rate * grad_weights, -.1, .1)
+    updated_weights = T.clip(weights - delta, eps, 10)  # Dont allow weights smaller than 0
+    updated_weights_normalised = T.clip(updated_weights / updated_weights.sum(), eps, 1)  # Renormalise
     updates = {weights: updated_weights_normalised}
     iter_train = theano.function([], loss, updates=updates)
 
@@ -434,7 +439,7 @@ def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix, eps=0.0, us
     if PRINT_FOLDS: print "      Training"
     for iteration in xrange(nr_epochs):
         train_err = iter_train()
-        w_value = weights.eval()
+        w_value = np.array(weights.eval())
         if (iteration+1) % PRINT_EVERY == 0:
             print iteration
             if PRINT_FOLDS: print "      train_error: %.4f, weights: %s" % (train_err, str((w_value*1000).astype('int32')))
@@ -475,6 +480,10 @@ def _ensemble_result_to_metadata(slice_ensemble_results):
     }
 
 
+def has_nan(x):
+    return np.isnan(np.sum(x))
+
+
 def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None):
 
     if outliers is not None and slice_ensemble_results is not None:
@@ -507,8 +516,8 @@ def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None):
 
     ## MAKE ENSEMBLE USING THE FULL VALIDATION SET
     print "Fitting weights on the entire validation set"
-    w_sys = _find_weights(w_init, preds_sys_val, targets_sys_val, mask_val)
-    w_dia = _find_weights(w_init, preds_dia_val, targets_dia_val, mask_val)
+    w_sys = _find_weights(w_init, preds_sys_val, targets_sys_val, mask_val, eps=EPS_TOP)
+    w_dia = _find_weights(w_init, preds_dia_val, targets_dia_val, mask_val, eps=EPS_TOP)
 
     # Print the result
     print
@@ -528,12 +537,21 @@ def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None):
     if slice_ensemble_results is not None and not ensemble_metadata in top_models:
         print "Forcing slice ensemble to be in the mix"
         top_models[-1] = ensemble_metadata
-        sorted_w_sys[SELECT_TOP-1] = 0.0001
-        sorted_w_dia[SELECT_TOP-1] = 0.0001
+        sorted_w_sys[SELECT_TOP-1] = EPS_TOP
+        sorted_w_dia[SELECT_TOP-1] = EPS_TOP
 
     w_init_sys_top = np.array(sorted_w_sys[:SELECT_TOP]) / np.array(sorted_w_sys[:SELECT_TOP]).sum()
     w_init_dia_top = np.array(sorted_w_dia[:SELECT_TOP]) / np.array(sorted_w_dia[:SELECT_TOP]).sum()
     mask_top, preds_sys_top, preds_dia_top = _create_prediction_matrix(top_models)
+
+    if outliers is not None and slice_ensemble_results is not None:
+        print "Taking outliers into account"
+        # remove outliers
+        mask_top = mask_top * np.logical_not(outliers)[np.newaxis, :]
+        for idx, model in enumerate(top_models):
+            if model is ensemble_metadata:
+                print idx
+                mask_top[idx, :] = np.ones(mask_top[idx, :].shape)
 
     mask_top_val, mask_top_test = mask_top[:, val_idx], mask_top[:, test_idx]
     preds_sys_top_val, preds_sys_top_test = preds_sys_top[:, val_idx, :], preds_sys_top[:, test_idx, :]
@@ -684,8 +702,8 @@ def dump_predictions(result_ensemble, submission_path):
     _, _, test_idx = _get_train_val_test_ids()
     test_ids = np.where(test_idx)[0] + 1
 
-    preds_sys = result_ensemble["predictions_systole"]
-    preds_dia = result_ensemble["predictions_diastole"]
+    preds_sys = result_ensemble["predictions_systole"][np.where(test_idx)]
+    preds_dia = result_ensemble["predictions_diastole"][np.where(test_idx)]
     print "dumping submission file to %s" % submission_path
     with open(submission_path, 'w') as csvfile:
         csvwriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -747,9 +765,9 @@ def main():
     result_ensemble_final = _create_ensembles(metadatas, outliers=outliers, slice_ensemble_results=result_ensemble_slices)
 
     # Dump predictions
-    dump_predictions(result_ensemble_everything, PREDICTIONS_PATH + 'ensemble_w_outliers.' + str(time.time()) + '.pkl')
-    dump_predictions(result_ensemble_slices, PREDICTIONS_PATH + 'ensemble_slices.' + str(time.time()) + '.pkl')
-    dump_predictions(result_ensemble_final, PREDICTIONS_PATH + 'ensemble_final.' + str(time.time()) + '.pkl')
+    dump_predictions(result_ensemble_everything, SUBMISSION_PATH + 'ensemble_w_outliers.' + str(time.time()) + '.csv')
+    dump_predictions(result_ensemble_slices, SUBMISSION_PATH + 'ensemble_slices.' + str(time.time()) + '.csv')
+    dump_predictions(result_ensemble_final, SUBMISSION_PATH + 'ensemble_final.' + str(time.time()) + '.csv')
 
 if __name__ == '__main__':
     main()

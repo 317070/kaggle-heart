@@ -97,81 +97,6 @@ def sample_augmentation_parameters(transformation):
                                                     sequence_shift)
 
 
-def transform_fft_norm_rescale(data, metadata, transformation, roi=None, random_augmentation_params=None,
-                               mm_center_location=(.5, .4), mm_patch_size=(128, 128), mask_roi=True):
-    patch_size = transformation['patch_size']
-    mm_patch_size = transformation['mm_patch_size'] if 'mm_patch_size' in transformation else mm_patch_size
-    mask_roi = transformation['mask_roi'] if 'mask_roi' in transformation else mask_roi
-    roi_center = roi['roi_center'] if roi else None
-    roi_radii = roi['roi_radii'] if roi else None
-    out_shape = (1,) + patch_size
-    out_data = np.zeros(out_shape, dtype='float32')
-
-    # correct orientation
-    data, roi_center, roi_radii = correct_orientation(data, metadata, roi_center, roi_radii)
-
-    # if random_augmentation_params=None -> sample new params
-    # if the transformation implies no augmentations then random_augmentation_params remains None
-    if not random_augmentation_params:
-        random_augmentation_params = sample_augmentation_parameters(transformation)
-
-    # build scaling transformation
-    pixel_spacing = metadata['PixelSpacing']
-    assert pixel_spacing[0] == pixel_spacing[1]
-    current_shape = data.shape[-2:]
-
-    # scale ROI radii and find ROI center in normalized patch
-    if roi_center:
-        mm_center_location = tuple(int(r * ps) for r, ps in zip(roi_center, pixel_spacing))
-
-    # scale the images such that they all have the same scale
-    norm_rescaling = 1. / pixel_spacing[0]
-    mm_shape = tuple(int(float(d) * ps) for d, ps in zip(current_shape, pixel_spacing))
-
-    tform_normscale = build_rescale_transform(downscale_factor=norm_rescaling,
-                                              image_shape=current_shape, target_shape=mm_shape)
-    tform_shift_center, tform_shift_uncenter = build_shift_center_transform(image_shape=mm_shape,
-                                                                            center_location=mm_center_location,
-                                                                            patch_size=mm_patch_size)
-
-    patch_scale = max(1. * mm_patch_size[0] / patch_size[0],
-                      1. * mm_patch_size[1] / patch_size[1])
-    tform_patch_scale = build_rescale_transform(patch_scale, mm_patch_size, target_shape=patch_size)
-
-    total_tform = tform_patch_scale + tform_shift_uncenter + tform_shift_center + tform_normscale
-
-    # build random augmentation
-    if random_augmentation_params:
-        augment_tform = build_augmentation_transform(rotation=random_augmentation_params.rotation,
-                                                     shear=random_augmentation_params.shear,
-                                                     translation=random_augmentation_params.translation,
-                                                     flip_x=random_augmentation_params.flip_x,
-                                                     flip_y=random_augmentation_params.flip_y,
-                                                     zoom=random_augmentation_params.zoom)
-        total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale
-
-    # apply transformation per image
-    for i in xrange(data.shape[0]):
-        out_data[i] = fast_warp(data[i], total_tform, output_shape=patch_size)
-
-    # apply transformation to ROI and mask the images
-    if roi_center and roi_radii and mask_roi:
-        roi_scale = random_augmentation_params.roi_scale if random_augmentation_params else 1  # augmentation
-        roi_zoom = random_augmentation_params.zoom if random_augmentation_params else (1., 1.)
-        rescaled_roi_radii = (roi_scale * roi_radii[0], roi_scale * roi_radii[1])
-        out_roi_radii = (int(roi_zoom[0] * rescaled_roi_radii[0] * pixel_spacing[0] / patch_scale),
-                         int(roi_zoom[1] * rescaled_roi_radii[1] * pixel_spacing[1] / patch_scale))
-        roi_mask = make_circular_roi_mask(patch_size, (patch_size[0] / 2, patch_size[1] / 2), out_roi_radii)
-        out_data *= roi_mask
-
-    if random_augmentation_params:
-        targets_zoom_factor = random_augmentation_params.zoom[0] * random_augmentation_params.zoom[1]
-    else:
-        targets_zoom_factor = 1.
-
-    return out_data, targets_zoom_factor
-
-
 def transform_norm_rescale(data, metadata, transformation, roi=None, random_augmentation_params=None,
                            mm_center_location=(.5, .4), mm_patch_size=(128, 128), mask_roi=True):
     patch_size = transformation['patch_size']
@@ -316,9 +241,6 @@ def transform_norm_rescale_after(data, metadata, transformation, roi=None, rando
                                                      flip_y=random_augmentation_params.flip_y,
                                                      zoom=random_augmentation_params.zoom)
         total_tform = tform_patch_scale + tform_shift_uncenter + augment_tform + tform_shift_center + tform_normscale
-
-    print 'Jeroen', 1./np.sqrt(np.abs(np.linalg.det(total_tform.params[:2, :2])))
-    print 'Jeroen', metadata["PixelSpacing"]
     # apply transformation per image
     for i in xrange(data.shape[0]):
         out_data[i] = fast_warp(data[i], total_tform, output_shape=patch_size)
@@ -387,11 +309,20 @@ def transform_ch(data_ch2, metadata_ch2, data_ch4, metadata_ch4, saxslice2metada
         bottom_point_metadata=bottom_point_enhanced_metadata,
         output_width=patch_size[1])
 
-    for ch, ch_out, transform, metadata in [(data_ch4, out_data_ch4, trf_4ch, metadata_ch4),
-                                            (data_ch2, out_data_ch2, trf_2ch, metadata_ch2)]:
+    if metadata_ch4 is None and metadata_ch2 is not None:
+        metadata_ch4 = metadata_ch2
+
+    if metadata_ch2 is None and metadata_ch4 is not None:
+        metadata_ch2 = metadata_ch4
+
+    for ch, ch_out, ch_transform, metadata in [(data_ch4, out_data_ch4, trf_4ch, metadata_ch4),
+                                               (data_ch2, out_data_ch2, trf_2ch, metadata_ch2)]:
+
         tform_shift_center, tform_shift_uncenter = build_center_uncenter_transforms(patch_size)
-        zoom_factor = np.sqrt(np.abs(np.linalg.det(transform.params[:2, :2])) * np.prod(metadata["PixelSpacing"]))
-        normalise_zoom_transform = build_augmentation_transform(zoom=(1./zoom_factor, 1./zoom_factor))
+        zoom_factor = np.sqrt(np.abs(np.linalg.det(trf_2ch.params[:2, :2]))) * metadata["PixelSpacing"][0]
+        zoom_transform = build_rescale_transform(downscale_factor=1. / zoom_factor, image_shape=patch_size,
+                                                 target_shape=patch_size)
+
         if random_augmentation_params:
             augment_tform = build_augmentation_transform(rotation=random_augmentation_params.rotation,
                                                          shear=random_augmentation_params.shear,
@@ -400,12 +331,10 @@ def transform_ch(data_ch2, metadata_ch2, data_ch4, metadata_ch4, saxslice2metada
                                                          flip_y=random_augmentation_params.flip_y,
                                                          zoom=random_augmentation_params.zoom)
 
-            total_tform = tform_shift_uncenter + augment_tform + normalise_zoom_transform + tform_shift_center + transform
+            total_tform = tform_shift_uncenter + augment_tform + tform_shift_center + zoom_transform + ch_transform
         else:
-            total_tform = tform_shift_uncenter + normalise_zoom_transform + tform_shift_center + transform
+            total_tform = zoom_transform + ch_transform
 
-        print 'JONAS', 1./np.sqrt(np.abs(np.linalg.det(total_tform.params[:2, :2])))
-        print 'JONAS', metadata["PixelSpacing"]
         for i in xrange(ch.shape[0]):
             ch_out[i] = fast_warp(ch[i], total_tform, output_shape=patch_size)
 

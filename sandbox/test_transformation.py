@@ -21,7 +21,7 @@ slice2roi = utils.load_pkl('../pkl_train_slice2roi_10.pkl')
 slice2roi_valid = utils.load_pkl('../pkl_validate_slice2roi_10.pkl')
 slice2roi.update(slice2roi_valid)
 
-patient_path = sorted(glob.glob(data_path + '/*/study'))
+patient_path = sorted(glob.glob(data_path + '/502/study'))
 for p in patient_path:
     print p
     spaths = sorted(glob.glob(p + '/2ch_*.pkl'), key=lambda x: int(re.search(r'/\w*_(\d+)*\.pkl$', x).group(1)))

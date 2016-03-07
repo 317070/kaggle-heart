@@ -6,8 +6,8 @@ You also need recent version (as of 2016) of scikit-learn, scikit-image, numpy, 
 Step 2
 ======
 
-To set up the SETTINGS.json file correctly, select all paths on a disk with plenty of space (~40GB). Also, set the number of the submission to either 1 or 2.
-We make 2 submissions, a first without validation set and fixed ensemble weights, a second with validation set with adapted ensemble weights.
+To set up the SETTINGS.json file correctly, select all paths on a disk with plenty of space (~40GB). Also, set the number of the submission to either 1 (at first) or 2 (after submission 1 has been gerenated).
+We make 2 submissions, a first with validation set and adapted ensemble weights, a second without validation set (i.e. the models are trained on all the training data) with fixed ensemble weights. The fixed ensemble weights are copied over from the first submissions. This means that submission 2 can only be generated after submission 1.
 
 Step 3
 ======
@@ -169,18 +169,35 @@ Also in the meantime, train these following models, which you can find in the di
 Step 5
 ======
 Merge the resulting predictions with
-> python merge_script_jeroen.py
-
-in the case of the first submission.
-Merge the resulting predictions with
 > python merge_script.py
-in the case of the second submission.
+This will generate the first submission file. The location of this file is specified by the SUBMISSION_PATH in SETTINGS.json. The path to the file will also be printed to the terminal.
 
 Step 6
 ======
+Merge the predictions with
+> python merge_script_jeroen.py
 
-????
+This will output a file containing ensemble weights in the ENSEMBLE_WEIGHTS_PATH, as specified in the SETTINGS.json file. This contains the ensembling weights, which will be transferred over to the second submission ensemble. The path to the file will also be printed to the terminal.
+
+Although not strictly necessairy, you could also keep track of which models get selected in the final ensemble. The script will print out 6 lists of models in total. The lists you're interested in are fourth and the sixth ones. If you do not do this, the end result will remain the same, but will take longer to compute.
 
 Step 7
 ======
-Submit the resulting submission file.
+Change the SETTINGS.json file to set it up for the second submission. To do this, SUBMISSION_NR should be set to 2, and the output paths (SUBMISSION_NR, INTERMEDIATE_PREDICTIONS_PATH, PREDICTIONS_PATH) shoudl be changed to point to new empty folders. Make sure that INTERMEDIATE_PREDICTIONS_PATH and PREDICTIONS_PATH point to the same directory.
+
+Step 8
+======
+Retrain all the models as in step 4. Optionally, you can omit retraining the models which did not come up in the lists you aquired in step 6, unless it is requried by another model. Retraining them anyways will not influence the final submission.
+
+Step 9
+======
+Merge the predictions with
+> python merge_script_jeroen.py PATH_TO_WEIGHTS_FILE
+
+where PATH_TO_WEIGHTS_FILE points to the .pkl that was created by the same script in step 6 and was written to the ENSEMBLE_WEIGHTS_PATH folder. 
+This script will output the final submission to the SUBMISSION_PATH folder. The file of intrest will be called 'ensemble_final.<some_numbers>.csv'. The other two files it produces can be ignored.
+
+Step 10
+=======
+Submit the predictions that were generated in steps 5 and 9
+ 

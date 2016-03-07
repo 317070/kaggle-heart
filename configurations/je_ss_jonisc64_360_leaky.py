@@ -30,7 +30,7 @@ caching = None
 validate_every = 10
 validate_train_set = True
 save_every = 10
-restart_from_save = True
+restart_from_save = False
 
 # Training (schedule) parameters
 # - batch sizes

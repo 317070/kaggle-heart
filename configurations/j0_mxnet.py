@@ -19,7 +19,7 @@ import theano_printer
 validate_every = 1
 validate_train_set = False
 save_every = 100
-restart_from_save = True
+restart_from_save = False
 
 dump_network_loaded_data = False
 

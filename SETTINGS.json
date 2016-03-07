@@ -8,11 +8,11 @@
   "SUBMISSION_PATH":"/mnt/storage/metadata/kaggle-heart/submissions/",
   "LOGS_PATH":"/mnt/storage/metadata/kaggle-heart/logs/",
   "INTERMEDIATE_PREDICTIONS_PATH":"/mnt/storage/metadata/kaggle-heart/predictions/",
+  "PREDICTIONS_PATH": "/mnt/storage/metadata/kaggle-heart/predictions",
   "ENSEMBLE_WEIGHTS_PATH":"/mnt/storage/metadata/kaggle-heart/ensemble-weights/",
   "TRAIN_PATIENT_IDS":[1,  500],
   "TEST_PATIENT_IDS": [501,700],
   "SUBMISSION_NR": 1,
   "METADATA_PATH": "/mnt/storage/metadata/kaggle-heart",
-  "TRAIN_LABELS_PATH": "/data/dsb15_pkl/train.csv",
-  "PREDICTIONS_PATH": "/mnt/storage/metadata/kaggle-heart/predictions"
+  "TRAIN_LABELS_PATH": "/data/dsb15_pkl/train.csv"
 }

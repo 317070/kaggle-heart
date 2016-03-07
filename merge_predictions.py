@@ -348,20 +348,22 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
     """
     ss_expert_pkl_files = sorted([]
         +glob.glob(prediction_file_location+"j6_2ch.pkl")
-        +glob.glob(prediction_file_location+"j6_2ch_128.pkl")
-        +glob.glob(prediction_file_location+"j6_2ch_128mm_skew.pkl")
-        +glob.glob(prediction_file_location+"j6_2ch_96mm_skew.pkl")
+        +glob.glob(prediction_file_location+"j6_2ch_128mm.pkl")
+        +glob.glob(prediction_file_location+"j6_2ch_128mm_96.pkl")
+        +glob.glob(prediction_file_location+"j6_2ch_128mm.pkl")
+        +glob.glob(prediction_file_location+"j6_2ch_96mm.pkl")
         +glob.glob(prediction_file_location+"j6_4ch.pkl")
         +glob.glob(prediction_file_location+"j6_4ch_gauss.pkl")
         +glob.glob(prediction_file_location+"je_ss_jonisc64_leaky_convroll.pkl")
         +glob.glob(prediction_file_location+"je_ss_jonisc64small_360.pkl")
         +glob.glob(prediction_file_location+"je_ss_jonisc64small_360_gauss_longer.pkl")
         +glob.glob(prediction_file_location+"je_ss_jonisc64small_360_gauss_longer_aubright.pkl")
-        +glob.glob(prediction_file_location+"je_ss_jonisc80_leaky_convroll_augzoombright.pkl")
+        +glob.glob(prediction_file_location+"je_ss_jonisc80_leaky_convroll.pkl")
         +glob.glob(prediction_file_location+"je_ss_normscale.pkl")
         +glob.glob(prediction_file_location+"je_ss_nrmsc128_gauss.pkl")
-        +glob.glob(prediction_file_location+"je_ss_nrmsc128_gauss.pkl")
+        +glob.glob(prediction_file_location+"ira_configurations.gauss_roi_zoom_big_after_seqshift-geit-20160307-010906")
     )
+
 
     fp_expert_pkl_files = sorted([]
         +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi10_big_leaky_after_seqshift-50.pkl")
@@ -377,6 +379,8 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
         +glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright.pkl")
         +glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright_betterdists.pkl")
+        +glob.glob(prediction_file_location+"je_os_fixedaggr_relloc_filtered.pkl")
+        +glob.glob(prediction_file_location+"je_os_fixedaggr_relloc_filtered_discs.pkl")
     )
 
     everything = sorted([]
@@ -386,7 +390,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         +glob.glob(prediction_file_location+"j7*.pkl")
         +glob.glob(prediction_file_location+"j8*.pkl")
     )
-    expert_pkl_files = fp_expert_pkl_files + ss_expert_pkl_files
+    expert_pkl_files = ss_expert_pkl_files + fp_expert_pkl_files
     """
     expert_pkl_files = sorted([]
         +glob.glob(prediction_file_location+"j6_2ch.pkl")
@@ -440,9 +444,10 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
                                    normalav,
                                    prodav,
                                    weighted_arithm_method,
-                                   weighted_arithm_no_entr,
-                                   weighted_geom_method,
-                                   weighted_geom_no_entr]:
+                                   #weighted_arithm_no_entr,
+                                   #weighted_geom_method,
+                                   #weighted_geom_no_entr
+                                   ]:
                 calculate_tta_average(predictions, average_method, average_systole, average_diastole)
 
                 crps = get_validate_crps(predictions, regular_labels)
@@ -514,6 +519,10 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         print expert_name.split('/')[-1]
 
     print
+    print "estimated leaderboard loss: %f" % ((first_pass_sys_loss + first_pass_dia_loss)/2)
+    print
+
+    print
     print "Average the experts according to these weights to find the final distribution"
     final_predictions = [{
                             "patient": i+1,
@@ -534,7 +543,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         valid_labels=systole_valid_labels,
         expert_pkl_files=expert_pkl_files,
         expert_weight=systole_expert_weight,
-        disagreement_cutoff=0.001 # 0.01
+        disagreement_cutoff=0.01 # 0.01
     )
 
     generate_final_predictions(
@@ -549,7 +558,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         valid_labels=diastole_valid_labels,
         expert_pkl_files=expert_pkl_files,
         expert_weight=diastole_expert_weight,
-        disagreement_cutoff=0.0015  # diastole has about 50% more error
+        disagreement_cutoff=0.015  # diastole has about 50% more error
     )
 
     print

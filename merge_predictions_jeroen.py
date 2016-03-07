@@ -99,7 +99,7 @@ def _get_all_prediction_files():
     The files are filtered first.
     """
     # Get all of them
-    all_files = glob.glob(PREDICTIONS_PATH + '*')[:10]
+    all_files = glob.glob(PREDICTIONS_PATH + '*')
     # And filter them
     res = []
     for f in all_files:
@@ -575,9 +575,7 @@ def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None, wei
     mask_top, preds_sys_top, preds_dia_top = _create_prediction_matrix(top_models)
 
     slice_models_idx = None
-    if outliers is not None and slice_ensemble_results is not None:
-        print "Taking outliers into account"
-        # remove outliers
+    if outliers is not None and slice_ensemble_results is not None:        # remove outliers
         mask_top = mask_top * np.logical_not(outliers)[np.newaxis, :]
         for idx, model in enumerate(top_models):
             if model is ensemble_metadata:
@@ -606,74 +604,92 @@ def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None, wei
     if DO_XVAL:
         print "  Doing leave one patient out xval (systole)"
         nr_val_patients = len(targets_sys_val)
+        
         train_errs_sys = []
         val_errs_sys = []
         w_iters_sys = []
-        for val_pid in xrange(nr_val_patients):
-            if PRINT_FOLDS: print "    - fold %d" % val_pid
-            w_iter = _find_weights(
-                w_init_sys_top,
-                np.hstack((preds_sys_top_val[:, :val_pid], preds_sys_top_val[:, val_pid+1:])),
-                np.vstack((targets_sys_val[:val_pid], targets_sys_val[val_pid+1:])),
-                np.hstack((mask_top_val[:, :val_pid], mask_top_val[:, val_pid+1:])),
-                eps=EPS_TOP,
-                )
-            train_err = _eval_weights(
-                w_iter,
-                np.hstack((preds_sys_top_val[:, :val_pid], preds_sys_top_val[:, val_pid+1:])),
-                np.vstack((targets_sys_val[:val_pid], targets_sys_val[val_pid+1:])),
-                np.hstack((mask_top_val[:, :val_pid], mask_top_val[:, val_pid+1:])),
-                )
-            val_err = _eval_weights(w_iter,
-                preds_sys_top_val[:, val_pid:val_pid+1],
-                targets_sys_val[val_pid:val_pid+1],
-                mask_top_val[:, val_pid:val_pid+1],
-                )
-            if PRINT_FOLDS: print "      train_err: %.4f,  val_err: %.4f" % (train_err, val_err)
-            train_errs_sys.append(train_err)
-            val_errs_sys.append(val_err)
-            w_iters_sys.append(w_iter)
 
-        expected_systole_loss = np.mean(val_errs_sys)
-        print "  average train err: %.4f" % np.mean(train_errs_sys)
-        print "  average valid err: %.4f" % np.mean(val_errs_sys)
-
-        print "  Doing leave one patient out xval (diastole)"
-        nr_val_patients = len(targets_dia_val)
         train_errs_dia = []
         val_errs_dia = []
         w_iters_dia = []
+        
         for val_pid in xrange(nr_val_patients):
             if PRINT_FOLDS: print "    - fold %d" % val_pid
-            w_iter = _find_weights(
-                w_init_dia_top,
-                np.hstack((preds_dia_top_val[:, :val_pid], preds_dia_top_val[:, val_pid+1:])),
-                np.vstack((targets_dia_val[:val_pid], targets_dia_val[val_pid+1:])),
-                np.hstack((mask_top_val[:, :val_pid], mask_top_val[:, val_pid+1:])),
-                eps=EPS_TOP,
-                )
-            train_err = _eval_weights(
-                w_iter,
-                np.hstack((preds_dia_top_val[:, :val_pid], preds_dia_top_val[:, val_pid+1:])),
-                np.vstack((targets_dia_val[:val_pid], targets_dia_val[val_pid+1:])),
-                np.hstack((mask_top_val[:, :val_pid], mask_top_val[:, val_pid+1:])),
-                )
-            val_err = _eval_weights(w_iter,
-                preds_dia_top_val[:, val_pid:val_pid+1],
-                targets_dia_val[val_pid:val_pid+1],
-                mask_top_val[:, val_pid:val_pid+1],
-                )
-            if PRINT_FOLDS: print "      train_err: %.4f,  val_err: %.4f" % (train_err, val_err)
-            train_errs_dia.append(train_err)
-            val_errs_dia.append(val_err)
-            w_iters_dia.append(w_iter)
+            preds_sys_val_i = np.hstack((preds_sys_val[:, :val_pid], preds_sys_val[:, val_pid+1:]))
+            targets_sys_val_i = np.vstack((targets_sys_val[:val_pid], targets_sys_val[val_pid+1:]))
+            preds_dia_val_i = np.hstack((preds_dia_val[:, :val_pid], preds_dia_val[:, val_pid+1:]))
+            targets_dia_val_i = np.vstack((targets_dia_val[:val_pid], targets_dia_val[val_pid+1:]))
+            mask_val_i = np.hstack((mask_val[:, :val_pid], mask_val[:, val_pid+1:]))
+                
+            # Fit weights on entire thing
+            w_sys_i = _find_weights(w_init, preds_sys_val_i, targets_sys_val_i, mask_val_i, eps=EPS_TOP)
+            w_dia_i = _find_weights(w_init, preds_dia_val_i, targets_dia_val_i, mask_val_i, eps=EPS_TOP)
 
+            # Select models
+            sorted_models_i, sorted_w_sys_i, sorted_w_dia_i = zip(*sorted(zip(metadatas, w_sys_i, w_dia_i), key=sort_key))
+            top_models_i = list(sorted_models_i[:SELECT_TOP])
+            sorted_w_sys_i = list(sorted_w_sys_i)
+            sorted_w_dia_i = list(sorted_w_dia_i)
+            if slice_ensemble_results is not None and not ensemble_metadata in top_models_i:
+                top_models_i[-1] = ensemble_metadata
+                sorted_w_sys_i[SELECT_TOP-1] = EPS_TOP
+                sorted_w_dia_i[SELECT_TOP-1] = EPS_TOP
+
+            w_init_sys_top_i = np.array(sorted_w_sys_i[:SELECT_TOP]) / np.array(sorted_w_sys_i[:SELECT_TOP]).sum()
+            w_init_dia_top_i = np.array(sorted_w_dia_i[:SELECT_TOP]) / np.array(sorted_w_dia_i[:SELECT_TOP]).sum()
+            
+            mask_top_, preds_sys_top_, preds_dia_top_ = _create_prediction_matrix(top_models_i)
+            
+            slice_models_idx_i = None
+            if outliers is not None and slice_ensemble_results is not None:
+                # remove outliers
+                mask_top_ = mask_top_ * np.logical_not(outliers)[np.newaxis, :]
+                for idx, model in enumerate(top_models):
+                    if model is ensemble_metadata:
+                        mask_top_[idx, :] = outliers
+                        slice_models_idx_i = idx 
+
+            mask_top_val_ = mask_top_[:, val_idx]
+            mask_top_val_i = np.hstack((mask_top_val_[:, :val_pid], mask_top_val_[:, val_pid+1:]))
+            
+            preds_sys_top_val_ = preds_sys_top_[:, val_idx, :]
+            preds_sys_top_val_i = np.hstack((preds_sys_top_val_[:, :val_pid], preds_sys_top_val_[:, val_pid+1:]))
+
+            preds_dia_top_val_ = preds_dia_top_[:, val_idx, :]
+            preds_dia_top_val_i = np.hstack((preds_dia_top_val_[:, :val_pid], preds_dia_top_val_[:, val_pid+1:]))
+            
+            w_sys_top_i = _find_weights(w_init_sys_top_i, preds_sys_top_val_i, targets_sys_val_i, mask_top_val_i, eps=EPS_TOP)
+            w_dia_top_i = _find_weights(w_init_dia_top_i, preds_dia_top_val_i, targets_dia_val_i, mask_top_val_i, eps=EPS_TOP)
+
+            sys_err_i = _eval_weights(w_sys_top_i, preds_sys_top_val[:, val_pid:val_pid+1], targets_sys_val[val_pid:val_pid+1], mask_top_val_[:, val_pid:val_pid+1])
+            dia_err_i = _eval_weights(w_dia_top_i, preds_dia_top_val[:, val_pid:val_pid+1], targets_dia_val[val_pid:val_pid+1], mask_top_val_[:, val_pid:val_pid+1])
+            sys_err_train_i = _eval_weights(w_sys_top_i, preds_sys_top_val_i, targets_sys_val_i, mask_top_val_i)
+            dia_err_train_i = _eval_weights(w_dia_top_i, preds_dia_top_val_i, targets_dia_val_i, mask_top_val_i)
+
+            if PRINT_FOLDS: print "      (sys) train_err: %.4f,  val_err: %.4f" % (sys_err_train_i, sys_err_i)
+            if PRINT_FOLDS: print "      (dia) train_err: %.4f,  val_err: %.4f" % (dia_err_train_i, dia_err_i)
+
+            train_errs_sys.append(sys_err_train_i)
+            val_errs_sys.append(sys_err_i)
+            w_iters_sys.append(w_sys_top_i)
+            train_errs_dia.append(dia_err_train_i)
+            val_errs_dia.append(dia_err_i)
+            w_iters_dia.append(w_dia_top_i)        
+
+
+        expected_systole_loss = np.mean(val_errs_sys)
         expected_diastole_loss = np.mean(val_errs_dia)
+        print " Results systole:"
+        print "  average train err: %.4f" % np.mean(train_errs_sys)
+        print "  average valid err: %.4f" % np.mean(val_errs_sys)
+        print " Results diastole:"
         print "  average train err: %.4f" % np.mean(train_errs_dia)
         print "  average valid err: %.4f" % np.mean(val_errs_dia)
+        print " Results average:"
+        print "  average train err: %.4f" % (np.mean(train_errs_dia)/2.0 + np.mean(train_errs_sys)/2.0)
+        print "  average valid err: %.4f" % (np.mean(val_errs_dia)/2.0 + np.mean(val_errs_sys)/2.0)
 
-
-
+        
     print "Final scores on the validation set:"
     print "  systole:  %.4f" % sys_err
     print "  diastole: %.4f" % dia_err

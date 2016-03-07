@@ -50,11 +50,15 @@ First, optimize the following models in this order:
 
 > python train.py -c j6_4ch_128mm_specialist
 
+> python train.py -c je_ss_jonisc64_leaky_convroll
+
 > python train.py -c je_ss_jonisc80small_360_gauss_longer_augzoombright
 
 > python train.py -c je_meta_fixedaggr_joniscale80small_augzoombright
 
 > python train.py -c je_meta_fixedaggr_joniscale64small_filtered_longer
+
+> python train.py -c je_ss_jonisc80_leaky_convroll_augzoombright
 
 > python train.py -c je_meta_fixedaggr_jsc80leakyconv_augzoombright_short
 
@@ -73,6 +77,8 @@ Also in the meantime, train these following models, which you can find in the di
 
 > cd ira
 
+---
+
 > python train.py gauss_roi10_maxout_seqshift_96
 
 > python train_meta.py meta_gauss_roi10_maxout_seqshift_96
@@ -80,6 +86,16 @@ Also in the meantime, train these following models, which you can find in the di
 > python predict_framework_transfer.py gauss_roi10_maxout_seqshift_96 50 arithmetic
 
 > python predict_framework_transfer.py meta_gauss_roi10_maxout_seqshift_96 50 arithmetic
+
+---
+
+> python train.py gauss_roi10_big_leaky_after_seqshift
+
+> python train_meta.py meta_gauss_roi10_big_leaky_after_seqshift
+
+> python predict_framework_transfer.py gauss_roi10_big_leaky_after_seqshift 50 arithmetic
+
+> python predict_framework_transfer.py meta_gauss_roi10_big_leaky_after_seqshift 50 arithmetic
 
 ---
 
@@ -123,13 +139,13 @@ Also in the meantime, train these following models, which you can find in the di
 
 ---
 
-> python train.py gauss_roi_zoom_mask_leaky_after
+> python train.py gauss_roi_zoom_mask_leaky
 
-> python train_meta.py meta_gauss_roi_zoom_mask_leaky_after
+> python train_meta.py meta_gauss_roi_zoom_mask_leaky
 
-> python predict_framework_transfer.py gauss_roi_zoom_mask_leaky_after 50 arithmetic
+> python predict_framework_transfer.py gauss_roi_zoom_mask_leaky 50 arithmetic
 
-> python predict_framework_transfer.py meta_gauss_roi_zoom_mask_leaky_after 50 arithmetic
+> python predict_framework_transfer.py meta_gauss_roi_zoom_mask_leaky 50 arithmetic
 
 ---
 
@@ -153,17 +169,6 @@ Also in the meantime, train these following models, which you can find in the di
 
 > python predict_framework_transfer.py ch2_zoom_leaky_after_nomask 50 arithmetic
 
----
-
-> python train.py ch2_zoom_leaky_after_nomask
-
-> python predict_framework_transfer.py ch2_zoom_leaky_after_nomask 50 arithmetic
-
----
-
-> python train.py gauss_roi10_zoom_mask_leaky_after
-
-> python predict_framework_transfer.py gauss_roi10_zoom_mask_leaky_after 50 arithmetic
 
 
 Step 5

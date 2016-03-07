@@ -519,16 +519,13 @@ if __name__ == '__main__':
         +glob.glob(PREDICTIONS_PATH+"j6_4ch.pkl")
         +glob.glob(PREDICTIONS_PATH+"j6_4ch_gauss.pkl")
 
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc80_leaky_convroll.pkl")
         +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64_leaky_convroll.pkl")
-
+        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc80_leaky_convroll.pkl")
         +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64small_360.pkl")
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64small_360_gauss_longer.pkl")
+
         +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64small_360_gauss_longer_aubright.pkl")
         +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64_leaky_convroll.pkl")
-        +glob.glob(PREDICTIONS_PATH+"je_ss_normscale.pkl")
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc80_leaky_convroll_augzoombright")
-        +glob.glob(PREDICTIONS_PATH+"je_ss_nrmsc128_gauss.pkl")
+        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc80_leaky_convroll_augzoombright.pkl")
 
         +glob.glob(PREDICTIONS_PATH+"ira_configurations.gauss_roi10_maxout.pkl")
         +glob.glob(PREDICTIONS_PATH+"ira_configurations.gauss_roi10_maxout_seqshift_96.pkl")

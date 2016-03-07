@@ -16,7 +16,9 @@ maxfloat = np.finfo(np.float32).max
 
 def find_model_metadata(metadata_dir, config_name):
     metadata_paths = glob.glob(metadata_dir + '/%s-*' % config_name)
-    if len(metadata_paths) > 1:
+    if not metadata_paths:
+        raise ValueError('No metadata files for config %s' % config_name)
+    elif len(metadata_paths) > 1:
         raise ValueError('Multiple metadata files for config %s' % config_name)
     print metadata_paths[0]
     return metadata_paths[0]

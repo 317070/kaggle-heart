@@ -2,7 +2,6 @@ from collections import defaultdict
 from scipy.stats import norm
 import numpy as np
 import scipy.stats
-import lasagne as nn
 
 
 def make_monotone_cdf(cdf):
@@ -96,7 +95,7 @@ def get_patient_average_heaviside_predictions(batch_predictions, batch_patient_i
     return patient2cdf
 
 
-def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean='geometric'):
+def get_patient_average_cdf_predictions(batch_predictions, batch_patient_ids, mean='arithmetic'):
     """
 
     :param batch_predictions: cdf predictions per slice

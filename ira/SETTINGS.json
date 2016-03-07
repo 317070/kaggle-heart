@@ -1,9 +1,0 @@
-{
-  "TRAIN_DATA_PATH": "/mnt/storage/data/dsb15/train",
-  "VALIDATE_DATA_PATH": "/mnt/storage/data/dsb15/validate",
-  "PKL_TRAIN_DATA_PATH": "/data/dsb15_pkl/pkl_train",
-  "PKL_VALIDATE_DATA_PATH": "/data/dsb15_pkl/pkl_validate",
-  "MODEL_PATH": "/home/ikorshun/metadata",
-  "TRAIN_LABELS_PATH": "/data/dsb15_pkl/train.csv",
-  "PREDICTIONS_PATH": "/mnt/storage/metadata/kaggle-heart/predictions"
-}

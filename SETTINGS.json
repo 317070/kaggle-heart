@@ -11,5 +11,10 @@
   "ENSEMBLE_WEIGHTS_PATH":"/mnt/storage/metadata/kaggle-heart/ensemble-weights/",
   "TRAIN_PATIENT_IDS":[1,  500],
   "TEST_PATIENT_IDS": [501,700],
-  "SUBMISSION_NR": 1
+  "SUBMISSION_NR": 1,
+  "VALIDATE_DATA_PATH": "/mnt/storage/data/dsb15/validate",
+  "PKL_VALIDATE_DATA_PATH": "/data/dsb15_pkl/pkl_validate",
+  "METADATA_PATH": "/mnt/storage/metadata/kaggle-heart",
+  "TRAIN_LABELS_PATH": "/data/dsb15_pkl/train.csv",
+  "PREDICTIONS_PATH": "/mnt/storage/metadata/kaggle-heart/predictions"
 }

@@ -8,7 +8,7 @@ import utils
 import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
-from pathfinder import MODEL_PATH, PREDICTIONS_PATH
+from pathfinder import METADATA_PATH, PREDICTIONS_PATH
 
 NUM_PATIENTS = 700
 
@@ -19,9 +19,9 @@ config_name = sys.argv[1]
 n_tta_iterations = int(sys.argv[2]) if len(sys.argv) >= 3 else 100
 mean = sys.argv[3] if len(sys.argv) >= 4 else 'geometric'
 
-print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, "both", mean)
+print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, "valid and test", mean)
 
-metadata_dir = utils.get_dir_path('train', MODEL_PATH)
+metadata_dir = utils.get_dir_path('train', METADATA_PATH)
 metadata_path = utils.find_model_metadata(metadata_dir, config_name)
 metadata = utils.load_pkl(metadata_path)
 assert config_name == metadata['configuration']
@@ -30,13 +30,14 @@ if 'subconfiguration' in metadata:
 set_configuration(config_name)
 
 # predictions paths
-jonas_prediction_path = PREDICTIONS_PATH + '/ira_%s.pkl' % config().__name__
-prediction_dir = utils.get_dir_path('predictions', MODEL_PATH)
-valid_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'valid', n_tta_iterations, mean)
+jonas_prediction_path = PREDICTIONS_PATH + '/ira_%s-%s.pkl' % (config().__name__, n_tta_iterations)
+prediction_dir = utils.get_dir_path('predictions', METADATA_PATH)
+valid_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (
+    metadata['experiment_id'], 'valid', n_tta_iterations, mean)
 test_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], 'test', n_tta_iterations, mean)
 
 # submissions paths
-submission_dir = utils.get_dir_path('submissions', MODEL_PATH)
+submission_dir = utils.get_dir_path('submissions', METADATA_PATH)
 submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], 'test', n_tta_iterations, mean)
 
 print "Build model"
@@ -113,7 +114,7 @@ test_data_iterator = config().test_data_iterator
 if n_tta_iterations == 1:
     test_data_iterator.transformation_params = config().valid_transformation_params
 else:
-    test_data_iterator.transformation_params = config().train_transformation_params
+    # just to be sure
     test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
 print 'test transformation params'
@@ -147,12 +148,23 @@ print '\npredictions saved to %s' % test_prediction_path
 utils.save_submission(avg_patient_predictions, submission_path)
 print ' submission saved to %s' % submission_path
 
-with open(jonas_prediction_path, 'w') as f:
-    pickle.dump({
-        'metadata_path': metadata_path,
-        'prediction_path': test_prediction_path,
-        'submission_path': submission_path,
-        'configuration_file': config().__name__,
-        'git_revision_hash': utils.get_git_revision_hash(),
-        'predictions': predictions
-    }, f, pickle.HIGHEST_PROTOCOL)
+try:
+    with open(jonas_prediction_path, 'w') as f:
+        pickle.dump({
+            'metadata_path': metadata_path,
+            'prediction_path': test_prediction_path,
+            'submission_path': submission_path,
+            'configuration_file': config().__name__,
+            'git_revision_hash': utils.get_git_revision_hash(),
+            'predictions': predictions
+        }, f, pickle.HIGHEST_PROTOCOL)
+except:
+    with open('ira_%s.pkl' % config().__name__, 'w') as f:
+        pickle.dump({
+            'metadata_path': metadata_path,
+            'prediction_path': test_prediction_path,
+            'submission_path': submission_path,
+            'configuration_file': config().__name__,
+            'git_revision_hash': utils.get_git_revision_hash(),
+            'predictions': predictions
+        }, f, pickle.HIGHEST_PROTOCOL)

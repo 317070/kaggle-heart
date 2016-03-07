@@ -20,7 +20,7 @@ mean = sys.argv[4] if len(sys.argv) >= 5 else 'geometric'
 
 print 'Make %s tta predictions for %s set using %s mean' % (n_tta_iterations, set, mean)
 
-metadata_dir = utils.get_dir_path('train', pathfinder.MODEL_PATH)
+metadata_dir = utils.get_dir_path('train', pathfinder.METADATA_PATH)
 metadata_path = utils.find_model_metadata(metadata_dir, config_name)
 metadata = utils.load_pkl(metadata_path)
 
@@ -30,11 +30,11 @@ if 'subconfiguration' in metadata:
 set_configuration(config_name)
 
 # predictions paths
-prediction_dir = utils.get_dir_path('predictions', pathfinder.MODEL_PATH)
+prediction_dir = utils.get_dir_path('predictions', pathfinder.METADATA_PATH)
 prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experiment_id'], set, n_tta_iterations, mean)
 
 # submissions paths
-submission_dir = utils.get_dir_path('submissions', pathfinder.MODEL_PATH)
+submission_dir = utils.get_dir_path('submissions', pathfinder.METADATA_PATH)
 submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], set, n_tta_iterations, mean)
 
 print "Build model"
@@ -149,8 +149,7 @@ if set == 'test':
     if n_tta_iterations == 1:
         test_data_iterator.transformation_params = config().valid_transformation_params
     else:
-        test_data_iterator.transformation_params = config().train_transformation_params
-    test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
+        test_data_iterator.transformation_params['zoom_range'] = (1., 1.)
 
     print 'n test: %d' % test_data_iterator.nsamples
     print 'tta iteration:',

@@ -20,7 +20,7 @@ if len(sys.argv) < 2:
 config_name = sys.argv[1]
 
 subconfig_name = config_name.replace('meta_', '')
-metadata_dir = utils.get_dir_path('train', pathfinder.MODEL_PATH)
+metadata_dir = utils.get_dir_path('train', pathfinder.METADATA_PATH)
 submodel_metadata_path = utils.find_model_metadata(metadata_dir, subconfig_name)
 submodel_metadata = utils.load_pkl(submodel_metadata_path)
 
@@ -35,7 +35,7 @@ print
 
 # meta metadata and logs paths
 metadata_path = metadata_dir + '/%s.pkl' % expid
-logs_dir = utils.get_dir_path('logs', pathfinder.MODEL_PATH)
+logs_dir = utils.get_dir_path('logs', pathfinder.METADATA_PATH)
 sys.stdout = logger.Logger(logs_dir + '/%s.log' % expid)
 
 print 'Build model'

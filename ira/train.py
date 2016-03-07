@@ -25,11 +25,11 @@ print "Experiment ID: %s" % expid
 print
 
 # metadata
-metadata_dir = utils.get_dir_path('train', pathfinder.MODEL_PATH)
+metadata_dir = utils.get_dir_path('train', pathfinder.METADATA_PATH)
 metadata_path = metadata_dir + '/%s.pkl' % expid
 
 # logs
-logs_dir = utils.get_dir_path('logs', pathfinder.MODEL_PATH)
+logs_dir = utils.get_dir_path('logs', pathfinder.METADATA_PATH)
 sys.stdout = logger.Logger(logs_dir + '/%s.log' % expid)
 sys.stderr = sys.stdout
 
@@ -71,7 +71,7 @@ for l_in, x in izip(model.l_ins, xs_shared):
 # theano functions
 iter_train = theano.function([idx], train_loss, givens=givens_train, updates=updates, on_unused_input='ignore')
 iter_validate = theano.function([], [nn.layers.get_output(l, deterministic=True) for l in model.l_outs],
-                                givens=givens_valid)
+                                givens=givens_valid,on_unused_input='warn')
 
 if config().restart_from_save:
     print 'Load model parameters for resuming'

@@ -6,8 +6,9 @@ import slice2roi
 with open('SETTINGS.json') as data_file:
     paths = json.load(data_file)
 
-MODEL_PATH = paths["MODEL_PATH"]
+METADATA_PATH = paths["METADATA_PATH"]
 PREDICTIONS_PATH = paths["PREDICTIONS_PATH"]
+SUBMISSION_PATH = paths["SUBMISSION_PATH"]
 
 TRAIN_DATA_PATH = paths["TRAIN_DATA_PATH"]
 PKL_TRAIN_DATA_PATH = paths["PKL_TRAIN_DATA_PATH"]
@@ -21,8 +22,7 @@ TRAIN_LABELS_PATH = paths["TRAIN_LABELS_PATH"]
 if not os.path.isfile(TRAIN_LABELS_PATH):
     raise ValueError('no file with train labels')
 
-
-# TODO: MOVE THIS SOMEWHERE
+# TODO: next time move this a better place
 if not os.path.isfile('pkl_train_slice2roi.pkl'):
     print 'Generating ROI'
     slice2roi.get_slice2roi(TRAIN_DATA_PATH, 'pkl_train_slice2roi.pkl')

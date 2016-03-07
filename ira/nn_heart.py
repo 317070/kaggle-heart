@@ -2,6 +2,7 @@ import lasagne as nn
 import theano.tensor as T
 import numpy as np
 from lasagne import nonlinearities
+from lasagne.layers.dnn import Conv2DDNNLayer
 
 
 def lb_softplus(lb=1):
@@ -334,3 +335,37 @@ class IraLayer(nn.layers.MergeLayer):
 
         # Concat and return
         return T.concatenate([mu_volume_patient, sigma_volume_patient], axis=1)
+
+
+class HighwayLayer(nn.layers.MergeLayer):
+    def __init__(self, gate, input1, input2, **kwargs):
+        incomings = [gate, input1, input2]
+        super(HighwayLayer, self).__init__(incomings, **kwargs)
+        assert gate.output_shape == input1.output_shape == input2.output_shape
+
+    def get_output_shape_for(self, input_shapes):
+        return input_shapes[0]
+
+    def get_output_for(self, inputs, **kwargs):
+        return inputs[0] * inputs[1] + (1 - inputs[0]) * inputs[2]
+
+
+def highway_conv3(incoming, nonlinearity=nn.nonlinearities.rectify, **kwargs):
+    wh = nn.init.Orthogonal('relu')
+    bh = nn.init.Constant(0.0)
+    wt = nn.init.Orthogonal('relu')
+    bt = nn.init.Constant(-2.)
+    num_filters = incoming.output_shape[1]
+
+    # H
+    l_h = Conv2DDNNLayer(incoming, num_filters=num_filters,
+                         filter_size=(3, 3), stride=(1, 1),
+                         pad='same', W=wh, b=bh,
+                         nonlinearity=nonlinearity)
+    # T
+    l_t = Conv2DDNNLayer(incoming, num_filters=num_filters,
+                         filter_size=(3, 3), stride=(1, 1),
+                         pad='same', W=wt, b=bt,
+                         nonlinearity=T.nnet.sigmoid)
+
+    return HighwayLayer(gate=l_t, input1=l_h, input2=incoming)

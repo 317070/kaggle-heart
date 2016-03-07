@@ -4,8 +4,6 @@ import re
 import itertools
 from collections import defaultdict
 import numpy as np
-import os
-import slice2roi
 import utils
 
 
@@ -179,6 +177,116 @@ class PatientsDataGenerator(object):
                 else:
                     yield [x_batch, slice_mask_batch, slice_location_batch, sex_age_batch], [y0_batch,
                                                                                              y1_batch], patients_ids
+
+            if not self.infinite:
+                break
+
+
+class Ch2Ch4DataGenerator(object):
+    def __init__(self, data_path, batch_size, transform_params, patient_ids=None, labels_path=None,
+                 slice2roi_path=None, full_batch=False, random=True, infinite=True, min_slices=5, **kwargs):
+
+        if patient_ids:
+            patient_paths = []
+            for pid in patient_ids:
+                patient_paths.append(data_path + '/%s/study/' % pid)
+        else:
+            patient_paths = glob.glob(data_path + '/*/study/')
+
+        self.pid2sax_slice_paths = defaultdict(list)
+        self.pid2ch2_path, self.pid2ch4_path = {}, {}
+        for p in patient_paths:
+            pid = int(utils.get_patient_id(p))
+            spaths = sorted(glob.glob(p + '/sax_*.pkl'), key=lambda x: int(re.search(r'/sax_(\d+)\.pkl$', x).group(1)))
+            if len(spaths) > min_slices:
+                self.pid2sax_slice_paths[pid] = spaths
+
+                ch2_path = glob.glob(p + '/2ch_*.pkl')
+                self.pid2ch2_path[pid] = ch2_path[0] if ch2_path else None
+                ch4_path = glob.glob(p + '/4ch_*.pkl')
+                self.pid2ch4_path[pid] = ch4_path[0] if ch4_path else None
+
+        self.patient_ids = self.pid2sax_slice_paths.keys()
+        self.nsamples = len(self.patient_ids)
+
+        self.id2labels = data.read_labels(labels_path) if labels_path else None
+        self.batch_size = batch_size
+        self.rng = np.random.RandomState(42)
+        self.full_batch = full_batch
+        self.random = random
+        self.batch_size = batch_size
+        self.infinite = infinite
+        self.transformation_params = transform_params
+        self.slice2roi = utils.load_pkl(slice2roi_path) if slice2roi_path else None
+
+    def generate(self):
+        while True:
+            rand_idxs = np.arange(self.nsamples)
+            if self.random:
+                self.rng.shuffle(rand_idxs)
+            for pos in xrange(0, len(rand_idxs), self.batch_size):
+                idxs_batch = rand_idxs[pos:pos + self.batch_size]
+                nb = len(idxs_batch)
+                # allocate batches
+                x_ch2_batch = np.zeros((nb, 30) + self.transformation_params['patch_size'],
+                                       dtype='float32')
+                x_ch4_batch = np.zeros((nb, 30) + self.transformation_params['patch_size'],
+                                       dtype='float32')
+                y0_batch = np.zeros((nb, 1), dtype='float32')
+                y1_batch = np.zeros((nb, 1), dtype='float32')
+                patients_ids = []
+
+                for i, idx in enumerate(idxs_batch):
+                    pid = self.patient_ids[idx]
+                    patients_ids.append(pid)
+
+                    # do everything with sax
+                    sax_slice_paths = self.pid2sax_slice_paths[pid]
+                    sax_slicepath2metadata = {}
+                    sax_slicepath2roi = {}
+                    for s in sax_slice_paths:
+                        sax_metadata = data.read_metadata(s)
+                        sax_slicepath2metadata[s] = sax_metadata
+                        sid = utils.get_slice_id(s)
+                        roi = self.slice2roi[str(pid)][sid]
+                        sax_slicepath2roi[s] = roi
+
+                    # read ch2, ch4
+                    if self.pid2ch2_path[pid]:
+                        data_ch2 = data.read_slice(self.pid2ch2_path[pid])
+                        metadata_ch2 = data.read_metadata(self.pid2ch2_path[pid])
+                    else:
+                        data_ch2, metadata_ch2 = None, None
+
+                    if self.pid2ch4_path[pid]:
+                        data_ch4 = data.read_slice(self.pid2ch4_path[pid])
+                        metadata_ch4 = data.read_metadata(self.pid2ch4_path[pid])
+                    else:
+                        data_ch4, metadata_ch4 = None, None
+
+                    if data_ch2 is None and data_ch4 is not None:
+                        data_ch2 = data_ch4
+
+                    if data_ch4 is None and data_ch2 is not None:
+                        data_ch4 = data_ch2
+
+                    # sample augmentation params per patient
+                    random_params = data.sample_augmentation_parameters(self.transformation_params)
+                    x_ch2_batch[i], x_ch4_batch[i], targets_zoom = data.transform_ch(data_ch2, metadata_ch2,
+                                                                                     data_ch4, metadata_ch4,
+                                                                                     saxslice2metadata=sax_slicepath2metadata,
+                                                                                     transformation=self.transformation_params,
+                                                                                     sax2roi=sax_slicepath2roi,
+                                                                                     random_augmentation_params=random_params)
+                    if self.id2labels:
+                        y0_batch[i] = self.id2labels[pid][0] * targets_zoom
+                        y1_batch[i] = self.id2labels[pid][1] * targets_zoom
+
+                if self.full_batch:
+                    if nb == self.batch_size:
+                        yield [x_ch2_batch, x_ch4_batch], [y0_batch, y1_batch], patients_ids
+                else:
+                    yield [x_ch2_batch, x_ch4_batch], [y0_batch, y1_batch], patients_ids
 
             if not self.infinite:
                 break

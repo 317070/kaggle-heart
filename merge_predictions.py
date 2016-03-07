@@ -372,12 +372,11 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_mask_leaky_after.pkl")
         +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi10_maxout-50.pkl")
         +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_mask_highway-50.pkl")
-        +glob.glob(prediction_file_location+"ira_configurations.*")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss_fixedagesex.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright.pkl")
-        #+glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright_betterdists.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss_fixedagesex.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright.pkl")
+        +glob.glob(prediction_file_location+"je_meta_fixedaggr_jonisc80small_augzoombright_betterdists.pkl")
     )
 
     everything = sorted([]
@@ -387,7 +386,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         +glob.glob(prediction_file_location+"j7*.pkl")
         +glob.glob(prediction_file_location+"j8*.pkl")
     )
-    expert_pkl_files = everything #fp_expert_pkl_files #+ ss_expert_pkl_files
+    expert_pkl_files = fp_expert_pkl_files + ss_expert_pkl_files
     """
     expert_pkl_files = sorted([]
         +glob.glob(prediction_file_location+"j6_2ch.pkl")

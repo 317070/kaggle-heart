@@ -1,9 +1,4 @@
 
-# TODO:
-# - import and export weights and averaging method
-# - nice interface
-# - no validation sets
-
 import cPickle as pickle
 import csv
 import glob
@@ -15,23 +10,25 @@ import theano
 import theano.tensor as T
 
 import data_loader
+import paths
 import postprocess
 import utils
+import sys
 
 
 METADATAS_LOCATION = 'metadatas.pkl'
-RELOAD_METADATAS = True
+RELOAD_METADATAS = False
 DO_XVAL = True
 
-PREDICTIONS_PATH = "/mnt/storage/metadata/kaggle-heart/predictions/"
-SUBMISSION_PATH = "/mnt/storage/metadata/kaggle-heart/submissions/"
-WEIGHTS_PATH = "/mnt/storage/metadata/kaggle-heart/ensemble-weights/"
+PREDICTIONS_PATH = paths.INTERMEDIATE_PREDICTIONS_PATH
+SUBMISSION_PATH = paths.SUBMISSION_PATH
+WEIGHTS_PATH = paths.ENSEMBLE_WEIGHTS_PATH
 
 PRINT_FOLDS = False
 PRINT_EVERY = 1000  # Print itermediate results during training
 LEARNING_RATE = 1  # Learning rate of gradient descend
 NR_EPOCHS = 100
-C_reg1 = 0.0000  # L1 regularisation parameters
+C_reg1 = 0.0001  # L1 regularisation parameters
 C_reg2 = 0.0000  # L2 regularisation parameters
 GRAD_CLIP = 1
 
@@ -282,17 +279,20 @@ def _add_tta_score_to_metadata(metadata, tta_score, best_method):
     metadata['best_method'] = best_method
 
 
-def _compute_best_tta(metadata, pats_predicted):
+def _compute_best_tta(metadata, pats_predicted, best_method=None):
     print "    Using %d patients, averaging over %d TTAs" % (
         len(pats_predicted), _compute_nr_ttas(metadata, pats_predicted))
-    best_score = 1
-    best_method = None
-    for averaging_method in AVERAGING_METHODS:
-        _compute_tta(metadata, averaging_method)
-        err = _validate_metadata(metadata, pats_predicted)
-        print "    - %s: %.5f" % (averaging_method.func_name, err)
-        if err < best_score:
-            best_score, best_method = err, averaging_method
+    if not best_method:
+        best_score = 1
+        best_method = None
+        for averaging_method in AVERAGING_METHODS:
+            _compute_tta(metadata, averaging_method)
+            err = _validate_metadata(metadata, pats_predicted)
+            print "    - %s: %.5f" % (averaging_method.func_name, err)
+            if err < best_score:
+                best_score, best_method = err, averaging_method
+    else:
+        print "    Using predefined averaging"
     _compute_tta(metadata, best_method)
     _make_valid_distributions(metadata)
     tta_score = _validate_metadata(metadata, pats_predicted)
@@ -313,7 +313,7 @@ def _remove_ttas(metadata, tags_to_remove=('systole', 'diastole')):
 #========================================#
 
 
-def _process_prediction_file(path):
+def _process_prediction_file(path, tta_methods=None):
     metadata = load_prediction_file(path)
     if not metadata:
         print "  Couldn't load file"
@@ -333,15 +333,20 @@ def _process_prediction_file(path):
         return
 
     # Compute best way of averaging
-    print "  Trying out different ways of doing TTA:"
-    _compute_best_tta(metadata, pats_predicted['validation'])
+    if tta_methods:
+        print "  Using predetermined way of doing TTA"
+        best_method = tta_methods[metadata['configuration_file']]
+        _compute_best_tta(metadata, pats_predicted['validation'], best_method)
+    else:
+        print "  Trying out different ways of doing TTA:"
+        _compute_best_tta(metadata, pats_predicted['validation'])
 
     # Clean up the metadata file and return it
     _remove_ttas(metadata)
     return metadata
 
 
-def _load_and_process_metadata_files():
+def _load_and_process_metadata_files(tta_methods=None):
     all_prediction_files = sorted(_get_all_prediction_files())[:]
     nr_prediction_files = len(all_prediction_files)
 
@@ -354,7 +359,7 @@ def _load_and_process_metadata_files():
     for idx, path in enumerate(all_prediction_files):
         print
         print 'Processing %s (%d/%d)' % (os.path.basename(path), idx+1, nr_prediction_files)
-        m = _process_prediction_file(path)
+        m = _process_prediction_file(path, tta_methods)
         if m:
             useful_files.append(m)
 
@@ -399,7 +404,7 @@ def _get_train_val_test_ids():
     return np.array(sets)=="train", np.array(sets)=="validation", np.array(sets)=="test"
 
 
-def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix, eps=0.0, use_reg=True):
+def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix, eps=0.0, use_reg=True, slice_models_idx=None):
 
     nr_models = len(w_init)
     nr_patients = mask_matrix.shape[1]
@@ -415,6 +420,7 @@ def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix, eps=0.0, us
     preds = theano.shared(preds_matrix.astype('float32'))
     targets = theano.shared(targets_matrix.astype('float32'))
     mask = theano.shared(mask_matrix.astype('float32'))
+
     # expression
     masked_weights = mask * weights.dimshuffle(0, 'x')
     tot_masked_weights = masked_weights.sum(axis=0)
@@ -430,7 +436,7 @@ def _find_weights(w_init, preds_matrix, targets_matrix, mask_matrix, eps=0.0, us
     grad_weights_norm = (grad_weights ** 2).sum()
     grad_weights = grad_weights * GRAD_CLIP / T.clip(grad_weights_norm, GRAD_CLIP, utils.maxfloat)
     delta = T.clip(learning_rate * grad_weights, -.1, .1)
-    updated_weights = T.clip(weights - delta, eps, 10)  # Dont allow weights smaller than 0
+    updated_weights = T.clip((weights - delta), eps, 10)  # Dont allow weights smaller than 0
     updated_weights_normalised = T.clip(updated_weights / updated_weights.sum(), eps, 1)  # Renormalise
     updates = {weights: updated_weights_normalised}
     iter_train = theano.function([], loss, updates=updates)
@@ -477,6 +483,7 @@ def _ensemble_result_to_metadata(slice_ensemble_results):
     return {
         "predictions": predictions,
         "configuration_file": "slice_ensemble",
+        "best_method": None,
     }
 
 
@@ -484,7 +491,13 @@ def has_nan(x):
     return np.isnan(np.sum(x))
 
 
-def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None):
+def get_weight_vector(metadatas, weights):
+    w_sys = np.array([weights[metadata['configuration_file']][0] for metadata in metadatas])
+    w_dia = np.array([weights[metadata['configuration_file']][1] for metadata in metadatas])
+    return w_sys, w_dia
+
+
+def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None, weights=None):
 
     if outliers is not None and slice_ensemble_results is not None:
         ensemble_metadata = _ensemble_result_to_metadata(slice_ensemble_results)
@@ -499,7 +512,20 @@ def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None):
         print "Taking outliers into account"
         # remove outliers
         mask = mask * np.logical_not(outliers)[np.newaxis, :]
-        mask[-1, :] = np.ones(mask[-1].shape)
+        mask[-1, :] = outliers
+
+    if weights is not None:
+        print "Loading predefined weights"
+        w_sys, w_dia = get_weight_vector(metadatas, weights)
+        print
+        print "dia    sys "
+        for metadata, weight_sys, weight_dia in zip(metadatas, w_sys, w_dia):
+            print "%5.2f  %5.2f : %s" % (weight_sys*100, weight_dia*100, metadata["configuration_file"])
+        return {
+            "weights": weights,
+            "predictions_systole": _compute_predictions_ensemble(w_sys, preds_sys, mask),
+            "predictions_diastole": _compute_predictions_ensemble(w_dia, preds_dia, mask),
+        }
 
     # initialise weights
     nr_models = len(metadatas)
@@ -544,14 +570,15 @@ def _create_ensembles(metadatas, outliers=None, slice_ensemble_results=None):
     w_init_dia_top = np.array(sorted_w_dia[:SELECT_TOP]) / np.array(sorted_w_dia[:SELECT_TOP]).sum()
     mask_top, preds_sys_top, preds_dia_top = _create_prediction_matrix(top_models)
 
+    slice_models_idx = None
     if outliers is not None and slice_ensemble_results is not None:
         print "Taking outliers into account"
         # remove outliers
         mask_top = mask_top * np.logical_not(outliers)[np.newaxis, :]
         for idx, model in enumerate(top_models):
             if model is ensemble_metadata:
-                print idx
-                mask_top[idx, :] = np.ones(mask_top[idx, :].shape)
+                mask_top[idx, :] = outliers
+                slice_models_idx = idx
 
     mask_top_val, mask_top_test = mask_top[:, val_idx], mask_top[:, test_idx]
     preds_sys_top_val, preds_sys_top_test = preds_sys_top[:, val_idx, :], preds_sys_top[:, test_idx, :]
@@ -726,7 +753,19 @@ def compute_outliers(result_ensemble_everything, result_ensemble_slices, thresho
     return is_outlier
 
 
-def main():
+def combine_results(result_ensemble_everything, result_ensemble_slices, outliers):
+    pred_sys = result_ensemble_everything["predictions_systole"]
+    pred_sys[np.where(outliers)] = result_ensemble_slices["predictions_systole"][np.where(outliers)]
+    pred_dia = result_ensemble_everything["predictions_diastole"]
+    pred_dia[np.where(outliers)] = result_ensemble_slices["predictions_diastole"][np.where(outliers)]
+    res = {
+        "predictions_systole": pred_sys,
+        "predictions_diastole": pred_dia,
+    }
+    return res
+
+
+def main(weights_dict=None):
     # Load all metadatas
     print
     print "LOADING PREDICTION FILES"
@@ -734,7 +773,10 @@ def main():
     if RELOAD_METADATAS:
         metadatas = load_metadatas()
     else:
-        metadatas = _load_and_process_metadata_files()
+        if weights_dict:
+            metadatas = _load_and_process_metadata_files(weights_dict['tta_methods'])
+        else:
+            metadatas = _load_and_process_metadata_files()
         dump_metadatas(metadatas)
     metadatas_slices = _filter_metadatas(metadatas, ONLY_SLICE_MODELS_FILTERS)
 
@@ -742,13 +784,19 @@ def main():
     print
     print "CREATING ENSEMBLE (ALL)"
     print
-    result_ensemble_everything = _create_ensembles(metadatas)
+    if not weights_dict:
+        result_ensemble_everything = _create_ensembles(metadatas)
+    else:
+        result_ensemble_everything = _create_ensembles(metadatas, weights=weights_dict['weights_all'])
 
     # Create an ensemble of only slicemodels
     print
     print "CREATING ENSEMBLE (SLICES)"
     print
-    result_ensemble_slices = _create_ensembles(metadatas_slices)
+    if not weights_dict:
+        result_ensemble_slices = _create_ensembles(metadatas_slices)
+    else:
+        result_ensemble_slices = _create_ensembles(metadatas_slices, weights=weights_dict['weights_slices'])
 
     # Compute outliers
     print
@@ -756,18 +804,49 @@ def main():
     print
     for t in (0.05, 0.04, 0.03, 0.02, 0.015, 0.01, 0.005):
         compute_outliers(result_ensemble_slices, result_ensemble_everything, threshold=t)
-    outliers = compute_outliers(result_ensemble_slices, result_ensemble_everything)
+    if not weights_dict:
+        outliers = compute_outliers(result_ensemble_slices, result_ensemble_everything)
+    else:
+        outliers = weights_dict['outliers']
 
     # Retrain
     print
     print "CREATING ENSEMBLE (SLICE + ALL w/ outliers)"
     print
-    result_ensemble_final = _create_ensembles(metadatas, outliers=outliers, slice_ensemble_results=result_ensemble_slices)
+    if not weights_dict:
+        result_ensemble_final = _create_ensembles(metadatas, outliers=outliers, slice_ensemble_results=result_ensemble_slices)
+    else:
+        result_ensemble_final = _create_ensembles(metadatas, outliers=outliers, slice_ensemble_results=result_ensemble_slices, weights=weights_dict['weights_final'])
 
     # Dump predictions
     dump_predictions(result_ensemble_everything, SUBMISSION_PATH + 'ensemble_w_outliers.' + str(time.time()) + '.csv')
     dump_predictions(result_ensemble_slices, SUBMISSION_PATH + 'ensemble_slices.' + str(time.time()) + '.csv')
     dump_predictions(result_ensemble_final, SUBMISSION_PATH + 'ensemble_final.' + str(time.time()) + '.csv')
 
+    # Dump weights and stuff
+    tta_methods = {metadata['configuration_file']: metadata['best_method'] for metadata in metadatas}
+    weights_all = result_ensemble_everything["weights"]
+    weights_slices = result_ensemble_slices["weights"]
+    weights_final = result_ensemble_final["weights"]
+    weights_path = WEIGHTS_PATH + 'weights_ensemble.' + str(time.time()) + '.pkl'
+
+    with open(weights_path, 'w') as f:
+        pickle.dump({
+                        'tta_methods': tta_methods,
+                        'weights_all': weights_all,
+                        'weights_slices': weights_slices,
+                        'weights_final': weights_final,
+                        'outliers': outliers,
+                    }, f, pickle.HIGHEST_PROTOCOL)
+    print "Weights file dumped to %s" % weights_path
+
+
+
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1:
+        print "Reusing weights!"
+        weights_path = sys.argv[1]
+        weights_dict = np.load(weights_path)
+        main(weights_dict)
+    else:
+        main()

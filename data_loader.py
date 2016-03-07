@@ -54,8 +54,13 @@ def _split_train_val(patient_folders):
     """Splits the patient folders into train and validation splits.
     """
     # Construct train and validation splits using default parameters
-    validation_patients_indices = validation_set.get_cross_validation_indices(
-        indices=ALL_TRAIN_PATIENT_IDS, validation_index=0)
+    if paths.SUBMISSION_NR == 1:
+        print "Using proper validation set"
+        validation_patients_indices = validation_set.get_cross_validation_indices(
+            indices=ALL_TRAIN_PATIENT_IDS, validation_index=0)
+    else:
+        print "WARNING: no validation set!!"
+        validation_patients_indices = [1]
     train_patients_indices = [
         i for i in ALL_TRAIN_PATIENT_IDS if i not in validation_patients_indices]
 

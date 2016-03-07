@@ -176,6 +176,11 @@ Merge the resulting predictions with
 > python merge_script.py
 in the case of the second submission.
 
+Step 6
+======
+
+????
+
 Step 7
 ======
 Submit the resulting submission file.

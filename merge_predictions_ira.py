@@ -482,64 +482,35 @@ def main():
 
 
 if __name__ == '__main__':
-    #metamodels
-    # metamodels = sorted([]
-    #     +glob.glob(PREDICTIONS_PATH+"ira_configurations.meta_gauss_roi10_big_leaky_after_seqshift.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"ira_configurations.meta_gauss_roi10_maxout.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"ira_configurations.meta_gauss_roi10_maxout_seqshift_96.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"ira_configurations.meta_gauss_roi10_zoom_mask_leaky_after.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"ira_configurations.meta_gauss_roi_zoom_big.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"ira_configurations.meta_gauss_roi_zoom.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"ira_configurations.meta_gauss_roi_zoom_mask_leaky.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"ira_configurations.meta_gauss_roi_zoom_mask_leaky_after.pkl")
-    #
-    #     +glob.glob(PREDICTIONS_PATH+"je_os_fixedaggr_relloc_filtered_discs.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_os_fixedaggr_relloc_filtered.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_os_fixedaggr_rellocframe.pkl")
-    #
-    #     +glob.glob(PREDICTIONS_PATH+"je_meta_fixedaggr_joniscale80small_augzoombright.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_meta_fixedaggr_joniscale64small_filtered_longer.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_meta_fixedaggr_jsc80leakyconv_augzoombright_short.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_meta_fixedaggr_jsc80leakyconv_augzoombright.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_meta_fixedaggr_jsc80leakyconv.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_meta_fixedaggr_joniscale80small_augzoombright_betterdist.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+" je_meta_fixedaggr_jsc80leakyconv.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_meta_fixedaggr_framemax_reg.pkl")
-    #     +glob.glob(PREDICTIONS_PATH+"je_meta_fixedaggr_filtered.pkl")
-    # )
-    # MODELS_TO_USE = metamodels
-    # main()
-
-    # slice models
+    metamodels = sorted([]
+                        + glob.glob(PREDICTIONS_PATH + "ira_configurations.meta_gauss_roi10_maxout_seqshift_96.pkl")
+                        + glob.glob(PREDICTIONS_PATH + "ira_configurations.meta_gauss_roi_zoom_big.pkl")
+                        + glob.glob(PREDICTIONS_PATH + "je_os_fixedaggr_relloc_filtered.pkl")
+                        + glob.glob(PREDICTIONS_PATH + "je_os_fixedaggr_rellocframe.pkl")
+                        + glob.glob(PREDICTIONS_PATH + "je_meta_fixedaggr_framemax_reg.pkl")
+                        + glob.glob(PREDICTIONS_PATH + "je_meta_fixedaggr_jsc80leakyconv.pkl")
+                        + glob.glob(PREDICTIONS_PATH + "ira_configurations.meta_gauss_roi_zoom_mask_leaky_after.pkl")
+                        + glob.glob(PREDICTIONS_PATH + "ira_configurations.meta_gauss_roi10_big_leaky_after_seqshift.pkl")
+                        + glob.glob(PREDICTIONS_PATH + "je_os_fixedaggr_relloc_filtered_discs.pkl")
+                        )
     slice_models = sorted([]
-        +glob.glob(PREDICTIONS_PATH+"j6_2ch.pkl")
-        +glob.glob(PREDICTIONS_PATH+"j6_2ch_128mm.pkl")
-        +glob.glob(PREDICTIONS_PATH+"j6_2ch_128mm_96.pkl")
-        +glob.glob(PREDICTIONS_PATH+"j6_2ch_96mm.pkl")
-        +glob.glob(PREDICTIONS_PATH+"j6_4ch.pkl")
-        +glob.glob(PREDICTIONS_PATH+"j6_4ch_gauss.pkl")
-
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64_leaky_convroll.pkl")
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc80_leaky_convroll.pkl")
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64small_360.pkl")
-
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64small_360_gauss_longer_aubright.pkl")
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc64_leaky_convroll.pkl")
-        +glob.glob(PREDICTIONS_PATH+"je_ss_jonisc80_leaky_convroll_augzoombright.pkl")
-
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.gauss_roi10_maxout.pkl")
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.gauss_roi10_maxout_seqshift_96.pkl")
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.gauss_roi10_zoom_mask_leaky_after.pkl")
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.gauss_roi_zoom_big_after_seqshift.pkl")
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.gauss_roi_zoom_mask_leaky.pkl")
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.ch2_maxout_shift_128.pkl")
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.ch2_roi10_zoom_leaky_after_nomask.pkl")
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.ch2_zoom_leaky_after_maxout.pkl")
-        +glob.glob(PREDICTIONS_PATH+"ira_configurations.ch2_zoom_leaky_after_nomask.pkl")
-    )
+                          + glob.glob(PREDICTIONS_PATH + "j6_2ch_128mm.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "j6_4ch_32mm_specialist.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "j6_4ch_128mm_specialist.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "j6_4ch.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "je_ss_jonisc80_leaky_convroll.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "je_ss_jonisc64_leaky_convroll.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "je_ss_jonisc64small_360.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "ira_configurations.ch2_zoom_leaky_after_maxout.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "ira_configurations.gauss_roi_zoom_mask_leaky.pkl")
+                          + glob.glob(PREDICTIONS_PATH + "ira_configurations.gauss_roi_zoom_mask_leaky_after.pkl")
+                          )
+    # meta
+    MODELS_TO_USE = metamodels
+    main()
+    # ss
     MODELS_TO_USE = slice_models
     main()
-    #
-    # # mixed_models
-    # MODELS_TO_USE = metamodels + slice_models
-    # main()
+    # mixed_models
+    MODELS_TO_USE = metamodels + slice_models
+    main()

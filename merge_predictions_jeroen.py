@@ -99,7 +99,7 @@ def _get_all_prediction_files():
     The files are filtered first.
     """
     # Get all of them
-    all_files = glob.glob(PREDICTIONS_PATH + '*')
+    all_files = glob.glob(PREDICTIONS_PATH + '*')[:10]
     # And filter them
     res = []
     for f in all_files:
@@ -276,7 +276,7 @@ def _make_valid_distributions(metadata):
 
 def _add_tta_score_to_metadata(metadata, tta_score, best_method):
     metadata['tta_score'] = tta_score
-    metadata['best_method'] = best_method
+    metadata['best_method'] = best_method.func_name
 
 
 def _compute_best_tta(metadata, pats_predicted, best_method=None):
@@ -293,6 +293,10 @@ def _compute_best_tta(metadata, pats_predicted, best_method=None):
                 best_score, best_method = err, averaging_method
     else:
         print "    Using predefined averaging"
+        for averaging_method in AVERAGING_METHODS:
+            if best_method == averaging_method.func_name:
+                best_method = averaging_method
+                break
     _compute_tta(metadata, best_method)
     _make_valid_distributions(metadata)
     tta_score = _validate_metadata(metadata, pats_predicted)

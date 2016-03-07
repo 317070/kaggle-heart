@@ -20,7 +20,7 @@ from updates import build_adam_updates
 validate_every = 10
 validate_train_set = False
 save_every = 10
-restart_from_save = True
+restart_from_save = False
 
 create_test_gen = partial(generate_test_batch, set="test")  # validate as well by default
 

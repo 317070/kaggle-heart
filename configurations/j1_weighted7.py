@@ -14,7 +14,7 @@ from updates import build_adam_updates
 validate_every = 10
 validate_train_set = False
 save_every = 1000
-restart_from_save = True
+restart_from_save = False
 
 batches_per_chunk = 16
 

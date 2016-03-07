@@ -62,8 +62,8 @@ def _split_train_val(patient_folders):
     else:
         print "WARNING: no validation set!!"
         validation_patients_indices = [1]
-    train_patients_indices = [
-        i for i in ALL_TRAIN_PATIENT_IDS if i not in validation_patients_indices]
+
+    train_patients_indices = [i for i in ALL_TRAIN_PATIENT_IDS if i not in validation_patients_indices]
 
     # Split the folder names accordingly
     # This regex is a big OR-clause if the folder corresponds to any of the
@@ -545,7 +545,7 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
 
 def generate_test_batch(required_input_keys, required_output_keys, augmentation=False, set=None):
     if set is None:
-        sets = ["train", "validation", "test"]
+        sets = ["validation", "test"]
     elif type(set) == list:
         sets = set
     else:

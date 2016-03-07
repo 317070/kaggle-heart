@@ -347,6 +347,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
     )
     """
     ss_expert_pkl_files = sorted([]
+        +glob.glob(prediction_file_location+"j6_sax.pkl")
         +glob.glob(prediction_file_location+"j6_2ch.pkl")
         +glob.glob(prediction_file_location+"j6_2ch_128mm.pkl")
         +glob.glob(prediction_file_location+"j6_2ch_128mm_96.pkl")
@@ -361,7 +362,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         +glob.glob(prediction_file_location+"je_ss_jonisc80_leaky_convroll.pkl")
         +glob.glob(prediction_file_location+"je_ss_normscale.pkl")
         +glob.glob(prediction_file_location+"je_ss_nrmsc128_gauss.pkl")
-        +glob.glob(prediction_file_location+"ira_configurations.gauss_roi_zoom_big_after_seqshift-geit-20160307-010906")
+        +glob.glob(prediction_file_location+"ira_configurations.gauss_roi_zoom_big_after_seqshift-50.pkl")
     )
 
 
@@ -445,7 +446,7 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
                                    prodav,
                                    weighted_arithm_method,
                                    #weighted_arithm_no_entr,
-                                   #weighted_geom_method,
+                                   weighted_geom_method,
                                    #weighted_geom_no_entr
                                    ]:
                 calculate_tta_average(predictions, average_method, average_systole, average_diastole)

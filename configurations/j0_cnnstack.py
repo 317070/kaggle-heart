@@ -15,7 +15,7 @@ import theano_printer
 validate_every = 100
 validate_train_set = False
 save_every = 100
-restart_from_save = True
+restart_from_save = False
 take_a_dump = False
 
 batches_per_chunk = 1

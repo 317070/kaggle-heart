@@ -18,7 +18,7 @@ cached = "memory"
 validate_every = 10
 validate_train_set = False
 save_every = 10
-restart_from_save = True
+restart_from_save = False
 
 dump_network_loaded_data = False
 

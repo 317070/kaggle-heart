@@ -27,7 +27,7 @@ def get_cross_validation_indices(indices, validation_index=0,
         rng_seed: RNG seed to use.
 
     Returns:
-        List of indices belonging to the requested split.
+        List of validation set indices belonging to the requested split.
     """
     np.random.seed(rng_seed)
 

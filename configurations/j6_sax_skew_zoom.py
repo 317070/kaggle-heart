@@ -30,7 +30,7 @@ caching = None
 validate_every = 10
 validate_train_set = True
 save_every = 10
-restart_from_save = True
+restart_from_save = False
 
 # Training (schedule) parameters
 # - batch sizes
@@ -85,7 +85,7 @@ sunny_preprocess_test = preprocess.sunny_preprocess_validation
 create_train_gen = data_loader.generate_train_batch
 create_eval_valid_gen = functools.partial(data_loader.generate_validation_batch, set="validation")
 create_eval_train_gen = functools.partial(data_loader.generate_validation_batch, set="train")
-create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation"])
+create_test_gen = functools.partial(data_loader.generate_test_batch, set=["validation", "test"])
 
 # Input sizes
 image_size = 64

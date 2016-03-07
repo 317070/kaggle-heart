@@ -12,9 +12,9 @@ We make 2 submissions, a first with validation set and adapted ensemble weights,
 Step 3
 ======
 Generate the pickle files which are used for the rest of the competition with
-> python generate_metadata_pkl.py
+> cd ira
 
-> python generate_roi_pkl.py
+> python pathfinder.py
 
 Step 4
 ======

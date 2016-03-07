@@ -31,7 +31,7 @@ caching = None
 validate_every = 20
 validate_train_set = True
 save_every = 20
-restart_from_save = True
+restart_from_save = False
 
 dump_network_loaded_data = False
 

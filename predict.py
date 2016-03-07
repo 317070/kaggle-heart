@@ -217,7 +217,7 @@ def predict_model(expid, mfile=None):
         csvwriter.writerow(['Id'] + ['P%d'%i for i in xrange(600)])
         for prediction in predictions:
             # the submission only has patients 501 to 700
-            if 500 < prediction["patient"] <= 700:
+            if prediction["patient"] in data_loader.test_patients_indices:
                 if "diastole_average" not in prediction or "systole_average" not in prediction:
                     raise Exception("Not all test-set patients were predicted")
                 csvwriter.writerow(["%d_Diastole" % prediction["patient"]] + ["%.18f" % p for p in prediction["diastole_average"].flatten()])

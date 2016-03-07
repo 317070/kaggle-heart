@@ -373,10 +373,8 @@ def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIO
     )
     expert_pkl_files = ss_expert_pkl_files + fp_expert_pkl_files
 
-    for i in expert_pkl_files:
-        print i
     print "found %d/44 files" % len(expert_pkl_files)
-
+    """
     # filter expert_pkl_files
     for file in expert_pkl_files[:]:
         try:
@@ -390,7 +388,7 @@ def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIO
             print sys.exc_info()[0]
             expert_pkl_files.remove(file)
             print "                -> removed"
-
+    """
     NUM_EXPERTS = len(expert_pkl_files)
     NUM_VALIDATIONS = len(validation_patients_indices)
     NUM_TESTS = len(test_patients_indices)
@@ -420,9 +418,9 @@ def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIO
                                    normalav,
                                    prodav,
                                    weighted_arithm_method,
-                                   #weighted_arithm_no_entr,
+                                   weighted_arithm_no_entr,
                                    weighted_geom_method,
-                                   #weighted_geom_no_entr
+                                   weighted_geom_no_entr
                                    ]:
                 calculate_tta_average(predictions, average_method, average_systole, average_diastole)
 
@@ -577,7 +575,7 @@ def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIO
         csvwriter.writerow(['Id'] + ['P%d'%i for i in xrange(600)])
         for prediction in final_predictions:
             # the submission only has patients 501 to 700
-            if 500 < prediction["patient"] <= 700:
+            if prediction["patient"] in test_patients_indices:
                 if "final_diastole" not in prediction or "final_systole" not in prediction:
                     raise Exception("Not all test-set patients were predicted")
                 csvwriter.writerow(["%d_Diastole" % prediction["patient"]] + ["%.18f" % p for p in prediction["final_diastole"].flatten()])

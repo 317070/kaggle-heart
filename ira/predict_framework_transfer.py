@@ -30,7 +30,7 @@ if 'subconfiguration' in metadata:
 set_configuration(config_name)
 
 # predictions paths
-jonas_prediction_path = PREDICTIONS_PATH + '/ira_%s-%s.pkl' % (config().__name__, n_tta_iterations)
+jonas_prediction_path = PREDICTIONS_PATH + '/ira_%s.pkl' % config().__name__
 prediction_dir = utils.get_dir_path('predictions', METADATA_PATH)
 valid_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (
     metadata['experiment_id'], 'valid', n_tta_iterations, mean)

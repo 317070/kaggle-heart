@@ -134,7 +134,6 @@ def build_model():
     l = conv3(l, num_filters=512)
 
     l = max_pool(l)
-    l = nn.layers.DimshuffleLayer(l, (1, 2, 3, 4, 0))
 
     l_d01 = nn.layers.DenseLayer(l, num_units=512, W=nn.init.Orthogonal("relu"),
                                  b=nn.init.Constant(0.1), nonlinearity=nn.nonlinearities.very_leaky_rectify)

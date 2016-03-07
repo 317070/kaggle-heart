@@ -12,10 +12,10 @@ import utils_heart
 # submission_name2 = sys.argv[2]
 # submission_path1 = 'final_submission-all_except_ira_00115_fixed.csv'
 # submission_path2 = 'final_submission-1457129444.05.csv'
-submission_path_meta = 'submissions/meta_ira_6.csv'
-submission_path_ss = 'submissions/ss_final_submission-1457220052.92.csv'
-submission_path_mix = 'submissions/mix_final_submission-1457218324.95.csv'
-fixed_submission_path = 'submissions/fixed_submission_ira6_92.95.csv'
+submission_path_meta = 'submissions/meta_final_submission-1457307421.35.csv'
+submission_path_ss = 'submissions/ss_final_submission-1457208805.78-fixed.csv'
+submission_path_mix = 'submissions/mix_final_submission-1457307792.6.csv'
+fixed_submission_path = 'submissions/fixed_submission_ira35_78_fixed_6.csv'
 
 
 # submissions paths

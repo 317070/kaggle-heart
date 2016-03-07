@@ -10,11 +10,11 @@ import nn_heart
 from pathfinder import PKL_TRAIN_DATA_PATH, TRAIN_LABELS_PATH, PKL_VALIDATE_DATA_PATH
 import utils
 import data
-caching = 'memory'
+caching = None
 
 restart_from_save = None
 rng = np.random.RandomState(42)
-patch_size = (96, 96)
+patch_size = (64, 64)
 train_transformation_params = {
     'patch_size': patch_size,
     'mm_patch_size': (128, 128),

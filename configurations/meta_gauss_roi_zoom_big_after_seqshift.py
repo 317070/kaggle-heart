@@ -9,7 +9,7 @@ import utils_heart
 import utils
 from pathfinder import PKL_TRAIN_DATA_PATH, TRAIN_LABELS_PATH, PKL_VALIDATE_DATA_PATH
 
-caching = 'memory'
+caching = None
 restart_from_save = None
 
 rng = subconfig().rng

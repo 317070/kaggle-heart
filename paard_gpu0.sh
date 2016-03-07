@@ -10,9 +10,16 @@
 #THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py meta_gauss_roi10_maxout 50 arithmetic
 
 
-THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py ch2_zoom_leaky_nomask_seqshift
-THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py ch2_zoom_leaky_nomask_seqshift 50 geometric
+#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py ch2_zoom_leaky_nomask_seqshift
+#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py ch2_zoom_leaky_nomask_seqshift 50 geometric
+#
+#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py ch4_zoom_leaky_nomask_seqshift
+#THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py ch4_zoom_leaky_nomask_seqshift 50 geometric
 
-THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py ch4_zoom_leaky_nomask_seqshift
-THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py ch4_zoom_leaky_nomask_seqshift 50 geometric
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py ch_first
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py ch_first 50 arithmetic
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py ch_second_ch2
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py ch_second_ch2 50 arithmetic
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python train.py ch_second_ch4
+THEANO_FLAGS='device=gpu0,floatX=float32,allow_gc=True' python predict_framework_transfer.py ch_second_ch4 50 arithmetic
 

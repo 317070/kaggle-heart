@@ -26,9 +26,9 @@ dump_network_loaded_data = False  # dump the outputs from the dataloader (for de
 caching = None
 
 # Save and validation frequency
-validate_every = 1
+validate_every = 20
 validate_train_set = True
-save_every = 1
+save_every = 20
 restart_from_save = False
 
 dump_network_loaded_data = False

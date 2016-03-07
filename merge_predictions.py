@@ -417,10 +417,7 @@ def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIO
             for average_method in [geomav,
                                    normalav,
                                    prodav,
-                                   weighted_arithm_method,
-                                   weighted_arithm_no_entr,
-                                   weighted_geom_method,
-                                   weighted_geom_no_entr
+                                   weighted_geom_method
                                    ]:
                 calculate_tta_average(predictions, average_method, average_systole, average_diastole)
 

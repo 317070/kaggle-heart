@@ -210,6 +210,8 @@ def preprocess_normscale(patient_data, result, index, augment=True,
     else:
         augmentation_params = None
 
+    zoom_factor = None
+
     # Iterate over different sorts of data
     for tag, data in patient_data.iteritems():
         if tag in metadata:
@@ -445,7 +447,7 @@ def preprocess_normscale(patient_data, result, index, augment=True,
             letter_rescale_factors = {'D': 365.25, 'W': 52.1429, 'M': 12., 'Y': 1.}
             result[tag][index][0] = float(patient_data[tag][:3]) / letter_rescale_factors[letter]
 
-    if augmentation_params:
+    if augmentation_params and zoom_factor:
         label_correction_function = lambda x: x * zoom_factor
         classification_correction_function = lambda x: utils.zoom_array(x, 1./zoom_factor)
         return label_correction_function, classification_correction_function

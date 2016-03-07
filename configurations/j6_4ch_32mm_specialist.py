@@ -30,7 +30,7 @@ caching = None
 validate_every = 10
 validate_train_set = True
 save_every = 10
-restart_from_save = True
+restart_from_save = False
 
 # Training (schedule) parameters
 # - batch sizes
@@ -135,7 +135,7 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 200  # More augmentations since a we only use single slices
+test_time_augmentations = 1000  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture

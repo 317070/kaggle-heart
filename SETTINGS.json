@@ -11,5 +11,5 @@
   "ENSEMBLE_WEIGHTS_PATH":"/mnt/storage/metadata/kaggle-heart/ensemble-weights/",
   "TRAIN_PATIENT_IDS":[1,  500],
   "TEST_PATIENT_IDS": [501,700],
-  "SUBMISSION_NR": 1,
+  "SUBMISSION_NR": 1
 }

@@ -13,6 +13,7 @@ import configuration
 import disk_access
 from paths import TEMP_FILES_PATH, PKL_TRAIN_DATA_PATH, TRAIN_PATIENT_IDS, TEST_PATIENT_IDS
 from paths import PKL_TEST_DATA_PATH
+import paths
 import utils
 import validation_set
 

@@ -27,10 +27,10 @@ dump_network_loaded_data = False  # dump the outputs from the dataloader (for de
 caching = None
 
 # Save and validation frequency
-validate_every = 10
+validate_every = 20
 validate_train_set = True
 save_every = 10
-restart_from_save = True
+restart_from_save = False
 
 # Training (schedule) parameters
 # - batch sizes
@@ -120,7 +120,7 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 20 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
+test_time_augmentations = 100 * AV_SLICE_PER_PAT  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture

@@ -120,7 +120,7 @@ def build_objective(interface_layers):
 
 # Testing
 postprocess = postprocess.postprocess
-test_time_augmentations = 200  # More augmentations since a we only use single slices
+test_time_augmentations = 1000  # More augmentations since a we only use single slices
 tta_average_method = lambda x: np.cumsum(utils.norm_geometric_average(utils.cdf_to_pdf(x)))
 
 # Architecture

@@ -28,14 +28,14 @@ PRINT_FOLDS = False
 PRINT_EVERY = 1000  # Print itermediate results during training
 LEARNING_RATE = 1  # Learning rate of gradient descend
 NR_EPOCHS = 100
-C_reg1 = 0.0001  # L1 regularisation parameters
-C_reg2 = 0.0000  # L2 regularisation parameters
+C_reg1 = 0.0000  # L1 regularisation parameters
+C_reg2 = 0.01  # L2 regularisation parameters
 GRAD_CLIP = 1
 
-EPS_TOP = 0.0001
-SELECT_TOP = 10  # Nr of models to select
+EPS_TOP = 0.000001
+SELECT_TOP = 15  # Nr of models to select
 
-OUTLIER_THRESHOLD = 0.015
+OUTLIER_THRESHOLD = 0.020
 
 print C_reg1
 print C_reg2

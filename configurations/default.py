@@ -47,7 +47,7 @@ num_epochs_train = 150
 
 validate_every = 20
 save_every = 20
-restart_from_save = True
+restart_from_save = False
 take_a_dump = False  # dump a lot of data in a pkl-dump file. (for debugging)
 dump_network_loaded_data = False  # dump the outputs from the dataloader (for debugging)
 

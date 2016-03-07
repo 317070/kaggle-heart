@@ -545,7 +545,7 @@ def generate_validation_batch(required_input_keys, required_output_keys, set="va
 
 def generate_test_batch(required_input_keys, required_output_keys, augmentation=False, set=None):
     if set is None:
-        sets = ["train", "validation", "test"]
+        sets = ["validation", "test"]
     elif type(set) == list:
         sets = set
     else:

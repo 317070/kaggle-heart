@@ -25,7 +25,7 @@ def read_submission(file_path):
     return pid2cdf0, pid2cdf1
 
 
-def fix_submission(submission_path_meta, submission_path_ss, submission_path_mix, threshold=0.02):
+def fix_submission(submission_path_meta, submission_path_ss, submission_path_mix, threshold=0.03):
     pid2cdf0_meta, pid2cdf1_meta = read_submission(submission_path_meta)
     pid2cdf0_ss, pid2cdf1_ss = read_submission(submission_path_ss)
     pid2cdf0_mix, pid2cdf1_mix = read_submission(submission_path_mix)

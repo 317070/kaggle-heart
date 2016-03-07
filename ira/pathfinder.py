@@ -3,7 +3,7 @@ import utils
 import os
 import slice2roi
 
-with open('SETTINGS.json') as data_file:
+with open('../SETTINGS.json') as data_file:
     paths = json.load(data_file)
 
 METADATA_PATH = paths["METADATA_PATH"]

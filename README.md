@@ -1,4 +1,5 @@
 1. Summary
+==========
 
 4-6 sentences summarizing the most important aspects of your model and analysis, such as:
 
@@ -14,6 +15,7 @@ We used deep learning approaches, in which we designed custom layers to add as m
 For this, we used lasagne, on top of Theano, on top of cudnn, on top of cuda to run our models.
 
 2. Features Selection / Extraction
+==================================
 
 What were the most important features? *
 How did you select features?
@@ -32,6 +34,7 @@ We did add top-layers which tell a deep learning network how to calculate volume
 No external data was used.
 
 3. Training Method(s)
+=====================
 
 What training methods did you use?
 Did you ensemble the models?
@@ -44,7 +47,7 @@ Models can choose not to predict a patient, because they know they'll have probl
 When ensembling, we check per patient if all models agree in the model agree enough with the final average distribution. If not, they are thrown out of the ensemble and a new ensemble is trained.
 
 4. Simple Features and Methods
-
+==============================
 Many customers are happy to trade off model performance for simplicity. With this in mind:
 
 Is there a subset of features that would get 90-95% of your final performance? Which features? *
@@ -55,7 +58,7 @@ What would the simplified model score?
 Yes, we have single models which achieve a score of crps 0.1090 on our own validation set. It is a meta-model, and is quite simple to understand and implement.
 
 5. Interesting findings
-
+=======================
 What was the most important trick you used?
 What do you think set you apart from others in the competition?
 Did you find any interesting relationships in the data that don't fit in the sections above?
@@ -64,7 +67,7 @@ The most important trick was to use preprocessing and classic computer vision ap
 This way, the learning algorithm can learn faster, and needs less training examples (the number of which were quite low in this competition).
 
 6. Background on you/your team
-
+==============================
 If part of a team, please answer these questions for each team member. For larger teams (3+), please give shorter responses.
 
 What was your background prior to entering this challenge?
@@ -77,11 +80,11 @@ If you competed as part of a team, who did what?
 We are four people from the data science lab of Ghent University.
 
 Appendix
-
+========
 This section is for a technical audience who are trying to run your solution. Please make sure your code is well commented.
 
 A1. Dependencies
-
+================
 List of all dependencies, libraries, functions, packages or other third-party code used to generate your solution.
 
 We ran this code on 5 computers:
@@ -115,9 +118,9 @@ Each of these computers has a linux Ubuntu 14.04, together with cuda 7.5, cudnn4
 You also need recent version of scikit-learn, scikit-image, numpy, scipy, blz, pydicom.
 
 A2. How To Generate the Solution (aka README file)
-
+==================================================
 We refer to the RUNME.md file for a complete explanation.
 
 A3. References
-
+==============
 Citations to references, websites, blog posts, and external sources of information where appropriate.

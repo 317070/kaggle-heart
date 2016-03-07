@@ -306,7 +306,7 @@ def calculate_tta_average(predictions, average_method, average_systole, average_
 
 
 
-def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predictions/", #INTERMEDIATE_PREDICTIONS_PATH,
+def merge_all_prediction_files(prediction_file_location = INTERMEDIATE_PREDICTIONS_PATH,
                                redo_tta = True):
 
     submission_path = SUBMISSION_PATH + "final_submission-%s.csv" % time.time()
@@ -377,15 +377,6 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
         print i
     print "found %d/44 files" % len(expert_pkl_files)
 
-    """
-    expert_pkl_files = sorted([]
-        +glob.glob(prediction_file_location+"j6_2ch.pkl")
-        +glob.glob(prediction_file_location+"ira_configurations.meta_gauss_roi_zoom_mask_leaky_after.pkl")
-        +glob.glob(prediction_file_location+"je_meta_fixedaggr_joniscale64small_360_gauss.pkl")
-    )
-    #"""
-
-    """
     # filter expert_pkl_files
     for file in expert_pkl_files[:]:
         try:
@@ -399,7 +390,6 @@ def merge_all_prediction_files(prediction_file_location = "/data/dsb15_pkl/predi
             print sys.exc_info()[0]
             expert_pkl_files.remove(file)
             print "                -> removed"
-    #"""
 
     NUM_EXPERTS = len(expert_pkl_files)
     NUM_VALIDATIONS = len(validation_patients_indices)

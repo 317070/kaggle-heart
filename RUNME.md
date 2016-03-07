@@ -179,6 +179,7 @@ Merge the resulting predictions with
 in the case of the first submission.
 Merge the resulting predictions with
 > python merge_script.py
+
 in the case of the second submission.
 
 Step 6

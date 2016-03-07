@@ -62,8 +62,8 @@ def _split_train_val(patient_folders):
     else:
         print "WARNING: no validation set!!"
         validation_patients_indices = [1]
-    train_patients_indices = [
-        i for i in ALL_TRAIN_PATIENT_IDS if i not in validation_patients_indices]
+
+    train_patients_indices = [i for i in ALL_TRAIN_PATIENT_IDS if i not in validation_patients_indices]
 
     # Split the folder names accordingly
     # This regex is a big OR-clause if the folder corresponds to any of the

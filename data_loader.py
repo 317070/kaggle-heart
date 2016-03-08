@@ -67,7 +67,7 @@ def _split_train_val(patient_folders):
 
     train_patient_folders = [
         folder for folder in patient_folders
-        if _extract_id_from_path(folder) in validation_patients_indices]
+        if not _extract_id_from_path(folder) in validation_patients_indices]
     validation_patient_folders = [
         folder for folder in patient_folders
         if folder not in train_patient_folders]

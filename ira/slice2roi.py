@@ -157,7 +157,6 @@ def get_slice2roi(data_path, out_filename, num_circles=None, plot=False):
 
         sorted_sax_slices = sort_sax_slices(sax_slice_stack)
         grouped_sax_slices = group_sax_slices(sorted_sax_slices)
-
         # init patient dict
         pid = sorted_sax_slices[0]['patient_id']
         # print pid

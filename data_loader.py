@@ -30,7 +30,7 @@ _DATA_FOLDER = TEMP_FILES_PATH
 
 _TRAIN_DATA_FOLDER = PKL_TRAIN_DATA_PATH
 _TEST_DATA_FOLDER = PKL_TEST_DATA_PATH
-_TRAIN_LABELS_PATH = os.path.join(TEMP_FILES_PATH, "train.csv")
+_TRAIN_LABELS_PATH = os.path.join(TEMP_FILES_PATH, "train.pkl")
 
 # TODO: don't make this hardcoded!
 ALL_TRAIN_PATIENT_IDS = range(TRAIN_PATIENT_IDS[0], TRAIN_PATIENT_IDS[1] + 1)
@@ -67,7 +67,7 @@ def _split_train_val(patient_folders):
 
     train_patient_folders = [
         folder for folder in patient_folders
-        if _extract_id_from_path(folder) in validation_patients_indices]
+        if not _extract_id_from_path(folder) in validation_patients_indices]
     validation_patient_folders = [
         folder for folder in patient_folders
         if folder not in train_patient_folders]

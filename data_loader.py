@@ -65,14 +65,9 @@ def _split_train_val(patient_folders):
 
     train_patients_indices = [i for i in ALL_TRAIN_PATIENT_IDS if i not in validation_patients_indices]
 
-    # Split the folder names accordingly
-    # This regex is a big OR-clause if the folder corresponds to any of the
-    # validation indices:
-    _VALIDATION_REGEX = "|".join(
-        ["(/%d/)"%i for i in validation_patients_indices])
     train_patient_folders = [
         folder for folder in patient_folders
-        if not re.search(_VALIDATION_REGEX, folder)]
+        if not _extract_id_from_path(folder) in validation_patients_indices]
     validation_patient_folders = [
         folder for folder in patient_folders
         if folder not in train_patient_folders]

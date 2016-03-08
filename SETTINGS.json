@@ -1,6 +1,6 @@
 {
-  "TRAIN_DATA_PATH":"unavailable",
-  "VALIDATE_DATA_PATH":"unavailable",
+  "TRAIN_DATA_PATH":"/data/dsb15_final/pkl_train/",
+  "VALIDATE_DATA_PATH":"/data/dsb15_final/pkl_validate/",
   "PKL_TRAIN_DATA_PATH":"/data/dsb15_final/pkl_train/",
   "PKL_VALIDATE_DATA_PATH":"/data/dsb15_final/pkl_validate/",
   "TEMP_FILES_PATH":"/data/dsb15_final/",

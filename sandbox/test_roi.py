@@ -4,7 +4,7 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 import glob
 import re
-import data_test
+import data as data_test
 import utils
 
 
@@ -87,7 +87,7 @@ def plot_roi(slice, roi_center, roi_radii):
 
 
 def plot_patient_roi(data_path, slice2roi_valid, slice2roi_train):
-    patient_paths = sorted(glob.glob(data_path + '/517/study'))
+    patient_paths = sorted(glob.glob(data_path + '/*/study'))
     for p in patient_paths:
         patient_data = get_patient_data(p)
         sd = patient_data[len(patient_data) / 2]
@@ -107,4 +107,7 @@ if __name__ == '__main__':
     data_path = '/mnt/sda3/data/kaggle-heart/pkl_validate'
     slice2roi_valid = utils.load_pkl('../pkl_validate_slice2roi.pkl')
     slice2roi_train = utils.load_pkl('../pkl_train_slice2roi.pkl')
+
+    # slice2roi_valid = utils.load_pkl('../pkl_train_slice2roi_new.pkl')
+    # slice2roi_train = utils.load_pkl('../pkl_train_slice2roi_new.pkl')
     plot_patient_roi(data_path, slice2roi_valid, slice2roi_train)

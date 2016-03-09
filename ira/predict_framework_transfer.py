@@ -145,8 +145,8 @@ avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions
 utils.save_pkl(avg_patient_predictions, test_prediction_path)
 print '\npredictions saved to %s' % test_prediction_path
 
-utils.save_submission(avg_patient_predictions, submission_path)
-print ' submission saved to %s' % submission_path
+# utils.save_submission(avg_patient_predictions, submission_path)
+# print ' submission saved to %s' % submission_path
 
 try:
     with open(jonas_prediction_path, 'w') as f:

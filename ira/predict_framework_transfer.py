@@ -9,6 +9,7 @@ import buffering
 import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
 from pathfinder import METADATA_PATH, PREDICTIONS_PATH
+import logger
 
 NUM_PATIENTS = 1140
 
@@ -39,6 +40,12 @@ test_prediction_path = prediction_dir + "/%s-%s-%s-%s.pkl" % (metadata['experime
 # submissions paths
 submission_dir = utils.get_dir_path('submissions', METADATA_PATH)
 submission_path = submission_dir + "/%s-%s-%s-%s.csv" % (metadata['experiment_id'], 'test', n_tta_iterations, mean)
+
+# logs
+logs_dir = utils.get_dir_path('logs', METADATA_PATH)
+sys.stdout = logger.Logger(logs_dir + '/ira_predictions_%s.log' % metadata['experiment_id'])
+sys.stderr = sys.stdout
+
 
 print "Build model"
 model = config().build_model()

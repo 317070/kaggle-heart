@@ -10,7 +10,6 @@ import numpy as np
 import dicom2pkl
 import create_validation_split
 import glob
-from pathfinder import SUBMISSION_NR
 
 maxfloat = np.finfo(np.float32).max
 
@@ -26,6 +25,7 @@ def find_model_metadata(metadata_dir, config_name):
 
 
 def get_train_valid_split(train_data_path):
+    from pathfinder import SUBMISSION_NR
     if SUBMISSION_NR == 1:
         filename = 'valid_split.pkl'
         if not os.path.isfile(filename):

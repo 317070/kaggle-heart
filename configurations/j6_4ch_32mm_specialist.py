@@ -70,11 +70,12 @@ def filter_samples(folders):
     import glob
     import os
     import cPickle as pickle
-    d = pickle.load(open("/data/dsb15_pkl/pkl_train_slice2roi.pkl"))
-    d.update(pickle.load(open("/data/dsb15_pkl/pkl_validate_slice2roi.pkl")))
+    from paths import TEMP_FILES_PATH
+    d = pickle.load(open(TEMP_FILES_PATH+"pkl_train_slice2roi.pkl"))
+    d.update(pickle.load(open(TEMP_FILES_PATH+"pkl_validate_slice2roi.pkl")))
 
-    c = pickle.load(open("/data/dsb15_pkl/pkl_train_metadata.pkl"))
-    c.update(pickle.load(open("/data/dsb15_pkl/pkl_validate_metadata.pkl")))
+    c = pickle.load(open(TEMP_FILES_PATH+"pkl_train_metadata.pkl"))
+    c.update(pickle.load(open(TEMP_FILES_PATH+"pkl_validate_metadata.pkl")))
     def has_4ch(f):
         ch_slices = glob.glob(f+"/4ch_*.pkl")
         if len(ch_slices) > 0:

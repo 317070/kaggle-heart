@@ -10,7 +10,7 @@ import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
 from pathfinder import METADATA_PATH, PREDICTIONS_PATH
 
-NUM_PATIENTS = 700
+NUM_PATIENTS = 1140
 
 if not (3 <= len(sys.argv) <= 5):
     sys.exit("Usage: predict.py <config_name> <n_tta_iterations> <average: arithmetic|geometric>")

@@ -25,16 +25,16 @@ if not os.path.isfile(TRAIN_LABELS_PATH):
 # TODO: next time move this a better place
 if not os.path.isfile('pkl_train_slice2roi.pkl'):
     print 'Generating ROI'
-    slice2roi.get_slice2roi(TRAIN_DATA_PATH, 'pkl_train_slice2roi.pkl')
+    slice2roi.get_slice2roi(PKL_TRAIN_DATA_PATH, 'pkl_train_slice2roi.pkl')
 
 if not os.path.isfile('pkl_validate_slice2roi.pkl'):
     print 'Generating ROI'
-    slice2roi.get_slice2roi(VALIDATE_DATA_PATH, 'pkl_validate_slice2roi.pkl')
+    slice2roi.get_slice2roi(PKL_VALIDATE_DATA_PATH, 'pkl_validate_slice2roi.pkl')
 
 if not os.path.isfile('pkl_train_slice2roi_10.pkl'):
     print 'Generating ROI'
-    slice2roi.get_slice2roi(TRAIN_DATA_PATH, 'pkl_train_slice2roi_10.pkl', num_circles=10)
+    slice2roi.get_slice2roi(PKL_TRAIN_DATA_PATH, 'pkl_train_slice2roi_10.pkl', num_circles=10)
 
 if not os.path.isfile('pkl_validate_slice2roi_10.pkl'):
     print 'Generating ROI'
-    slice2roi.get_slice2roi(VALIDATE_DATA_PATH, 'pkl_validate_slice2roi_10.pkl', num_circles=10)
+    slice2roi.get_slice2roi(PKL_VALIDATE_DATA_PATH, 'pkl_validate_slice2roi_10.pkl', num_circles=10)

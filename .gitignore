@@ -70,4 +70,4 @@ submissions/
 # lsyncd
 lsyncd.lua
 
-*.csv
+ira/sample_submission_validate.csv

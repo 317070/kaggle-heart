@@ -10,7 +10,7 @@ import utils_heart
 from configuration import config, set_configuration, set_subconfiguration
 from pathfinder import METADATA_PATH, PREDICTIONS_PATH
 
-NUM_PATIENTS = 700
+NUM_PATIENTS = 1140
 
 if not (3 <= len(sys.argv) <= 5):
     sys.exit("Usage: predict.py <config_name> <n_tta_iterations> <average: arithmetic|geometric>")
@@ -145,8 +145,8 @@ avg_patient_predictions = config().get_avg_patient_predictions(batch_predictions
 utils.save_pkl(avg_patient_predictions, test_prediction_path)
 print '\npredictions saved to %s' % test_prediction_path
 
-utils.save_submission(avg_patient_predictions, submission_path)
-print ' submission saved to %s' % submission_path
+# utils.save_submission(avg_patient_predictions, submission_path)
+# print ' submission saved to %s' % submission_path
 
 try:
     with open(jonas_prediction_path, 'w') as f:

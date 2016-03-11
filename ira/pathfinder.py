@@ -6,6 +6,7 @@ import slice2roi
 with open('../SETTINGS.json') as data_file:
     paths = json.load(data_file)
 
+SUBMISSION_NR = paths["SUBMISSION_NR"]
 METADATA_PATH = paths["METADATA_PATH"]
 PREDICTIONS_PATH = paths["PREDICTIONS_PATH"]
 SUBMISSION_PATH = paths["SUBMISSION_PATH"]

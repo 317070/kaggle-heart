@@ -73,7 +73,7 @@ def get_metadata(data_path):
         for pd in patient_data:
             metadata_dict[pid][pd['slice_id']] = pd['metadata']
 
-    filename = data_path.split('/')[-1] + '_metadata.pkl'
+    filename = data_path.split('/')[-2] + '_metadata.pkl'
     with open(filename, 'w') as f:
         pickle.dump(metadata_dict, f)
     print 'saved to ', filename

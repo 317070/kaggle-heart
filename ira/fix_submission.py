@@ -66,8 +66,8 @@ def fix_submission(submission_path_meta, submission_path_ss, submission_path_mix
 
 if __name__ == '__main__':
     # TODO here I will fill my final ensemble
-    submission_path_meta = SUBMISSION_PATH + 'final_submission-1457307421.35.csv'
-    submission_path_ss = SUBMISSION_PATH + 'final_submission-1457306840.7.csv'
-    submission_path_mix = SUBMISSION_PATH + 'final_submission-1457307792.6.csv'
+    submission_path_meta = SUBMISSION_PATH + 'final_submission-1457786956.36.csv'
+    submission_path_ss = SUBMISSION_PATH + 'final_submission-1457790522.0.csv'
+    submission_path_mix = SUBMISSION_PATH + 'final_submission-1457794389.54.csv'
 
     fix_submission(submission_path_meta, submission_path_ss, submission_path_mix)

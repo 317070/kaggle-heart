@@ -2,7 +2,7 @@
 
 This module supports loading data and metadata from a given file path. 
 This data can be compressed and cached in ram or on the disk, depending on
-the configuration.
+the configuration file.
 """
 
 import cPickle as pickle

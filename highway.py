@@ -1,3 +1,6 @@
+"""Lasagne layer implementing a variant of highway and residual networks.
+"""
+
 import numpy as np
 import theano
 import theano.tensor as T
@@ -137,41 +140,3 @@ def jonas_residual(incoming, num_filters=None,
                                         )
 
     return MultiplicativeGatingLayer(gate=None, input1=l_maxpool, input2=l_proc_incoming)
-
-
-
-
-
-"""
-def highway_dense(incoming, Wh=nn.init.Orthogonal(), bh=nn.init.Constant(0.0),
-              Wt=nn.init.Orthogonal(), bt=nn.init.Constant(-4.0),
-              nonlinearity=nn.nonlinearities.rectify, **kwargs):
-    num_inputs = int(np.prod(incoming.output_shape[1:]))
-    # regular layer
-    l_h = nn.layers.DenseLayer(incoming, num_units=num_inputs, W=Wh, b=bh,
-                               nonlinearity=nonlinearity)
-    # gate layer
-    l_t = nn.layers.DenseLayer(incoming, num_units=num_inputs, W=Wt, b=bt,
-                               nonlinearity=T.nnet.sigmoid)
-
-    return MultiplicativeGatingLayer(gate=l_t, input1=l_h, input2=incoming)
-
-
-def highway_conv2d(incoming, filter_size,
-               Wh=nn.init.Orthogonal(), bh=nn.init.Constant(0.0),
-               Wt=nn.init.Orthogonal(), bt=nn.init.Constant(-4.0),
-               , **kwargs):
-    num_channels = incoming.output_shape[1]
-    # regular layer
-    l_h = nn.layers.Conv2DLayer(incoming, num_filters=num_channels,
-                                filter_size=filter_size,
-                                pad='same', W=Wh, b=bh,
-                                nonlinearity=nonlinearity)
-    # gate layer
-    l_t = nn.layers.Conv2DLayer(incoming, num_filters=num_channels,
-                                filter_size=filter_size,
-                                pad='same', W=Wt, b=bt,
-                                nonlinearity=T.nnet.sigmoid)
-
-    return MultiplicativeGatingLayer(gate=l_t, input1=l_h, input2=incoming)
-"""

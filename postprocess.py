@@ -1,8 +1,16 @@
-import numpy as np
+"""Library implementing different post-process functions.
+
+Post-process functions are functions that transform the network output to
+a suitable format (i.e. a series of 600, monotonously increasing numbers).
+"""
 import re
-from configuration import config
+
+import numpy as np
 import scipy
+
 import utils
+
+from configuration import config
 
 
 def make_monotone_distribution(distribution):

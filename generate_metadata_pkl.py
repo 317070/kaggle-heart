@@ -1,9 +1,11 @@
 import argparse
-from dicom.sequence import Sequence
 import glob
 import re
-from log import print_to_file
 import cPickle as pickle
+
+from dicom.sequence import Sequence
+
+from log import print_to_file
 from paths import LOGS_PATH, TRAIN_DATA_PATH, TEST_DATA_PATH
 
 

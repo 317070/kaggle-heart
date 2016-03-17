@@ -1,9 +1,9 @@
-"""
-take in a numpy tensor, and reshape last 2 dimensions as images to fit the desired shape
+"""Library implementing the data augmentations.
 """
 import numpy as np
 import skimage.io
 import skimage.transform
+
 from custom_warnings import deprecated
 
 
@@ -24,6 +24,8 @@ NO_AUGMENT_PARAMS = {
 }
 
 def resize_to_make_it_fit(images, output_shape=(50, 50)):
+    """Resizes the images to a given shape.
+    """
     max_time = max(images[i].shape[0] for i in xrange(len(images)))
     final_shape = (len(images),max_time) + output_shape
     result = np.zeros(final_shape, dtype="float32")
@@ -47,10 +49,15 @@ def resize_to_make_it_fit(images, output_shape=(50, 50)):
     return result, volume_change
 
 
+@deprecated
 def normscale_resize_and_augment(slices, output_shape=(50, 50), augment=None,
                                  pixel_spacing=(1,1), shift_center=(.4, .5),
                                  normalised_patch_size=(200,200)):
     """Normalizes the scale, augments, and crops the image.
+
+    WARNING: This function contains bugs. We kept it around to ensure older
+    models would still behave in the same way. Use normscale_resize_and_augment_2
+    instead.
     """
     if not pixel_spacing[0] == pixel_spacing[1]:
         raise NotImplementedError("Only supports square pixels")
@@ -109,7 +116,6 @@ def normscale_resize_and_augment_2(slices, output_shape=(50, 50), augment=None,
                                    pixel_spacing=(1,1), shift_center=(None, None),
                                    normalised_patch_size=(200,200)):
     """Normalizes the scale, augments, and crops the image.
-    Fixed a bug !
     """
     if not pixel_spacing[0] == pixel_spacing[1]:
         raise NotImplementedError("Only supports square pixels")

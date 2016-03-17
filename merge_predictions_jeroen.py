@@ -1,4 +1,28 @@
 """Ensembling script using weighted averaging and outlier detection. 
+
+This script loads all the prediction files in the predictions folder.
+For every file, it computes the best way to do the averaging across TTAs, by
+looking at the validation set. Then, it makes 3 ensembles. The first ensemble
+contains every single model. The second ensemble excludes patient models, since
+these are generally not robust to outliers. When these two disagree too much on
+a given patient, that patient is considered an outlier. The final ensemble is
+trained on all patients that are not outliers. Outliers are predicted using the 
+second ensemble. 
+
+To create an ensemble, a set of weights (summing ot one) is optimised using
+projected gradient descend. Then, the top models are selected, and the weights
+are re-optimised for only those models.
+
+This script also exports the weights and other results. If these are passed as 
+an argument, the script will work without a validation set, and simply use 
+the averaging methods and ensemble weights as defined in the weights file.
+
+Usage:
+    To simply generate an ensemble and export the weights:
+    > python merge_predictions_jeroen
+
+    To reuse weights that were computed by an earlier run of this script:
+    > python merge_predictions_jeroen PATH_TO_WEIGHTS_FILE
 """
 import cPickle as pickle
 import csv
@@ -17,26 +41,39 @@ import utils
 import sys
 
 
-METADATAS_LOCATION = 'metadatas.pkl'
-RELOAD_METADATAS = False
-DO_XVAL = True
+###### PARAMTERS #######
+#======================#
 
+DO_XVAL = True  # Flag specifying whether to do cross-validation or not.
+
+# Loading all the predictions takes a while. Once they are loaded, the
+# intermediate results are saved to the following location:
+METADATAS_LOCATION = 'metadatas.pkl'
+# ... and if the following flag is set to True, the predictions are loaded from
+# that location instead. This makes loading faster, but new predictions will not
+# be processed.
+RELOAD_METADATAS = False  
+
+# Some paths
 PREDICTIONS_PATH = paths.INTERMEDIATE_PREDICTIONS_PATH
 SUBMISSION_PATH = paths.SUBMISSION_PATH
 WEIGHTS_PATH = paths.ENSEMBLE_WEIGHTS_PATH
 
-PRINT_FOLDS = False
+# Printing to console
+PRINT_FOLDS = False  # Print the result of every xval fold
 PRINT_EVERY = 1000  # Print itermediate results during training
+
+# Projected SGD parameters
 LEARNING_RATE = 1  # Learning rate of gradient descend
 NR_EPOCHS = 100
 C_reg1 = 0.0000  # L1 regularisation parameters
 C_reg2 = 0.01  # L2 regularisation parameters
 GRAD_CLIP = 1
 
-EPS_TOP = 0.000001
+EPS_TOP = 0.000001  # Minnimal possible weight
 SELECT_TOP = 15  # Nr of models to select
 
-OUTLIER_THRESHOLD = 0.020
+OUTLIER_THRESHOLD = 0.020  # Disagreement threshold
 
 print C_reg1
 print C_reg2
@@ -825,8 +862,6 @@ def main(weights_dict=None):
     print
     print "COMPUTING OUTLIERS"
     print
-    for t in (0.05, 0.04, 0.03, 0.02, 0.015, 0.01, 0.005):
-        compute_outliers(result_ensemble_slices, result_ensemble_everything, threshold=t)
     if not weights_dict:
         outliers = compute_outliers(result_ensemble_slices, result_ensemble_everything)
     else:

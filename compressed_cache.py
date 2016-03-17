@@ -2,8 +2,6 @@
 
 It provides a decorator that caches function results. If the function returns
 a numpy array, it is stored in a compressed way.
-
-Average compression rate for single patients (excluding metadata): 2.91
 """
 
 import functools

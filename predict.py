@@ -1,29 +1,43 @@
+"""Script for generating predictions for a given trained model.
+
+The script loads the specified configuration file. All parameters are defined
+in that file.
+
+Usage:
+> python predict.py -c CONFIG_NAME
+"""
+
 from __future__ import division
+
 import argparse
-from functools import partial
+import cPickle as pickle
+import csv
 import itertools
-from itertools import izip
-from datetime import timedelta, datetime
-import lasagne
-import theano
-import time
-import buffering
-from configuration import config, set_configuration
-import numpy as np
 import string
-from data_loader import get_number_of_test_batches, validation_patients_indices, train_patients_indices, regular_labels
+import time
+
+from datetime import timedelta, datetime
+from functools import partial
+from itertools import izip
+
+import lasagne
+import numpy as np
+import theano
+import theano.tensor as T
+
+import buffering
 import data_loader
+import theano_printer
+import utils
+
+from configuration import config, set_configuration
+from data_loader import get_number_of_test_batches, validation_patients_indices, train_patients_indices, regular_labels
+from data_loader import NUM_PATIENTS
 from paths import MODEL_PATH
 from paths import INTERMEDIATE_PREDICTIONS_PATH
 from paths import SUBMISSION_PATH
-import theano_printer
-import utils
-import theano.tensor as T
-import cPickle as pickle
-import csv
-from data_loader import NUM_PATIENTS
-from utils import CRSP
 from postprocess import make_monotone_distribution, test_if_valid_distribution
+from utils import CRSP
 
 def predict_model(expid, mfile=None):
     metadata_path = MODEL_PATH + "%s.pkl" % (expid if not mfile else mfile)

@@ -1,3 +1,6 @@
+"""Library implementing the Hough transform in Theano and Lasagne.
+"""
+
 
 import numpy as np
 
@@ -69,39 +72,3 @@ class HoughDNNLayer(Conv2DDNNLayer):
                                              flip_filters, n=2, **kwargs)
         # Remove trainable tag for W
         self.params[self.W] = self.params[self.W].difference(set(['trainable']))
-
-
-if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    import matplotlib.cm as cm
-    import scipy
-    import time
-    import theano
-    import theano.tensor as T
-
-    IMAGE_PATH = 'unittest_targets/images.png'
-    image = scipy.misc.imread(IMAGE_PATH)
-    image = np.round(1. - np.array(image, dtype='float32')/255.)
-#    print image
-    
-    plt.imshow(image, cmap=cm.Greys_r)
-#    plt.show()
-
-    l0 = nn.layers.InputLayer((1, 1, 100, 100))
-    lh = HoughDNNLayer(l0, range(1, 50), pad='same')
-    W = lh.W.get_value()
-#    while True:
-#        for w in W:
-#            plt.imshow(w[0, :, :], cmap=cm.Greys_r)
-#            plt.show()
-
-    givens = {l0.input_var: image.reshape(1,1,100,100)}
-    f = theano.function(
-        [],
-        [nn.layers.helper.get_output(lh)],
-        givens=givens
-    )
-    while True:
-        for m in np.array(f()[0])[0,:,:,:]:
-            plt.imshow(m, cmap=cm.Greys)
-            plt.show()

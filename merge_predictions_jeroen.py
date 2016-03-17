@@ -1,4 +1,5 @@
-
+"""Ensembling script using weighted averaging and outlier detection. 
+"""
 import cPickle as pickle
 import csv
 import glob
@@ -263,8 +264,10 @@ def _compute_tta(metadata, averaging_method):
 
 
 def _compute_nr_ttas(metadata, pats_predicted):
-    return len(metadata['predictions'][pats_predicted[0]]["systole"])
-
+    if pats_predicted:
+        return len(metadata['predictions'][pats_predicted[0]]["systole"])
+    else:
+        return -1
 
 def _make_valid_distributions(metadata):
     for prediction in metadata['predictions']:
@@ -317,7 +320,7 @@ def _remove_ttas(metadata, tags_to_remove=('systole', 'diastole')):
 #========================================#
 
 
-def _process_prediction_file(path, tta_methods=None):
+def _process_prediction_file(path, tta_methods=None, noskip=False):
     metadata = load_prediction_file(path)
     if not metadata:
         print "  Couldn't load file"
@@ -332,7 +335,7 @@ def _process_prediction_file(path, tta_methods=None):
     print "  val: %3d/%3d,  test: %3d/%3d" % (
         nr_val_predicted, data_loader.NUM_VALID_PATIENTS,
         nr_test_predicted, data_loader.NUM_TEST_PATIENTS,)
-    if nr_val_predicted == 0 or nr_test_predicted == 0:
+    if not noskip and (nr_val_predicted == 0 or nr_test_predicted == 0):
         print "  Skipping this model, not enough predictions."
         return
 
@@ -350,7 +353,7 @@ def _process_prediction_file(path, tta_methods=None):
     return metadata
 
 
-def _load_and_process_metadata_files(tta_methods=None):
+def _load_and_process_metadata_files(tta_methods=None, noskip=False):
     all_prediction_files = sorted(_get_all_prediction_files())[:]
     nr_prediction_files = len(all_prediction_files)
 
@@ -363,7 +366,7 @@ def _load_and_process_metadata_files(tta_methods=None):
     for idx, path in enumerate(all_prediction_files):
         print
         print 'Processing %s (%d/%d)' % (os.path.basename(path), idx+1, nr_prediction_files)
-        m = _process_prediction_file(path, tta_methods)
+        m = _process_prediction_file(path, tta_methods, noskip=noskip)
         if m:
             useful_files.append(m)
 
@@ -496,8 +499,8 @@ def has_nan(x):
 
 
 def get_weight_vector(metadatas, weights):
-    w_sys = np.array([weights[metadata['configuration_file']][0] for metadata in metadatas])
-    w_dia = np.array([weights[metadata['configuration_file']][1] for metadata in metadatas])
+    w_sys = np.array([weights.get(metadata['configuration_file'], [0,0])[0] for metadata in metadatas])
+    w_dia = np.array([weights.get(metadata['configuration_file'], [0,0])[1] for metadata in metadatas])
     return w_sys, w_dia
 
 
@@ -794,7 +797,7 @@ def main(weights_dict=None):
         metadatas = load_metadatas()
     else:
         if weights_dict:
-            metadatas = _load_and_process_metadata_files(weights_dict['tta_methods'])
+            metadatas = _load_and_process_metadata_files(weights_dict['tta_methods'], noskip=True)
         else:
             metadatas = _load_and_process_metadata_files()
         dump_metadatas(metadatas)

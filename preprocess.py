@@ -1,15 +1,22 @@
-import numpy as np
+"""Library implementing different ways to preprocess the data.
+"""
+
 import re
+
+import numpy as np
+import skimage.io
+import skimage.transform
+
+from itertools import izip
+from functools import partial
+
+import quasi_random
+import utils
+
 from configuration import config
 from image_transform import resize_to_make_it_fit, resize_to_make_sunny_fit, resize_and_augment_sunny, \
     resize_and_augment, normscale_resize_and_augment, build_rescale_transform, build_shift_center_transform, \
     build_augmentation_transform, build_center_uncenter_transforms, fast_warp
-import skimage.io
-import skimage.transform
-import quasi_random
-from itertools import izip
-from functools import partial
-import utils
 
 
 def uint_to_float(img):

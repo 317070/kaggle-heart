@@ -1,10 +1,15 @@
+"""Library implementing various Lasagne layers.
+"""
+
 import lasagne
-from lasagne.layers import Conv1DLayer
+import numpy as np
 import theano
 import theano.tensor as T
-import numpy as np
-from theano.sandbox.cuda import dnn
+
+from lasagne.layers import Conv1DLayer
 from lasagne.layers.dnn import Conv2DDNNLayer
+from theano.sandbox.cuda import dnn
+
 import theano_printer
 import utils
 
@@ -95,6 +100,10 @@ class LogicalNotLayer(lasagne.layers.Layer):
 
 
 class NormalisationLayer(lasagne.layers.Layer):
+    """Layer which normalises the input over the first axis.
+
+    Normalisation is achieved by simply dividing by the sum.
+    """
     def __init__(self, incoming, norm_sum=1.0, allow_negative=False, **kwargs):
         super(NormalisationLayer, self).__init__(incoming, **kwargs)
         self.norm_sum = norm_sum
@@ -159,6 +168,8 @@ class WideConv2DDNNLayer(Conv2DDNNLayer):
 class JeroenLayer(lasagne.layers.MergeLayer):
     """This layer doesn't overfit; it already knows what to do.
 
+    Estimates the volume between slices using a truncated cone approximation.
+
     incomings = [mu_area, sigma_area, is_not_padded, slicelocs]
     output = N x 2 array, with mu = output[:, 0] and sigma = output[:, 1]
     """
@@ -206,8 +217,13 @@ class JeroenLayer(lasagne.layers.MergeLayer):
 
 
 class JeroenLayerDists(lasagne.layers.MergeLayer):
-    """Uses better distances
+    """JeroenLayer using better distances.
+
+    This layer expects the distances between slices as an input, so computing or
+    estimating the distances offloaded to other modules. This allows
+    exploration of alternative ways to compute slice distances.
     """
+
     def __init__(self, incomings, rescale_input=1.0, **kwargs):
         super(JeroenLayerDists, self).__init__(incomings, **kwargs)
         self.rescale_input = rescale_input
@@ -252,7 +268,7 @@ class JeroenLayerDists(lasagne.layers.MergeLayer):
 
 
 class JeroenLayerDiscs(lasagne.layers.MergeLayer):
-    """Uses better discs instead of pyramids
+    """JeroenLayers using discs instead of truncated cones.
     """
     def __init__(self, incomings, rescale_input=1.0, **kwargs):
         super(JeroenLayerDiscs, self).__init__(incomings, **kwargs)
@@ -295,7 +311,6 @@ class JeroenLayerDiscs(lasagne.layers.MergeLayer):
         return T.concatenate([
             mu_volume_patient.dimshuffle(0, 'x'),
             sigma_volume_patient.dimshuffle(0, 'x')], axis=1)
-
 
 
 class WeightedMeanLayer(lasagne.layers.MergeLayer):
@@ -348,7 +363,9 @@ class TrainableScaleLayer(lasagne.layers.Layer):
 
 
 class RelativeLocationLayer(lasagne.layers.Layer):
-
+    """Layer implementing a function mapping outermost values to 1 and innermost
+    values to 0.
+    """
     def __init__(self, slicelocations, **kwargs):
         super(RelativeLocationLayer, self).__init__(slicelocations, **kwargs)
 
@@ -387,6 +404,12 @@ def repeat(input, repeats, axis):
 
 
 class IraLayer(lasagne.layers.MergeLayer):
+    """Layer estimating the volume of the heart using 2CH and 4CH images.
+
+    The volume is estimated by stacking elliptical discs. 
+    For each 'row' in the 2ch and 4ch image, it expects the mu and sigma of the
+    expected width of the heart chamber in that row.
+    """
     def __init__(self, l_4ch_mu, l_4ch_sigma, l_2ch_mu, l_2ch_sigma, trainable_scale=False, **kwargs):
         super(IraLayer, self).__init__([l_4ch_mu, l_4ch_sigma, l_2ch_mu, l_2ch_sigma], **kwargs)
 
@@ -485,6 +508,8 @@ class SumGaussLayer(lasagne.layers.MergeLayer):
 
 
 class IraLayerNoTime(lasagne.layers.MergeLayer):
+    """Similar to IraLayer, but without handling the time dimension.
+    """
     def __init__(self, l_4ch_musigma, l_2ch_musigma, **kwargs):
         super(IraLayerNoTime, self).__init__([l_4ch_musigma, l_2ch_musigma], **kwargs)
 

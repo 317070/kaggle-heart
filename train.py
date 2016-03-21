@@ -1,30 +1,42 @@
+"""Script for training a network as defined in a given configuraton.
+
+Usage:
+> python train.py -c CONFIG_NAME
+"""
+
 from __future__ import division
 
 import argparse
 import collections
-from configuration import config, set_configuration
-import numpy as np
-import string
-from data_loader import get_lenght_of_set, get_number_of_validation_samples, validation_patients_indices, NUM_TRAIN_PATIENTS
-import data_loader
-from paths import MODEL_PATH, LOGS_PATH
-from predict import predict_model
-import utils
 import cPickle as pickle
+import logging
+import string
+import time
 import os
+import sys
+
+from datetime import datetime, timedelta
+from functools import partial
+from itertools import izip
+
 import lasagne
+import numpy as np
 import theano
 import theano.tensor as T
-import time
-from itertools import izip
-from datetime import datetime, timedelta
-import sys
-from log import print_to_file
-import logging
-from functools import partial
-import theano_printer
+
 from theano.compile.nanguardmode import NanGuardMode
+
 import buffering
+import data_loader
+import theano_printer
+import utils
+
+from configuration import config, set_configuration
+from data_loader import get_lenght_of_set, get_number_of_validation_samples, validation_patients_indices, NUM_TRAIN_PATIENTS
+from paths import MODEL_PATH, LOGS_PATH
+from predict import predict_model
+from log import print_to_file
+
 
 def train_model(expid):
     metadata_path = MODEL_PATH + "%s.pkl" % expid

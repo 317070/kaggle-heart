@@ -5,21 +5,6 @@ import theano.tensor as T
 import lasagne as nn
 
 
-# TODO
-
-# - cyclic stuff seems to take up about 25% of the time, so this is probably worth optimizing!
-# - create dihedral versions of the layers (including flipping)
-# - write PyCUDA ops (custom kernels) for the roll operations and their gradients to speed up this operation. It's pretty slow in vanilla Theano.
-
-
-
-# some helper functions that rotate arrays on the trailing axes.
-# these should work for both Theano expressions and numpy arrays.
-
-
-# TODO: figure out if it is better (in Theano) to do slicing THEN transposing, or transposing THEN slicing.
-# since the optimizers seem to be unable to exchange these operations, their order may affect performance significantly.
-
 def array_tf_0(arr):
     return arr
 
@@ -96,13 +81,6 @@ def array_tf_270f_c01b(arr):
     axes_order = [0, 2, 1, 3]
     slices = [slice(None), slice(None, None, -1), slice(None, None, -1), slice(None)]
     return arr[tuple(slices)].transpose(axes_order)
-
-
-
-
-
-
-
 
 
 

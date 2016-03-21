@@ -1,3 +1,6 @@
+"""Library implementing different objective functions.
+"""
+
 import numpy as np
 import lasagne
 import theano

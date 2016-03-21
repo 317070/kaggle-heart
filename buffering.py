@@ -1,3 +1,6 @@
+"""Wrapper functions to make iterators buffered.
+"""
+
 import multiprocessing as mp
 import threading
 import traceback

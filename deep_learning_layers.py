@@ -1,119 +1,15 @@
+"""Library providing some custom Lasagne layers.
+"""
+
 import lasagne
-from lasagne.layers.dnn import Conv2DDNNLayer, Conv3DDNNLayer, MaxPool2DDNNLayer, MaxPool3DDNNLayer
-from lasagne.utils import as_tuple
 import theano
 import theano.tensor as T
-from lasagne.layers import Conv1DLayer, MaxPool1DLayer, Layer
 import numpy as np
 
+from lasagne.layers.dnn import Conv2DDNNLayer, Conv3DDNNLayer, MaxPool2DDNNLayer, MaxPool3DDNNLayer
+from lasagne.utils import as_tuple
+from lasagne.layers import Conv1DLayer, MaxPool1DLayer, Layer
 
-"""
-class ConvolutionOverAxisLayer(Conv1DLayer):
-    def __init__(self, incoming, num_filters, filter_size, channel=1, axis=(2,), **kwargs):
-        super(ConvolutionOverAxisLayer, self).__init__(incoming,
-                                                 num_filters,
-                                                 filter_size=filter_size,
-                                                 check_shape=False,
-                                                 **kwargs)
-        self.axis = axis
-        self.channel = channel
-
-    def get_output_shape_for(self, input_shape):
-        shape = list(input_shape)
-        # axis channel shrinks
-        for axis in self.axis:
-            shape[axis] = lasagne.layers.conv.conv_output_length(shape[axis], self.filter_size[0], self.stride[0], self.pad[0])
-        # filter channel changes
-        shape[self.channel] = self.num_filters
-        return tuple(shape)
-
-    def get_output_for(self, input, **kwargs):
-        conved = self.convolve(input, **kwargs)
-
-        if self.b is None:
-            activation = conved
-        elif self.untie_biases:
-            raise NotImplementedError("untie_biases has not been implemented")
-        else:
-            shuffle = ['x']*len(self.input_shape)
-            shuffle[self.channel] = 0
-            activation = conved + self.b.dimshuffle(tuple(shuffle))
-        return self.nonlinearity(activation)
-
-    def convolve(self, input, **kwargs):
-        dimshuffle = range(len(self.input_shape))
-        dimshuffle.remove(self.channel)
-        for axis in self.axis:
-            dimshuffle.remove(axis)
-        dimshuffle.append(self.channel)
-        for axis in self.axis:
-            dimshuffle.append(axis)
-        print kwargs
-        input = input.dimshuffle(*dimshuffle).reshape((-1,
-                                                      self.input_shape[self.channel],
-                                                      self.input_shape[self.axis[0]],
-                                                       ))
-
-        conved = super(ConvolutionOverAxisLayer, self).convolve(input, **kwargs)
-
-        output_shape = list(self.input_shape)
-        output_shape = [i for j, i in enumerate(output_shape) if j not in [self.channel, self.axis[0]]]
-
-        conv_output_shape = self.get_output_shape_for(self.input_shape)
-        output_shape = tuple(output_shape) + (self.num_filters, conv_output_shape[self.axis[0]])
-        #print "output", output_shape
-        conved = conved.reshape(output_shape)
-
-        reverse_dimshuffle = [dimshuffle.index(i) for i in xrange(len(self.input_shape))]
-        conved = conved.dimshuffle(*reverse_dimshuffle)
-        return conved
-
-
-class MaxPoolOverAxisLayer(MaxPool1DLayer):
-    def __init__(self, incoming, pool_size, axis=(2,), **kwargs):
-        super(MaxPool1DLayer, self).__init__(incoming,
-                                             pool_size,
-                                             check_shape=False,
-                                             **kwargs)
-        self.axis = axis
-
-    def get_output_shape_for(self, input_shape):
-        shape = list(input_shape)
-        # axis channels shrink
-        for i in xrange(1):
-            shape[self.axis[i]] = lasagne.layers.pool.pool_output_length(shape[self.axis[i]],
-                                                                         pool_size=self.pool_size[i],
-                                                                         stride=self.stride[i],
-                                                                         pad=self.pad[i],
-                                                                         ignore_border=True
-                                                                         )
-        return tuple(shape)
-
-    def get_output_for(self, input, **kwargs):
-        dimshuffle = range(len(self.input_shape))
-        for axis in self.axis:
-            dimshuffle.remove(axis)
-        for axis in self.axis:
-            dimshuffle.append(axis)
-
-        input = input.dimshuffle(*dimshuffle).reshape((-1,
-                                                      1,
-                                                      self.input_shape[self.axis[0]],
-                                                       ))
-
-        pooled = super(MaxPoolOverAxisLayer, self).get_output_for(input, **kwargs)
-        output_shape = list(self.input_shape)
-        output_shape = [i for j, i in enumerate(output_shape) if j not in self.axis]
-
-        pool_output_shape = self.get_output_shape_for(self.input_shape)
-        output_shape = tuple(output_shape)+(pool_output_shape[self.axis[0]],)
-
-        pooled = pooled.reshape(output_shape)
-        print "output", output_shape
-        reverse_dimshuffle = [dimshuffle.index(i) for i in xrange(len(self.input_shape))]
-        pooled = pooled.dimshuffle(*reverse_dimshuffle)
-        return pooled
-"""
 
 class ConvolutionOver2DAxisLayer(Conv2DDNNLayer):
     def __init__(self, incoming, num_filters, filter_size, channel=1, axis=(2,3), **kwargs):
@@ -370,6 +266,8 @@ class MaxPoolOverAxisLayer(MaxPoolOver2DAxisLayer):
 
 
 class FixedScaleLayer(Layer):
+    """Layer which simply scales the input by a fixed factor.
+    """
     def __init__(self, incoming, scale=1, **kwargs):
         super(FixedScaleLayer, self).__init__(incoming, **kwargs)
         self.scale = scale
@@ -377,7 +275,10 @@ class FixedScaleLayer(Layer):
     def get_output_for(self, input, **kwargs):
         return input * self.scale
 
+
 def FixedConstantLayer(constant):
+    """Function creating an InputLayer which outputs a fixed scalar.
+    """
     theano_var = theano.shared(constant)
     # Add 0 to the theano var, to prevent it from returning a cudandarray later
     theano_var += theano.shared(np.array(0.0, dtype='float32'))

@@ -1,3 +1,6 @@
+"""Depricated layer
+"""
+
 import numpy as np
 import lasagne
 import theano

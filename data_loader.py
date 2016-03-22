@@ -153,21 +153,24 @@ def filter_patient_folders():
 # Sunny data #
 ##############
 # This small dataset is loaded into memory
-_SUNNY_DATA_PATH = os.path.join(_DATA_FOLDER, "pkl_annotated", "data.pkl")
+#_SUNNY_DATA_PATH = os.path.join(_DATA_FOLDER, "pkl_annotated", "data.pkl")
 
-_sunny_data = _load_file(_SUNNY_DATA_PATH)
-num_sunny_images = len(_sunny_data["images"])
+#_sunny_data = _load_file(_SUNNY_DATA_PATH)
+#num_sunny_images = len(_sunny_data["images"])
 
-_validation_sunny_indices = validation_set.get_cross_validation_indices(
-    indices=range(num_sunny_images))
-_train_sunny_indices = [
-    i for i in range(num_sunny_images) if i not in _validation_sunny_indices]
+#_validation_sunny_indices = validation_set.get_cross_validation_indices(
+#    indices=range(num_sunny_images))
+#_train_sunny_indices = [
+#    i for i in range(num_sunny_images) if i not in _validation_sunny_indices]
 
-sunny_train_images = np.array(_sunny_data["images"])[_train_sunny_indices]
-sunny_train_labels = np.array(_sunny_data["labels"])[_train_sunny_indices]
-sunny_validation_images = np.array(_sunny_data["images"])[_validation_sunny_indices]
-sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indices]
-
+#sunny_train_images = np.array(_sunny_data["images"])[_train_sunny_indices]
+#sunny_train_labels = np.array(_sunny_data["labels"])[_train_sunny_indices]
+#sunny_validation_images = np.array(_sunny_data["images"])[_validation_sunny_indices]
+#sunny_validation_labels = np.array(_sunny_data["labels"])[_validation_sunny_indices]
+sunny_train_images = [None] * 1000
+sunny_train_labels = [None] * 1000
+sunny_validation_images = [None] * 1000
+sunny_validation_labels = [None] * 1000
 
 ###########################
 # Data form preprocessing #
